@@ -26,6 +26,8 @@ intel = [
     "optimum-intel[openvino]>=2.1",
     "nncf>=3.3",
     "psutil>=5.9",  # integrations/intel/scripts/profile_yolo_openvino.py
+    "opencv-python>=4.9",  # src/omni_q/vision.py -- letterbox/NMS + real-camera capture
+    "pyyaml>=6.0",  # src/omni_q/vision.py -- OpenVINODetector reads exported metadata.yaml
 ]
 
 [project.scripts]
