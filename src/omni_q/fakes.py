@@ -204,6 +204,13 @@ class FakeVerifier:
                 observed={"object": obj_id, "zone": observed.zone if observed else None},
                 mismatch=() if ok else (str(obj_id),),
             )
+        if step.op != "VERIFY":
+            # No postcondition modelled yet for this primitive (OPEN, CLOSE,
+            # ROTATE, PRESENT, HANDOFF, ...) -- trivially pass rather than
+            # judging it against the "whole workspace tidy" check below,
+            # which is meant for the terminal VERIFY step and is never true
+            # this early in a run.
+            return VerifyResult(ok=True, expected={"op": step.op}, observed={"op": step.op})
         remaining = [d.object_id for d in observation.misplaced()]
         expected = {"workspace_clear": True}
         observed = {"workspace_clear": observation.workspace_clear,

@@ -48,6 +48,15 @@ ARM_XML = ROOT / "integrations" / "intel" / "assets" / "menagerie_so_arm100" / "
 ARM_ASSETS = ARM_XML.parent / "assets"
 HOME = (0.0, -1.57, 1.57, 1.57, -1.57, 0.0)
 
+# OQ-010 primitive targets. Coarse proxy values (not IK), consistent with this
+# module's existing "simulation-scripted-manipulation" framing -- distinct
+# enough per op to make PICK/PLACE/MOVE/OPEN/CLOSE/ROTATE/PRESENT observably
+# different controller behaviour, not evidence of contact-rich grasping.
+GRIPPER_OPEN = 1.5     # Jaw joint, rad -- near the SO-101 open end of its range
+GRIPPER_CLOSED = 0.0
+DRAWER_OPEN = 0.12     # drawer_slide qpos, m -- matches its MJCF range max
+DRAWER_CLOSED = 0.0
+
 
 class IntelSimulationUnavailable(RuntimeError):
     """Raised when the optional MuJoCo integration dependency is absent."""
@@ -192,12 +201,19 @@ class IntelTableWorld(MockWorld):
             Detection("fork_1", "fork", "drawer", "left"),
             Detection("spoon_1", "spoon", "drawer", "right"),
             Detection("napkin_1", "napkin", "tray_napkin", "lower_left"),
+            # The drawer itself, so OPEN/CLOSE(object="drawer") passes
+            # MockWorld.apply_transition's object-registration check.
+            # zone == target_zone: it's a fixture, never "misplaced", so
+            # RulePlanner never tries to PICK/MOVE it like tableware.
+            Detection("drawer", "fixture", "closed", "closed"),
         ])
         mujoco = _mujoco()
         self.model = load_dual_so101_model()
         self.data = mujoco.MjData(self.model)
         self._mujoco = mujoco
         self._controller_steps = 0
+        drawer_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "drawer_slide")
+        self._drawer_qpos_adr = self.model.jnt_qposadr[drawer_joint_id]
         for index, value in enumerate(HOME * 2):
             self.data.ctrl[index] = value
         mujoco.mj_forward(self.model, self.data)
@@ -205,12 +221,37 @@ class IntelTableWorld(MockWorld):
     def apply_transition(self, request: TransitionRequest) -> TransitionResult:
         result = super().apply_transition(request)
         arm_offset = 6 if request.actor and "right" in request.actor else 0
+        op = request.op
+        obj = request.args.get("object")
         target = list(HOME)
-        if request.op in {"PICK", "MOVE", "PLACE"}:
-            target[2] = 1.20
-            target[3] = 0.85
-        if request.op == "HANDOFF":
+
+        # OQ-010: each primitive gets a distinct controller target instead of
+        # PICK/MOVE/PLACE sharing one pose and everything else silently
+        # falling through to HOME. The drawer has no actuator (see
+        # dual_so101_xml._drawer) -- OPEN/CLOSE on it is a kinematic qpos
+        # override, the same "explicitly scripted" honesty this adapter
+        # already applies to tableware placement.
+        if op in {"PICK", "MOVE"}:
+            target[2], target[3], target[5] = 1.20, 0.85, GRIPPER_CLOSED
+        elif op == "PLACE":
+            target[2], target[3], target[5] = 1.20, 0.85, GRIPPER_OPEN
+        elif op == "OPEN" and obj == "drawer":
+            target[2], target[3] = 0.9, 0.3
+            self.data.qpos[self._drawer_qpos_adr] = DRAWER_OPEN
+        elif op == "CLOSE" and obj == "drawer":
+            target[2], target[3] = 0.9, 0.3
+            self.data.qpos[self._drawer_qpos_adr] = DRAWER_CLOSED
+        elif op == "OPEN":
+            target[5] = GRIPPER_OPEN
+        elif op == "CLOSE":
+            target[5] = GRIPPER_CLOSED
+        elif op == "ROTATE":
+            target[4] = -0.8 if arm_offset else 0.8
+        elif op == "PRESENT":
+            target[1], target[3], target[5] = -0.8, 0.3, GRIPPER_CLOSED
+        elif op == "HANDOFF":
             target[4] = 1.20 if arm_offset else -1.20
+
         for index, value in enumerate(target, start=arm_offset):
             self.data.ctrl[index] = value
         self._mujoco.mj_step(self.model, self.data, nstep=20)
@@ -233,6 +274,7 @@ class IntelTableWorld(MockWorld):
             "cameras": self.model.ncam,
             "time": float(self.data.time),
             "controller_steps": self._controller_steps,
+            "drawer_qpos": round(float(self.data.qpos[self._drawer_qpos_adr]), 4),
         }
 
 
@@ -240,13 +282,34 @@ class IntelTablePlanner(RulePlanner):
     """Deterministic role assignment for the first dual-arm table-setting slice."""
 
     _RIGHT_OBJECTS = {"cup_1", "spoon_1"}
+    # objects that physically start inside the drawer (dual_so101_xml) -- their
+    # PICK depends on an OPEN step first, matching the brief's literal
+    # scenario ("open the top drawer, retrieve spoons and forks").
+    _DRAWER_OBJECTS = {"fork_1", "spoon_1"}
 
     def plan(self, goal, world):
         graph = super().plan(goal, world)
+
+        needs_drawer = any(
+            s.op == "PICK" and s.args.get("object") in self._DRAWER_OBJECTS
+            for s in graph.steps
+        )
+        if needs_drawer:
+            open_drawer = Step(
+                "open_drawer", "manipulate", "OPEN", args={"object": "drawer"},
+                rationale="fork/spoon start in the drawer; open it before retrieving them",
+            )
+            graph.steps.insert(0, open_drawer)
+            for s in graph.steps:
+                if s.op == "PICK" and s.args.get("object") in self._DRAWER_OBJECTS:
+                    s.deps = tuple(sorted(set(s.deps) | {open_drawer.id}))
+
         for step in graph.steps:
             object_id = step.args.get("object")
-            if object_id:
-                step.arm = "right" if object_id in self._RIGHT_OBJECTS else "left"
+            if object_id in self._RIGHT_OBJECTS:
+                step.arm = "right"
+            elif object_id:
+                step.arm = "left"
         return graph
 
 

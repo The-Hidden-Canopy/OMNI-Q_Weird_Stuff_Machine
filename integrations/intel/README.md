@@ -79,9 +79,28 @@ alongside the YOLO perception node.
   names). Net effect on `set the table`: 11 waves → 7, `max_parallelism` 1 → 2,
   `serialized_conflicts` 12 → 0. Tests: `tests/test_intel_sim_scene.py`,
   extended `tests/test_intel_sim_scheduled.py`. Object placement is still
-  explicitly scripted (OQ-010 territory) — the drawer isn't yet gated behind
-  an `OPEN` primitive, and pose-based (rather than zone-label) region
-  inference is still open.
+  explicitly scripted; pose-based (rather than zone-label) region inference
+  is still open.
+- [x] OQ-010 first pass — single-arm primitives execute individually with
+  distinct controller targets instead of PICK/MOVE/PLACE sharing one pose and
+  everything else silently falling through to HOME: PICK/MOVE close the
+  gripper, PLACE opens it (the gripper joint was never actuated before this),
+  OPEN/CLOSE on `object="drawer"` kinematically drive the (unactuated)
+  `drawer_slide` joint, ROTATE/PRESENT get their own wrist/pitch targets.
+  `IntelTablePlanner` now prepends an `OPEN(drawer)` step before
+  `fork_1`/`spoon_1` PICKs, matching the brief's literal scenario. Found and
+  fixed two bugs surfaced by actually running this: (1) `MockWorld.apply_transition`
+  rejected any step targeting `"drawer"` since it wasn't a registered
+  object — fixed by registering it as a `zone == target_zone` fixture so
+  `RulePlanner` never treats it as tableware to tidy; (2) `FakeVerifier`'s
+  fallback branch judged *any* unrecognized op (including the new `OPEN`)
+  against "is the whole workspace tidy," which is never true early in a run —
+  it was written assuming only the terminal `VERIFY` step reached that
+  branch. Fixed in `src/omni_q/fakes.py` (shared, not Intel-specific) to only
+  apply that check to `op == "VERIFY"`. Tests: `tests/test_intel_sim_primitives.py`.
+  Still open: bimanual primitives (OQ-011: HANDOFF has a minimal branch,
+  STABILIZE/REGRASP/COOPERATIVE_ROTATE don't yet), and OPEN/CLOSE postcondition
+  verification (currently a trivial pass, see `FakeVerifier`).
 - [ ] LeRobot dataset/demonstration capture from the MuJoCo scene
 - [ ] Train/fine-tune a VLA or imitation-learning policy (SmolVLA, Pi0.5, ACT, or other)
 - [ ] Capability-node wrappers for arm primitives
