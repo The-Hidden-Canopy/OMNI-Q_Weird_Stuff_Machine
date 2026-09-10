@@ -33,6 +33,20 @@
 > Same caveat as the OpenVINO addendum above: real pipeline, placeholder
 > class labels until OQ-008's fine-tune lands, and `FrameObserver` isn't
 > wired into `build_intel_sim_engine()`'s default engine yet (still opt-in).
+
+> **Third addendum, 2026-09-10 working-tree follow-up:** the general legacy
+> table-setting controller now includes an object-aware 6D fingertip-pad solve,
+> named pad-only contact masks, calibrated `cup_1` physics, and snapshot-based
+> retry rollback.  This improves the physical primitive but does **not** close
+> the multi-step table-setting GAP: current local runs still expose
+> shared-workspace/order sensitivity plus unresolved cutlery or placement
+> failures.  The separate `simulation-contact-handoff` path remains the only
+> deterministic 10/10 contact evidence.  The point-in-time matrix below is
+> intentionally retained; re-run the legacy randomized report after the
+> controller/scene changes before changing its verdict.  A fresh 10-seed
+> report is retained at
+> [`evidence/benchmark_results/intel_table_eval_2026-09-10-v4/report.json`](../evidence/benchmark_results/intel_table_eval_2026-09-10-v4/report.json):
+> 0/10 complete, with 2 grasp failures and 8 placement failures.
 >
 > **Third addendum, same day:** OQ-021's red-team pass
 > ([`docs/oq-021-red-team-findings.md`](oq-021-red-team-findings.md)) found

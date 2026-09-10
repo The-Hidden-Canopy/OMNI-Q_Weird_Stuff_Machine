@@ -1,0 +1,1382 @@
+{
+  "contact_transitions": [
+    {
+      "from": [],
+      "phase": "initial_settle",
+      "sim_time_s": 0.002,
+      "to": [
+        "cup:table"
+      ]
+    },
+    {
+      "from": [
+        "cup:table"
+      ],
+      "phase": "left_approach",
+      "sim_time_s": 1.452,
+      "to": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:table"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:table"
+      ],
+      "phase": "left_approach",
+      "sim_time_s": 1.712,
+      "to": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:table"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:table"
+      ],
+      "phase": "left_approach",
+      "sim_time_s": 1.732,
+      "to": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:table"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:table"
+      ],
+      "phase": "left_descend",
+      "sim_time_s": 1.822,
+      "to": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:table"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:table"
+      ],
+      "phase": "left_descend",
+      "sim_time_s": 1.842,
+      "to": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:table"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:table"
+      ],
+      "phase": "left_descend",
+      "sim_time_s": 1.882,
+      "to": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:table"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:table"
+      ],
+      "phase": "left_grasp",
+      "sim_time_s": 3.56,
+      "to": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_4",
+        "cup:table"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_4",
+        "cup:table"
+      ],
+      "phase": "left_lift_transfer",
+      "sim_time_s": 3.784,
+      "to": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_4"
+      ],
+      "phase": "left_lift_transfer",
+      "sim_time_s": 4.104,
+      "to": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4"
+      ],
+      "phase": "right_approach",
+      "sim_time_s": 5.564,
+      "to": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_2",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_2",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4"
+      ],
+      "phase": "right_approach",
+      "sim_time_s": 5.884,
+      "to": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_2",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_2",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ],
+      "phase": "right_approach",
+      "sim_time_s": 5.904,
+      "to": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4"
+      ],
+      "phase": "right_approach",
+      "sim_time_s": 5.964,
+      "to": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_2",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_2",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4"
+      ],
+      "phase": "right_approach",
+      "sim_time_s": 5.984,
+      "to": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_1",
+        "cup:left_moving_jaw_pad_2",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_1",
+        "cup:left_moving_jaw_pad_2",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4"
+      ],
+      "phase": "right_descend",
+      "sim_time_s": 6.074,
+      "to": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_1",
+        "cup:left_moving_jaw_pad_2",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_1",
+        "cup:left_moving_jaw_pad_2",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_4"
+      ],
+      "phase": "right_descend",
+      "sim_time_s": 6.544,
+      "to": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_1",
+        "cup:left_moving_jaw_pad_2",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_3",
+        "cup:right_fixed_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_1",
+        "cup:left_moving_jaw_pad_2",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_3",
+        "cup:right_fixed_jaw_pad_4"
+      ],
+      "phase": "right_descend",
+      "sim_time_s": 6.804,
+      "to": [
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_1",
+        "cup:left_moving_jaw_pad_2",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_3",
+        "cup:right_fixed_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_1",
+        "cup:left_moving_jaw_pad_2",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_3",
+        "cup:right_fixed_jaw_pad_4"
+      ],
+      "phase": "right_descend",
+      "sim_time_s": 7.014,
+      "to": [
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_2",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_3",
+        "cup:right_fixed_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_2",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_3",
+        "cup:right_fixed_jaw_pad_4"
+      ],
+      "phase": "right_descend",
+      "sim_time_s": 7.144,
+      "to": [
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_2",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_2",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_4"
+      ],
+      "phase": "right_grasp",
+      "sim_time_s": 7.328,
+      "to": [
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_4"
+      ],
+      "phase": "right_grasp",
+      "sim_time_s": 7.784,
+      "to": [
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ],
+      "phase": "left_release",
+      "sim_time_s": 7.858,
+      "to": [
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ],
+      "phase": "left_release",
+      "sim_time_s": 7.954,
+      "to": [
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ],
+      "phase": "left_release",
+      "sim_time_s": 8.418,
+      "to": [
+        "cup:left_fixed_jaw_pad_3",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_3",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ],
+      "phase": "left_release",
+      "sim_time_s": 8.498,
+      "to": [
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ],
+      "phase": "left_release",
+      "sim_time_s": 8.518,
+      "to": [
+        "cup:left_fixed_jaw_pad_3",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_3",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ],
+      "phase": "left_release",
+      "sim_time_s": 8.548,
+      "to": [
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ],
+      "phase": "left_release",
+      "sim_time_s": 8.568,
+      "to": [
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ],
+      "phase": "left_release",
+      "sim_time_s": 8.588,
+      "to": [
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ],
+      "phase": "left_release",
+      "sim_time_s": 8.608,
+      "to": [
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ],
+      "phase": "left_release",
+      "sim_time_s": 8.648,
+      "to": [
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ],
+      "phase": "left_release",
+      "sim_time_s": 8.698,
+      "to": [
+        "cup:right_fixed_jaw_pad_3",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:right_fixed_jaw_pad_3",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ],
+      "phase": "right_release_preopen",
+      "sim_time_s": 12.294,
+      "to": [
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ],
+      "phase": "right_release_preopen",
+      "sim_time_s": 12.462,
+      "to": [
+        "cup:right_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:right_moving_jaw_pad_4"
+      ],
+      "phase": "right_release_preopen",
+      "sim_time_s": 12.482,
+      "to": [
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ],
+      "phase": "right_release_preopen",
+      "sim_time_s": 12.536,
+      "to": [
+        "cup:right_fixed_jaw_pad_4"
+      ]
+    },
+    {
+      "from": [
+        "cup:right_fixed_jaw_pad_4"
+      ],
+      "phase": "right_release_preopen",
+      "sim_time_s": 12.556,
+      "to": [
+        "cup:right_moving_jaw_pad_4",
+        "cup:table"
+      ]
+    },
+    {
+      "from": [
+        "cup:right_moving_jaw_pad_4",
+        "cup:table"
+      ],
+      "phase": "right_release_lift",
+      "sim_time_s": 12.61,
+      "to": [
+        "cup:right_fixed_jaw_pad_3",
+        "cup:table"
+      ]
+    },
+    {
+      "from": [
+        "cup:right_fixed_jaw_pad_3",
+        "cup:table"
+      ],
+      "phase": "right_release_lift",
+      "sim_time_s": 12.67,
+      "to": [
+        "cup:table"
+      ]
+    },
+    {
+      "from": [
+        "cup:table"
+      ],
+      "phase": "right_release_lift",
+      "sim_time_s": 12.97,
+      "to": [
+        "cup:right_moving_jaw_pad_1",
+        "cup:table"
+      ]
+    },
+    {
+      "from": [
+        "cup:right_moving_jaw_pad_1",
+        "cup:table"
+      ],
+      "phase": "right_release_lift",
+      "sim_time_s": 12.99,
+      "to": [
+        "cup:right_moving_jaw_pad_1",
+        "cup:right_moving_jaw_pad_2",
+        "cup:table"
+      ]
+    },
+    {
+      "from": [
+        "cup:right_moving_jaw_pad_1",
+        "cup:right_moving_jaw_pad_2",
+        "cup:table"
+      ],
+      "phase": "right_release_lift",
+      "sim_time_s": 13.06,
+      "to": [
+        "cup:right_moving_jaw_pad_1",
+        "cup:table"
+      ]
+    },
+    {
+      "from": [
+        "cup:right_moving_jaw_pad_1",
+        "cup:table"
+      ],
+      "phase": "right_release_lift",
+      "sim_time_s": 13.08,
+      "to": [
+        "cup:table"
+      ]
+    }
+  ],
+  "content_hash": "sha256:6015fff7514a7ef1082458270736e31ef152d17413e84e99c6914fcad4bec00a",
+  "controller": {
+    "gripper_closed_rad": 0.35,
+    "gripper_open_rad": 1.65,
+    "ik_damping": 0.001,
+    "ik_iterations": 700,
+    "ik_tolerance_m": 0.002,
+    "interpolation_segments": 8,
+    "joint_limit_margin_rad": 0.03,
+    "max_contact_force_n": 80.0,
+    "max_relative_cup_distance_m": 0.105,
+    "motion_steps_per_segment": 75,
+    "motion_timeout_steps": 120,
+    "orientation_jitter_rad": 0.025,
+    "position_jitter_m": 0.002,
+    "randomized": true,
+    "seed": 711,
+    "settle_steps": 300,
+    "shared_workspace_x_limit_m": 0.18
+  },
+  "deterministic": false,
+  "failure_reason": null,
+  "final_cup_pose": {
+    "linear_velocity": [
+      0.015252,
+      -0.005795,
+      0.0
+    ],
+    "position": [
+      0.131239,
+      -0.101836,
+      0.020947
+    ],
+    "quaternion": [
+      0.364367,
+      0.125377,
+      -0.695903,
+      0.606001
+    ]
+  },
+  "final_owner": null,
+  "final_stable": true,
+  "mjcf_sha256": "sha256:bb372fa8a8585c4768e3d99b640c04005608e0e814289ab35d6a18b27350c919",
+  "mode": "simulation-contact-handoff",
+  "phase_timings": [
+    {
+      "duration_s": 0.6,
+      "end_s": 0.6,
+      "phase": "initial_settle",
+      "start_s": 0.0
+    },
+    {
+      "duration_s": 1.2,
+      "end_s": 1.8,
+      "phase": "left_approach",
+      "start_s": 0.6
+    },
+    {
+      "duration_s": 1.2,
+      "end_s": 3.0,
+      "phase": "left_descend",
+      "start_s": 1.8
+    },
+    {
+      "duration_s": 0.592,
+      "end_s": 3.592,
+      "phase": "left_grasp",
+      "start_s": 3.0
+    },
+    {
+      "duration_s": 1.2,
+      "end_s": 4.792,
+      "phase": "left_lift_transfer",
+      "start_s": 3.592
+    },
+    {
+      "duration_s": 1.2,
+      "end_s": 5.992,
+      "phase": "right_approach",
+      "start_s": 4.792
+    },
+    {
+      "duration_s": 1.2,
+      "end_s": 7.192,
+      "phase": "right_descend",
+      "start_s": 5.992
+    },
+    {
+      "duration_s": 0.592,
+      "end_s": 7.784,
+      "phase": "right_grasp",
+      "start_s": 7.192
+    },
+    {
+      "duration_s": 1.792,
+      "end_s": 9.576,
+      "phase": "left_release",
+      "start_s": 7.784
+    },
+    {
+      "duration_s": 1.2,
+      "end_s": 10.776,
+      "phase": "right_retreat",
+      "start_s": 9.576
+    },
+    {
+      "duration_s": 1.2,
+      "end_s": 11.976,
+      "phase": "right_place",
+      "start_s": 10.776
+    },
+    {
+      "duration_s": 3.584,
+      "end_s": 15.56,
+      "phase": "right_release",
+      "start_s": 11.976
+    },
+    {
+      "duration_s": 0.6,
+      "end_s": 16.16,
+      "phase": "final_settle",
+      "start_s": 15.56
+    }
+  ],
+  "randomized": true,
+  "schema_version": 1,
+  "seed": 711,
+  "source_state_revision": 1,
+  "state_samples": [
+    {
+      "contact_counts": {
+        "left": 0,
+        "right": 0
+      },
+      "contacts": [
+        "cup:table"
+      ],
+      "cup": {
+        "linear_velocity": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "position": [
+          -0.259541,
+          -0.150429,
+          0.05
+        ],
+        "quaternion": [
+          0.999942,
+          -0.00193,
+          -0.006818,
+          0.008136
+        ]
+      },
+      "cup_on_table": true,
+      "max_gripper_force_n": 0.0,
+      "min_joint_margin_rad": 0.09,
+      "ownership": null,
+      "phase": "initial",
+      "sim_time_s": 0.0
+    },
+    {
+      "contact_counts": {
+        "left": 0,
+        "right": 0
+      },
+      "contacts": [
+        "cup:table"
+      ],
+      "cup": {
+        "linear_velocity": [
+          -0.000853,
+          -0.00068,
+          -6.8e-05
+        ],
+        "position": [
+          -0.258905,
+          -0.15073,
+          0.049443
+        ],
+        "quaternion": [
+          0.999966,
+          0.001127,
+          -0.000484,
+          0.008124
+        ]
+      },
+      "cup_on_table": true,
+      "max_gripper_force_n": 0.0,
+      "min_joint_margin_rad": 0.090004,
+      "ownership": null,
+      "phase": "initial_settle",
+      "sim_time_s": 0.6
+    },
+    {
+      "contact_counts": {
+        "left": 1,
+        "right": 0
+      },
+      "contacts": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:table"
+      ],
+      "cup": {
+        "linear_velocity": [
+          -0.054308,
+          0.032085,
+          -0.005166
+        ],
+        "position": [
+          -0.271685,
+          -0.161368,
+          0.051483
+        ],
+        "quaternion": [
+          0.766263,
+          0.064302,
+          0.07893,
+          0.63441
+        ]
+      },
+      "cup_on_table": true,
+      "max_gripper_force_n": 0.004014,
+      "min_joint_margin_rad": 0.090012,
+      "ownership": "left",
+      "phase": "left_approach",
+      "sim_time_s": 1.8
+    },
+    {
+      "contact_counts": {
+        "left": 4,
+        "right": 0
+      },
+      "contacts": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:table"
+      ],
+      "cup": {
+        "linear_velocity": [
+          0.004759,
+          0.00635,
+          0.002038
+        ],
+        "position": [
+          -0.279031,
+          -0.16408,
+          0.041168
+        ],
+        "quaternion": [
+          0.649923,
+          -0.043426,
+          -0.003718,
+          0.758749
+        ]
+      },
+      "cup_on_table": true,
+      "max_gripper_force_n": 0.634747,
+      "min_joint_margin_rad": 0.090018,
+      "ownership": "left",
+      "phase": "left_descend",
+      "sim_time_s": 3.0
+    },
+    {
+      "contact_counts": {
+        "left": 5,
+        "right": 0
+      },
+      "contacts": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_4",
+        "cup:table"
+      ],
+      "cup": {
+        "linear_velocity": [
+          0.005313,
+          -0.000226,
+          0.001152
+        ],
+        "position": [
+          -0.276219,
+          -0.162109,
+          0.047231
+        ],
+        "quaternion": [
+          0.612824,
+          -0.035447,
+          -0.010853,
+          0.78935
+        ]
+      },
+      "cup_on_table": true,
+      "max_gripper_force_n": 0.109923,
+      "min_joint_margin_rad": 0.09002,
+      "ownership": "left",
+      "phase": "left_grasp",
+      "sim_time_s": 3.592
+    },
+    {
+      "contact_counts": {
+        "left": 9,
+        "right": 0
+      },
+      "contacts": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4"
+      ],
+      "cup": {
+        "linear_velocity": [
+          0.092526,
+          0.073352,
+          0.042834
+        ],
+        "position": [
+          -0.030538,
+          -0.101899,
+          0.131592
+        ],
+        "quaternion": [
+          0.275244,
+          -0.194416,
+          0.108864,
+          0.935196
+        ]
+      },
+      "cup_on_table": false,
+      "max_gripper_force_n": 0.351786,
+      "min_joint_margin_rad": 0.090024,
+      "ownership": "left",
+      "phase": "left_lift_transfer",
+      "sim_time_s": 4.792
+    },
+    {
+      "contact_counts": {
+        "left": 8,
+        "right": 0
+      },
+      "contacts": [
+        "cup:left_fixed_jaw_pad_1",
+        "cup:left_fixed_jaw_pad_2",
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_1",
+        "cup:left_moving_jaw_pad_2",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4"
+      ],
+      "cup": {
+        "linear_velocity": [
+          0.007416,
+          0.008388,
+          0.000903
+        ],
+        "position": [
+          -0.026023,
+          -0.097586,
+          0.134391
+        ],
+        "quaternion": [
+          0.245173,
+          -0.23025,
+          0.068674,
+          0.939233
+        ]
+      },
+      "cup_on_table": false,
+      "max_gripper_force_n": 0.159393,
+      "min_joint_margin_rad": 0.100098,
+      "ownership": "left",
+      "phase": "right_approach",
+      "sim_time_s": 5.992
+    },
+    {
+      "contact_counts": {
+        "left": 6,
+        "right": 1
+      },
+      "contacts": [
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_2",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_4"
+      ],
+      "cup": {
+        "linear_velocity": [
+          -0.000337,
+          0.002509,
+          -0.006166
+        ],
+        "position": [
+          -0.024461,
+          -0.095721,
+          0.126613
+        ],
+        "quaternion": [
+          0.300963,
+          -0.126564,
+          -0.019345,
+          0.945002
+        ]
+      },
+      "cup_on_table": false,
+      "max_gripper_force_n": 0.651641,
+      "min_joint_margin_rad": 0.100066,
+      "ownership": "dual",
+      "phase": "right_descend",
+      "sim_time_s": 7.192
+    },
+    {
+      "contact_counts": {
+        "left": 5,
+        "right": 3
+      },
+      "contacts": [
+        "cup:left_fixed_jaw_pad_3",
+        "cup:left_fixed_jaw_pad_4",
+        "cup:left_moving_jaw_pad_3",
+        "cup:left_moving_jaw_pad_4",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ],
+      "cup": {
+        "linear_velocity": [
+          -0.002852,
+          0.000156,
+          -0.000802
+        ],
+        "position": [
+          -0.025929,
+          -0.094561,
+          0.126107
+        ],
+        "quaternion": [
+          0.330558,
+          -0.060682,
+          -0.043962,
+          0.940806
+        ]
+      },
+      "cup_on_table": false,
+      "max_gripper_force_n": 0.232741,
+      "min_joint_margin_rad": 0.524579,
+      "ownership": "dual",
+      "phase": "right_grasp",
+      "sim_time_s": 7.784
+    },
+    {
+      "contact_counts": {
+        "left": 0,
+        "right": 4
+      },
+      "contacts": [
+        "cup:right_fixed_jaw_pad_3",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ],
+      "cup": {
+        "linear_velocity": [
+          0.000817,
+          0.000659,
+          -0.00283
+        ],
+        "position": [
+          -0.024377,
+          -0.088739,
+          0.120229
+        ],
+        "quaternion": [
+          0.35823,
+          0.093471,
+          0.280112,
+          0.885704
+        ]
+      },
+      "cup_on_table": false,
+      "max_gripper_force_n": 0.168373,
+      "min_joint_margin_rad": 0.10148,
+      "ownership": "right",
+      "phase": "left_release",
+      "sim_time_s": 9.576
+    },
+    {
+      "contact_counts": {
+        "left": 0,
+        "right": 4
+      },
+      "contacts": [
+        "cup:right_fixed_jaw_pad_3",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ],
+      "cup": {
+        "linear_velocity": [
+          0.055147,
+          0.021877,
+          0.017037
+        ],
+        "position": [
+          0.10224,
+          -0.084265,
+          0.142212
+        ],
+        "quaternion": [
+          0.26051,
+          -0.045499,
+          0.023245,
+          0.964118
+        ]
+      },
+      "cup_on_table": false,
+      "max_gripper_force_n": 0.184759,
+      "min_joint_margin_rad": 0.10085,
+      "ownership": "right",
+      "phase": "right_retreat",
+      "sim_time_s": 10.776
+    },
+    {
+      "contact_counts": {
+        "left": 0,
+        "right": 4
+      },
+      "contacts": [
+        "cup:right_fixed_jaw_pad_3",
+        "cup:right_fixed_jaw_pad_4",
+        "cup:right_moving_jaw_pad_4"
+      ],
+      "cup": {
+        "linear_velocity": [
+          0.013615,
+          0.012208,
+          -0.032635
+        ],
+        "position": [
+          0.132717,
+          -0.066467,
+          0.057955
+        ],
+        "quaternion": [
+          0.241962,
+          -0.115889,
+          -0.221484,
+          0.937533
+        ]
+      },
+      "cup_on_table": false,
+      "max_gripper_force_n": 0.193864,
+      "min_joint_margin_rad": 0.100507,
+      "ownership": "right",
+      "phase": "right_place",
+      "sim_time_s": 11.976
+    },
+    {
+      "contact_counts": {
+        "left": 0,
+        "right": 0
+      },
+      "contacts": [
+        "cup:table"
+      ],
+      "cup": {
+        "linear_velocity": [
+          0.015235,
+          -0.005788,
+          -0.0
+        ],
+        "position": [
+          0.122089,
+          -0.098359,
+          0.020947
+        ],
+        "quaternion": [
+          0.21803,
+          -0.035092,
+          -0.706235,
+          0.672654
+        ]
+      },
+      "cup_on_table": true,
+      "max_gripper_force_n": 0.0,
+      "min_joint_margin_rad": 0.072222,
+      "ownership": null,
+      "phase": "right_release",
+      "sim_time_s": 15.56
+    },
+    {
+      "contact_counts": {
+        "left": 0,
+        "right": 0
+      },
+      "contacts": [
+        "cup:table"
+      ],
+      "cup": {
+        "linear_velocity": [
+          0.015252,
+          -0.005795,
+          0.0
+        ],
+        "position": [
+          0.131239,
+          -0.101836,
+          0.020947
+        ],
+        "quaternion": [
+          0.364367,
+          0.125377,
+          -0.695903,
+          0.606001
+        ]
+      },
+      "cup_on_table": true,
+      "max_gripper_force_n": 0.0,
+      "min_joint_margin_rad": 0.065333,
+      "ownership": null,
+      "phase": "final_settle",
+      "sim_time_s": 16.16
+    },
+    {
+      "contact_counts": {
+        "left": 0,
+        "right": 0
+      },
+      "contacts": [
+        "cup:table"
+      ],
+      "cup": {
+        "linear_velocity": [
+          0.015252,
+          -0.005795,
+          0.0
+        ],
+        "position": [
+          0.131239,
+          -0.101836,
+          0.020947
+        ],
+        "quaternion": [
+          0.364367,
+          0.125377,
+          -0.695903,
+          0.606001
+        ]
+      },
+      "cup_on_table": true,
+      "max_gripper_force_n": 0.0,
+      "min_joint_margin_rad": 0.065333,
+      "ownership": null,
+      "phase": "final",
+      "sim_time_s": 16.16
+    }
+  ],
+  "success": true
+}

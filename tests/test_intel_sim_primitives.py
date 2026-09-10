@@ -50,6 +50,17 @@ def test_open_then_close_drawer_moves_its_qpos_both_ways():
     assert world.simulation_summary()["drawer_qpos"] == pytest.approx(DRAWER_CLOSED, abs=1e-6)
 
 
+def test_drawer_fixture_open_does_not_retarget_an_arm():
+    """A passive fixture transition must not disturb the next arm command."""
+    world = IntelTableWorld()
+    before_ctrl = world.data.ctrl.copy()
+
+    _send(world, "OPEN", {"object": "drawer"})
+
+    np.testing.assert_allclose(world.data.ctrl, before_ctrl, atol=0.0)
+    assert world.simulation_summary()["drawer_qpos"] == pytest.approx(DRAWER_OPEN, abs=1e-6)
+
+
 def test_drawer_postcondition_verification_is_physics_backed_and_fail_closed():
     world = IntelTableWorld()
     verifier = IntelTableVerifier(world)
@@ -146,22 +157,25 @@ def test_open_close_rotate_present_execute_individually_and_differ():
 
 
 def test_failed_grasp_reverts_worldstate_instead_of_claiming_success():
-    """The actual point of the OQ-010 rework: a real grasp/placement failure
-    must not leave the scripted WorldState update (ownership/zone) committed
-    -- that would silently claim success the physics never delivered.
-    plate_1 is a reliable real-world repro today: it's wider than the
-    gripper can ever open (190mm vs a 77mm max opening), so it can only
-    ever be an edge grasp, which this adapter still doesn't land -- a good
-    regression case for the revert path itself, independent of whether/when
-    the grasp geometry improves for other objects. (cup_1 was this
-    repro case until 2026-09-10, when real orientation-aware IK plus fixing
-    its geometry to actually fit the gripper's measured envelope made it a
-    genuine, honest success -- see intel_sim.py's module docstring.)"""
+    """A real grasp failure must not leave a scripted ownership claim.
+
+    The calibrated cup now succeeds on the nominal scene (see
+    intel_sim.py's module docstring: real orientation-aware IK + a resized
+    cup_1 produce a genuine held grasp for the first time this
+    investigation has seen). This adversarial fixture disables the named
+    pad contacts, forcing the physical check to fail and exercising the
+    same rollback boundary regardless of which object currently succeeds.
+    """
     world = IntelTableWorld()
+    for geom_id in range(world.model.ngeom):
+        name = world._mujoco.mj_id2name(world.model, world._mujoco.mjtObj.mjOBJ_GEOM, geom_id) or ""
+        if "jaw_pad_" in name:
+            world.model.geom_contype[geom_id] = 0
+    world._mujoco.mj_forward(world.model, world.data)
 
     request = TransitionRequest(
-        step_id="t", op="PICK", args={"object": "plate_1"},
-        expected_revision=world.state().revision, actor="intel.left_arm",
+        step_id="t", op="PICK", args={"object": "cup_1"},
+        expected_revision=world.state().revision, actor="intel.right_arm",
     )
     result = world.apply_transition(request)
 
@@ -171,18 +185,16 @@ def test_failed_grasp_reverts_worldstate_instead_of_claiming_success():
     # this adapter's real-physics grasp check runs; a failed grasp must
     # revert that claim, not leave the object silently "held" by an arm
     # that never actually gripped it.
-    assert world.state().ownership["plate_1"] is None
+    assert world.state().ownership["cup_1"] is None
 
 
 def test_pad_tracked_ik_converges_tighter_than_body_tracked_ik():
-    """cup_1 is now a genuine grasp success (see intel_sim.py's module
-    docstring) so this doubles as a light success-path check, but its real
-    job is protecting reach *precision* specifically: should land in the
-    ~1-5cm band the pad-geom + orientation-aware technique achieves, not
-    regress back toward the ~5-9cm band the old free-wrist-roll 5-joint
-    solve produced for the same target. plate_1 is the current honest-
-    failure repro case (see test_failed_grasp_reverts_worldstate_instead_
-    of_claiming_success), not this test's concern."""
+    """Protect the measured pad-tracking improvement in the legacy path.
+
+    This is not a full table-setting gate: placement and all-object
+    robustness remain separate evidence.  It only prevents the final
+    object-facing approach from regressing to the old body-tracked solve.
+    """
     world = IntelTableWorld()
 
     result = world._do_pick(6, "cup_1")
@@ -190,25 +202,93 @@ def test_pad_tracked_ik_converges_tighter_than_body_tracked_ik():
     assert result["reach_error_m"] < 0.06
 
 
+def test_grasp_frame_reads_object_yaw_without_mutating_freejoint():
+    """The orientation target is derived from observed scene state only."""
+    world = IntelTableWorld()
+    qpos_before = world.data.qpos.copy()
+
+    rotation, roll_hint = world._grasp_frame(6, "cup_1")
+
+    np.testing.assert_allclose(rotation.T @ rotation, np.eye(3), atol=1e-10)
+    assert np.linalg.det(rotation) == pytest.approx(1.0, abs=1e-10)
+    assert -1.65 <= roll_hint <= 1.65
+    np.testing.assert_allclose(world.data.qpos, qpos_before, atol=0.0)
+
+
+def test_oriented_pad_solver_returns_pose_metrics_and_respects_arm_only_scope():
+    world = IntelTableWorld()
+    rotation, roll_hint = world._grasp_frame(6, "cup_1")
+    target = world.data.geom_xpos[world._pad_geom[6]].copy()
+    object_qpos_before = world.data.qpos[world._object_joints["cup_1"][0]:world._object_joints["cup_1"][0] + 7].copy()
+
+    result = world._ik_reach_pad_pose(6, target, rotation, roll_hint=roll_hint, iters=1)
+
+    assert set(result) == {"position_error_m", "orientation_error_rad", "orientation_satisfied"}
+    assert result["position_error_m"] >= 0.0
+    assert result["orientation_error_rad"] >= 0.0
+    assert isinstance(result["orientation_satisfied"], bool)
+    np.testing.assert_allclose(
+        world.data.qpos[world._object_joints["cup_1"][0]:world._object_joints["cup_1"][0] + 7],
+        object_qpos_before,
+        atol=1e-10,
+    )
+
+
+def test_legacy_scene_exposes_calibrated_cup_and_no_collision_exemptions():
+    """cup_1's real calibration survives, but the earlier version of this
+    test also asserted a contype/conaffinity scheme that exempted the arm
+    from colliding with the table/drawer/objects -- a no-clip cheat, not a
+    control improvement (see intel_sim.py's module docstring). Reverted:
+    every geom in this scene uses plain MuJoCo defaults (contype=
+    conaffinity=1) and collides with everything. The narrower, real fix
+    for the order-dependence bug that scheme was also solving --
+    tableware not shoving other tableware before its own governed PICK --
+    is now explicit named <exclude> pairs between the 5 tableware bodies,
+    not a bitmask that also happened to exempt the arm."""
+    world = IntelTableWorld()
+    mujoco = world._mujoco
+    cup_id = mujoco.mj_name2id(world.model, mujoco.mjtObj.mjOBJ_GEOM, "cup_1")
+    pad_id = world._pad_geom[0]
+    assert tuple(world.model.geom_size[cup_id][:2]) == pytest.approx((0.022, 0.050), abs=1e-6)
+    assert tuple(world.model.geom_friction[cup_id]) == pytest.approx((3.0, 0.020, 0.001), abs=1e-6)
+    # Every geom -- pads included -- uses plain MuJoCo defaults, not a
+    # custom contype/conaffinity scheme (the pad's own friction/solref/
+    # solimp overrides are real material tuning, not a collision mask).
+    for geom_id in (pad_id, cup_id):
+        assert int(world.model.geom_contype[geom_id]) == 1
+        assert int(world.model.geom_conaffinity[geom_id]) == 1
+    for object_id in ("plate_1", "cup_1", "fork_1", "spoon_1", "napkin_1"):
+        geom_id = mujoco.mj_name2id(world.model, mujoco.mjtObj.mjOBJ_GEOM, object_id)
+        assert int(world.model.geom_contype[geom_id]) == 1
+        assert int(world.model.geom_conaffinity[geom_id]) == 1
+    # The real, narrower fix: explicit exclude pairs between all 5
+    # tableware bodies (10 pairs), on top of whatever arm self-collision
+    # excludes the source MJCF already declared.
+    assert world.model.nexclude >= 10
+
+
 def test_failed_grasp_restores_mujoco_state_for_a_clean_retry():
     """A rejected real attempt must roll back physics as well as WorldState.
 
-    The real controller currently fails this plate grasp honestly (see
-    test_failed_grasp_reverts_worldstate_instead_of_claiming_success for why
-    plate_1, not cup_1, is the current repro case). Before the rollback
-    guard, that failure still left the arm/free-body dynamics at the end of
-    its attempted trajectory, so a governed retry was not a retry from the
-    same scene.  Compare all state that the transition advances, not just
-    the ownership label that the MockWorld layer reverted.
+    Disable the named pad contacts to force a physical failure regardless
+    of which object currently succeeds (see the same fixture in
+    test_failed_grasp_reverts_worldstate_instead_of_claiming_success).
+    Compare all state that the transition advances, not just the
+    ownership label that the MockWorld layer reverts.
     """
     world = IntelTableWorld()
+    for geom_id in range(world.model.ngeom):
+        name = world._mujoco.mj_id2name(world.model, world._mujoco.mjtObj.mjOBJ_GEOM, geom_id) or ""
+        if "jaw_pad_" in name:
+            world.model.geom_contype[geom_id] = 0
+    world._mujoco.mj_forward(world.model, world.data)
     before_qpos = world.data.qpos.copy()
     before_qvel = world.data.qvel.copy()
     before_ctrl = world.data.ctrl.copy()
     before_time = float(world.data.time)
     before_steps = world.simulation_summary()["controller_steps"]
 
-    result = _send(world, "PICK", {"object": "plate_1"}, actor="intel.left_arm")
+    result = _send(world, "PICK", {"object": "cup_1"}, actor="intel.right_arm")
 
     assert result.ok is False
     np.testing.assert_allclose(world.data.qpos, before_qpos, atol=1e-10)
@@ -216,7 +296,7 @@ def test_failed_grasp_restores_mujoco_state_for_a_clean_retry():
     np.testing.assert_allclose(world.data.ctrl, before_ctrl, atol=1e-10)
     assert float(world.data.time) == pytest.approx(before_time, abs=1e-12)
     assert world.simulation_summary()["controller_steps"] == before_steps
-    assert world.state().ownership["plate_1"] is None
+    assert world.state().ownership["cup_1"] is None
 
 
 def test_failed_place_restores_the_pre_attempt_owner():

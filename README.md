@@ -122,6 +122,23 @@ the boundary between the frontend event surface and real provider work.
   host latency/memory baseline for the perception model (ONNX CPU vs PyTorch CUDA) anchoring the Qualcomm variants (OQ-029)
 - [`evidence/benchmark_results/openvino_inference_2026-09-10/README.md`](evidence/benchmark_results/openvino_inference_2026-09-10/README.md) —
   first model actually run through OpenVINO on real Intel CPU + iGPU: FP32 device comparison + NNCF INT8 quantization, same protocol as the ONNX baseline above
+- [`evidence/benchmark_results/yolo_2bit_cpu_20260910/README.md`](evidence/benchmark_results/yolo_2bit_cpu_20260910/README.md) —
+  2-bit weight-format evaluation on CPU (fp32/mxfp4/nvint2/mxfp2 arms; ~14× footprint cut; output agreement measured; software-dequantize only) — vendored codec at [`integrations/qualcomm/lowbit/`](integrations/qualcomm/lowbit/) (OQ-029)
+- [`evidence/datasets/table_yolo_v1_20260910/README.md`](evidence/datasets/table_yolo_v1_20260910/README.md) —
+  first multi-source tabletop dataset haul (2,723 unique images, measured dedup; feeds `perception/finetune.py`)
+
+## IDA Omni reasoner (brain)
+
+The planning seam is built for a local reasoner: `src/omni_q/omni_planner.py`
+(OmniPlanner — the model advises in a constrained grammar, the governed core
+validates every step, deterministic fallback stays truthfully labeled on every
+decision) and `src/omni_q/omni_reasoner.py` (backends). YOLO sees; Omni Q
+decides; every rationale rides the receipt. Intel-suite hook:
+`python -m omni_q.demo_intel_reasoner` (real MuJoCo + reasoner advice, zero
+edits to `intel_sim.py`). The IDA Omni body loads through the vendored,
+identity-gated harness at
+[`integrations/intel/vendor/omni_reference/`](integrations/intel/vendor/omni_reference/)
+— select with `OMNIQ_OMNI_REASONER=mock|omni` (+ checkpoint/receipt paths).
 
 ## Documents
 

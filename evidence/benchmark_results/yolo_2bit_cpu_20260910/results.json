@@ -1,0 +1,326 @@
+{
+  "attribution": "Portions derived from *The Hidden Canopy LLC* - [IDA-TRAIN-V2](https://github.com/The-Hidden-Canopy/IDA-TRAIN-V2). Used with permission.",
+  "codec": {
+    "formats": {
+      "mxfp2": {
+        "block_size": 32,
+        "code_bits": 2
+      },
+      "mxfp4": {
+        "block_size": 32,
+        "code_bits": 4
+      },
+      "nvint2": {
+        "block_size": 16,
+        "code_bits": 2
+      }
+    },
+    "module": "integrations/qualcomm.lowbit"
+  },
+  "created_utc": "2026-09-10T21:48:02Z",
+  "decode_sanity": {
+    "method": "ultralytics predict path, conf=0.25, detection count per input",
+    "parity_vs_fp32": {
+      "mxfp2": {
+        "count_agreement_rate": 1.0,
+        "mean_count_arm": 0.0,
+        "mean_count_fp32": 0.0
+      },
+      "mxfp4": {
+        "count_agreement_rate": 1.0,
+        "mean_count_arm": 0.0,
+        "mean_count_fp32": 0.0
+      },
+      "nvint2": {
+        "count_agreement_rate": 1.0,
+        "mean_count_arm": 0.0,
+        "mean_count_fp32": 0.0
+      }
+    }
+  },
+  "environment": {
+    "cpu_count": 12,
+    "interpreter": "E:\\HiddenCanopy\\OMNI-Q_Weird_Stuff_Machine\\.venv\\Scripts\\python.exe",
+    "numpy": "2.5.3",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "processor": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
+    "python": "3.12.10",
+    "torch": "2.14.0+cpu",
+    "torch_default_threads": 6
+  },
+  "finished_utc": "2026-09-10T21:54:26Z",
+  "harness": "integrations/qualcomm/scripts/eval_yolo_2bit_cpu.py",
+  "labels": {
+    "accuracy": "mAP50 blocked: HIT-UAV val set not on disk; 0.825 cited as published reference (yolo_host_baseline_2026-09-10)",
+    "decode_sanity": "synthetic gaussian-noise inputs yield zero detections at conf=0.25 in every arm, so count parity is trivially 1.0; output cosine is the informative agreement metric",
+    "execution": "software dequantize; no native 2-bit hardware \u2014 weights are restored to fp32 and executed by ordinary torch CPU kernels",
+    "inputs": "fixed-seed synthetic thermal-like inputs (rng.normal 640x640 grayscale broadcast to 3 channels); LATENCY + agreement probe only, not an accuracy claim",
+    "latency": "all arms execute the same fp32 torch kernels with identical FLOPs after the weight restore, so per-arm latency spread is co-residency timing noise on a shared dev box; the discriminative rows are footprint and Tier 2 dequant bandwidth",
+    "rss": "process-level peak RSS, dominated by the torch/ultralytics framework (~0.7 GB), not the 12 MB model",
+    "standing_note": "a format is a format - all quantized arms are reported symmetrically with measurements only",
+    "tier3": "ternary multiply-free Linear is a prototype, not production"
+  },
+  "map50": "blocked: HIT-UAV val set not on disk; 0.825 cited as reference (evidence/benchmark_results/yolo_host_baseline_2026-09-10)",
+  "model": {
+    "loader": "ultralytics YOLO",
+    "path": "E:\\HiddenCanopy\\OMNI-Q_Weird_Stuff_Machine\\models\\hituav_yolov8n_finetuned_2026-08-26.pt",
+    "protocol": {
+      "conf_for_count_parity": 0.25,
+      "input": "fixed-seed rng.normal, 640x640 grayscale -> 3ch",
+      "n_inputs": 32,
+      "seed": 7,
+      "timed": 100,
+      "warmup": 10
+    }
+  },
+  "question": "What do weight-only RNE MXFP4 / NVINT2 / MXFP2 masters do to the HIT-UAV YOLOv8n's CPU forward latency, memory footprint and output agreement vs the fp32 baseline?",
+  "tiers": {
+    "tier1_footprint_latency": {
+      "fp32": {
+        "fp32_weight_bytes": 12004864,
+        "output_cosine_vs_fp32": {
+          "mean": 1.0,
+          "min": 1.0,
+          "std": 0.0
+        },
+        "packed_bytes": 12004864,
+        "packed_ratio": 1.0,
+        "rss_peak_mb": 506.3,
+        "tier1_latency_ms": {
+          "threads_1": {
+            "max": 352.244,
+            "mean": 230.762,
+            "min": 186.647,
+            "p50": 220.48,
+            "p95": 300.35
+          },
+          "threads_default": {
+            "max": 172.842,
+            "mean": 126.904,
+            "min": 112.195,
+            "p50": 122.786,
+            "p95": 147.691
+          }
+        }
+      },
+      "mxfp2": {
+        "fp32_weight_bytes": 12004864,
+        "output_cosine_vs_fp32": {
+          "mean": 0.999325,
+          "min": 0.999229,
+          "std": 4.3e-05
+        },
+        "packed_bytes": 844093,
+        "packed_ratio": 0.0703,
+        "rss_peak_mb": 524.7,
+        "tier1_latency_ms": {
+          "threads_1": {
+            "max": 347.728,
+            "mean": 241.084,
+            "min": 186.975,
+            "p50": 229.656,
+            "p95": 314.426
+          },
+          "threads_default": {
+            "max": 147.297,
+            "mean": 131.548,
+            "min": 117.125,
+            "p50": 130.717,
+            "p95": 143.947
+          }
+        },
+        "tier2_bandwidth": {
+          "threads_1": {
+            "dequant_ms_mean": 91.294,
+            "excluded_forward_ms_mean": 241.084,
+            "forward_only_ms": {
+              "max": 347.728,
+              "mean": 241.084,
+              "min": 186.975,
+              "p50": 229.656,
+              "p95": 314.426
+            },
+            "inferred_included_ms_mean": 346.927,
+            "restore_plus_forward_ms": {
+              "max": 485.154,
+              "mean": 346.927,
+              "min": 258.558,
+              "p50": 351.86,
+              "p95": 450.869
+            }
+          },
+          "threads_default": {
+            "dequant_ms_mean": 120.068,
+            "excluded_forward_ms_mean": 131.548,
+            "forward_only_ms": {
+              "max": 147.297,
+              "mean": 131.548,
+              "min": 117.125,
+              "p50": 130.717,
+              "p95": 143.947
+            },
+            "inferred_included_ms_mean": 246.432,
+            "restore_plus_forward_ms": {
+              "max": 285.456,
+              "mean": 246.432,
+              "min": 216.836,
+              "p50": 247.816,
+              "p95": 271.11
+            }
+          }
+        },
+        "weight_cosine_mean": 0.715998,
+        "weight_cosine_min": 0.626038
+      },
+      "mxfp4": {
+        "fp32_weight_bytes": 12004864,
+        "output_cosine_vs_fp32": {
+          "mean": 0.999457,
+          "min": 0.999365,
+          "std": 3.5e-05
+        },
+        "packed_bytes": 1594397,
+        "packed_ratio": 0.1328,
+        "rss_peak_mb": 516.5,
+        "tier1_latency_ms": {
+          "threads_1": {
+            "max": 270.527,
+            "mean": 186.127,
+            "min": 153.803,
+            "p50": 172.133,
+            "p95": 249.413
+          },
+          "threads_default": {
+            "max": 171.859,
+            "mean": 116.48,
+            "min": 91.469,
+            "p50": 112.724,
+            "p95": 138.52
+          }
+        },
+        "tier2_bandwidth": {
+          "threads_1": {
+            "dequant_ms_mean": 65.251,
+            "excluded_forward_ms_mean": 186.127,
+            "forward_only_ms": {
+              "max": 270.527,
+              "mean": 186.127,
+              "min": 153.803,
+              "p50": 172.133,
+              "p95": 249.413
+            },
+            "inferred_included_ms_mean": 254.197,
+            "restore_plus_forward_ms": {
+              "max": 369.42,
+              "mean": 254.197,
+              "min": 203.317,
+              "p50": 243.273,
+              "p95": 343.624
+            }
+          },
+          "threads_default": {
+            "dequant_ms_mean": 119.343,
+            "excluded_forward_ms_mean": 116.48,
+            "forward_only_ms": {
+              "max": 171.859,
+              "mean": 116.48,
+              "min": 91.469,
+              "p50": 112.724,
+              "p95": 138.52
+            },
+            "inferred_included_ms_mean": 246.063,
+            "restore_plus_forward_ms": {
+              "max": 313.175,
+              "mean": 246.063,
+              "min": 202.299,
+              "p50": 243.472,
+              "p95": 290.284
+            }
+          }
+        },
+        "weight_cosine_mean": 0.992046,
+        "weight_cosine_min": 0.988115
+      },
+      "nvint2": {
+        "fp32_weight_bytes": 12004864,
+        "output_cosine_vs_fp32": {
+          "mean": 0.955414,
+          "min": 0.955247,
+          "std": 7.6e-05
+        },
+        "packed_bytes": 938136,
+        "packed_ratio": 0.0781,
+        "rss_peak_mb": 519.8,
+        "tier1_latency_ms": {
+          "threads_1": {
+            "max": 401.59,
+            "mean": 278.193,
+            "min": 221.723,
+            "p50": 265.156,
+            "p95": 352.492
+          },
+          "threads_default": {
+            "max": 159.115,
+            "mean": 136.475,
+            "min": 123.509,
+            "p50": 135.561,
+            "p95": 150.589
+          }
+        },
+        "tier2_bandwidth": {
+          "threads_1": {
+            "dequant_ms_mean": 65.003,
+            "excluded_forward_ms_mean": 278.193,
+            "forward_only_ms": {
+              "max": 401.59,
+              "mean": 278.193,
+              "min": 221.723,
+              "p50": 265.156,
+              "p95": 352.492
+            },
+            "inferred_included_ms_mean": 352.861,
+            "restore_plus_forward_ms": {
+              "max": 495.35,
+              "mean": 352.861,
+              "min": 273.914,
+              "p50": 345.321,
+              "p95": 436.678
+            }
+          },
+          "threads_default": {
+            "dequant_ms_mean": 97.579,
+            "excluded_forward_ms_mean": 136.475,
+            "forward_only_ms": {
+              "max": 159.115,
+              "mean": 136.475,
+              "min": 123.509,
+              "p50": 135.561,
+              "p95": 150.589
+            },
+            "inferred_included_ms_mean": 237.804,
+            "restore_plus_forward_ms": {
+              "max": 314.736,
+              "mean": 237.804,
+              "min": 196.861,
+              "p50": 237.621,
+              "p95": 269.877
+            }
+          }
+        },
+        "weight_cosine_mean": 0.909665,
+        "weight_cosine_min": 0.82693
+      }
+    },
+    "tier3_ternary_linear_prototype": {
+      "case": "[512,1024] x [1024,1024] torch.nn.Linear, mxfp2 ternary payload",
+      "cosine_vs_fp32_matmul_same_weights": 0.9999999999998886,
+      "cosine_vs_prequant_fp32": 0.6119441130086184,
+      "label": "prototype, not production",
+      "max_abs_diff_vs_fp32_matmul_same_weights": 3.1e-05,
+      "max_abs_diff_vs_prequant_fp32": 134.959656,
+      "ms_fp32_matmul_same_weights": 6.255,
+      "ms_prototype_binary_mask": 48.594,
+      "weight_cosine": 0.613015
+    }
+  }
+}

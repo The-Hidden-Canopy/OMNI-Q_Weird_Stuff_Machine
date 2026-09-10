@@ -58,3 +58,6 @@ data/raw/
 data/interim/
 *.sqlite
 *.db
+
+# ultralytics / YOLO training scratch output
+runs/

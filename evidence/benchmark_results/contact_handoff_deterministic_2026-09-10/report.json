@@ -1,0 +1,91 @@
+{
+  "failures": 0,
+  "kind": "deterministic acceptance gate; pinned seed; not a promotion claim",
+  "mode": "simulation-contact-handoff",
+  "receipts": [
+    {
+      "final_owner": null,
+      "final_stable": true,
+      "receipt": "trial-00-seed-19.json",
+      "seed": 19,
+      "success": true,
+      "trial": 0
+    },
+    {
+      "final_owner": null,
+      "final_stable": true,
+      "receipt": "trial-01-seed-19.json",
+      "seed": 19,
+      "success": true,
+      "trial": 1
+    },
+    {
+      "final_owner": null,
+      "final_stable": true,
+      "receipt": "trial-02-seed-19.json",
+      "seed": 19,
+      "success": true,
+      "trial": 2
+    },
+    {
+      "final_owner": null,
+      "final_stable": true,
+      "receipt": "trial-03-seed-19.json",
+      "seed": 19,
+      "success": true,
+      "trial": 3
+    },
+    {
+      "final_owner": null,
+      "final_stable": true,
+      "receipt": "trial-04-seed-19.json",
+      "seed": 19,
+      "success": true,
+      "trial": 4
+    },
+    {
+      "final_owner": null,
+      "final_stable": true,
+      "receipt": "trial-05-seed-19.json",
+      "seed": 19,
+      "success": true,
+      "trial": 5
+    },
+    {
+      "final_owner": null,
+      "final_stable": true,
+      "receipt": "trial-06-seed-19.json",
+      "seed": 19,
+      "success": true,
+      "trial": 6
+    },
+    {
+      "final_owner": null,
+      "final_stable": true,
+      "receipt": "trial-07-seed-19.json",
+      "seed": 19,
+      "success": true,
+      "trial": 7
+    },
+    {
+      "final_owner": null,
+      "final_stable": true,
+      "receipt": "trial-08-seed-19.json",
+      "seed": 19,
+      "success": true,
+      "trial": 8
+    },
+    {
+      "final_owner": null,
+      "final_stable": true,
+      "receipt": "trial-09-seed-19.json",
+      "seed": 19,
+      "success": true,
+      "trial": 9
+    }
+  ],
+  "schema_version": 1,
+  "seed": 19,
+  "successes": 10,
+  "trials": 10
+}

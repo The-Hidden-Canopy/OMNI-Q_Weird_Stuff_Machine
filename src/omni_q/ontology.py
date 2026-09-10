@@ -33,6 +33,7 @@ from typing import Any, Callable
 
 from .contracts import DataStatus, Detection, Observation, WorldState
 from .frame_observer import Detection2D, grid_zone_map, iou
+from .scheduler import DEFAULT_LAYOUT, Region, arm_reaches
 
 # ---------------------------------------------------------------------------
 # IS-A hierarchy — detector vocab differences don't reach OMNI-Q
@@ -65,6 +66,17 @@ def compatible(a: str, b: str) -> bool:
     return canonical(a) == canonical(b) or a == b
 
 
+# What a complete place setting holds, per setting zone (canonical classes).
+# ``missing_from_rule`` reports each unfilled slot + an ``incomplete`` marker;
+# override per scene via ``Ontology(place_setting=...)``.
+DEFAULT_PLACE_SETTING: dict[str, set[str]] = {
+    "setting_1": {"plate", "cup", "fork", "napkin"},
+    "setting_2": {"plate", "cup", "fork", "napkin"},
+}
+# Mirrored-pair reach slack, shared with the scheduler's arm_reaches().
+REACH_OVERLAP = 0.15
+
+
 # ---------------------------------------------------------------------------
 # value types
 # ---------------------------------------------------------------------------
@@ -89,7 +101,7 @@ class Claim:
 @dataclass(frozen=True)
 class Relation:
     subject: str
-    predicate: str      # near | intersects | reachable_by | missing_from | pointing_toward
+    predicate: str      # near | intersects | reachable_by | missing_from | incomplete | pointing_toward
     obj: str
     conf: float = 1.0
     source: str = "ontology"
@@ -171,6 +183,7 @@ class Ontology:
         conflict_conf: float = 0.45,
         max_missed: int = 3,
         relation_rules: list[RelationRule] | None = None,
+        place_setting: dict[str, set[str]] | None = None,
     ) -> None:
         self.zone_map = zone_map
         self.iou_thresh = iou_thresh
@@ -178,7 +191,12 @@ class Ontology:
         self.center_gate = center_gate
         self.conflict_conf = conflict_conf
         self.max_missed = max_missed
-        self.relation_rules = relation_rules or [near_rule, workspace_conflict_rule]
+        self.place_setting = (
+            DEFAULT_PLACE_SETTING if place_setting is None else place_setting
+        )
+        self.relation_rules = relation_rules or [
+            near_rule, workspace_conflict_rule, reachable_by_rule, missing_from_rule,
+        ]
 
         self.entities: dict[str, Entity] = {}
         self.relations: list[Relation] = []
@@ -410,6 +428,54 @@ def workspace_conflict_rule(ont: Ontology) -> list[Relation]:
         for a in arms:
             if h.zone == a.zone or iou(h.geometry, a.geometry) > 0:
                 out.append(Relation(h.id, "intersects", a.id, conf=0.9))
+    return out
+
+
+def reachable_by_rule(ont: Ontology, *, layout: dict[str, "Region"] = DEFAULT_LAYOUT,
+                      overlap: float = REACH_OVERLAP) -> list[Relation]:
+    """Table-geometry reach (OQ-ONT-007). Every task object gets a
+    ``reachable_by left_arm|right_arm`` relation for each arm whose
+    mirrored-pair envelope covers the object's zone -- the same reach model
+    the scheduler plans with (``omni_q.scheduler.arm_reaches``), so "left_arm
+    can reach the cup" in the ontology means the scheduler agrees. Pure
+    geometry: the object is ``reachable_by`` a side whether or not an arm
+    entity was detected this frame (arm availability is the provider's
+    concern, not the scene graph's). The object is a stable ``<side>_arm``
+    label, not a per-run entity id."""
+    out: list[Relation] = []
+    for e in ont.live():
+        if e.canonical_type == "human" or "arm" in e.type or e.type == "robot":
+            continue
+        region = layout.get(e.zone, Region(e.zone, 0.0))
+        for side in ("left", "right"):
+            if arm_reaches(side, region, overlap):
+                out.append(Relation(e.id, "reachable_by", f"{side}_arm", conf=0.9))
+    return out
+
+
+def missing_from_rule(ont: Ontology) -> list[Relation]:
+    """Place-setting completeness (OQ-ONT-007). For each setting zone in
+    ``ont.place_setting``: a ``<obj|class> missing_from <zone>`` relation per
+    unfilled slot (naming the real entity when one sits in the wrong zone,
+    else the bare class), plus one ``<zone> incomplete setting`` marker whose
+    conf is the fraction of the setting still missing."""
+    out: list[Relation] = []
+    for zone, required in ont.place_setting.items():
+        present = {
+            e.canonical_type for e in ont.live()
+            if e.zone == zone and "arm" not in e.type and e.canonical_type != "human"
+        }
+        missing = required - present
+        for cls in sorted(missing):
+            subject = next(
+                (e.id for e in ont.live()
+                 if e.canonical_type == cls and e.zone != zone and "arm" not in e.type),
+                cls,
+            )
+            out.append(Relation(subject, "missing_from", zone, conf=1.0))
+        if missing:
+            out.append(Relation(zone, "incomplete", "setting",
+                                conf=round(len(missing) / len(required), 2)))
     return out
 
 

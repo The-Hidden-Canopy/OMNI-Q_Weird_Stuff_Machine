@@ -314,11 +314,27 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     ET.SubElement(visual, "global", {"azimuth": "125", "elevation": "-28"})
     worldbody = ET.SubElement(root, "worldbody")
     ET.SubElement(worldbody, "light", {"name": "key", "pos": "0 -0.3 1.3", "dir": "0 0 -1", "directional": "true"})
+    # No contype/conaffinity here (or anywhere else in this scene): plain
+    # MuJoCo defaults collide with everything, which is what "no clipping
+    # through the environment" requires. A prior version of this comment
+    # justified an arm/table collision exemption as necessary to keep the
+    # position-only IK from "jamming" against the table -- that concern is
+    # real in principle, but the fix for it is a controller that doesn't
+    # command infeasible poses, not physics that pretends the arm has no
+    # body. Verified empirically: the real orientation-aware grasp (see
+    # this file's module docstring) still works correctly with full
+    # collision, no jamming observed.
     ET.SubElement(worldbody, "geom", {
         "name": "floor", "type": "plane", "size": "0 0 .05", "rgba": ".08 .12 .12 1",
     })
+    # pos.z -0.05 puts the box's top face at world z = 0 -- a real surface
+    # flush with the floor plane. The previous -0.055 sank the top to
+    # z = -0.005 (below the floor), so nothing ever rested on the table:
+    # every object fell through it to the floor plane. Tableware start
+    # z-heights below are set to each geom's own half-height so they begin
+    # resting on this surface instead of dropping onto it.
     ET.SubElement(worldbody, "geom", {
-        "name": "table", "type": "box", "pos": "0 -0.10 -0.055", "size": ".42 .36 .05",
+        "name": "table", "type": "box", "pos": "0 -0.10 -0.05", "size": ".42 .36 .05",
         "rgba": ".23 .14 .08 1", "friction": "1 .005 .0001",
     })
     ET.SubElement(worldbody, "camera", {"name": "third_person", "pos": "0 -1.15 .85", "euler": "1.05 0 0"})
@@ -339,7 +355,7 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     # source exclude pair once per arm, prefixed to match _prefixed()'s
     # renaming.
     source_excludes = source.findall("./contact/exclude")
-    contact = ET.SubElement(root, "contact") if source_excludes else None
+    contact = ET.SubElement(root, "contact")
     for arm, pos in (("left", "-.26 .20 .0"), ("right", ".26 .20 .0")):
         arm_body = _prefixed(base, arm)
         arm_body.set("pos", pos)
@@ -369,9 +385,13 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
                 "body2": f"{arm}_{exclude.attrib['body2']}",
             })
 
-    worldbody.append(_drawer("0 -.40 .01"))
-    plate_pos, plate_euler = tableware_pose((-.13, -.08, .026))
-    cup_pos, cup_euler = tableware_pose((.16, -.06, .055))
+    worldbody.append(_drawer("0 -.40 .015"))  # half-height .015 -> base rests on the z=0 table top
+    # Each z is the geom's own half-height: the object starts resting on the
+    # table surface (top face at world z = 0) rather than hovering above a
+    # surface that used to be below the floor. z is never jittered by
+    # tableware_pose(), so these stay exact.
+    plate_pos, plate_euler = tableware_pose((-.13, -.08, .016))
+    cup_pos, cup_euler = tableware_pose((.16, -.06, .050))
     # fork_1/spoon_1 used to sit at (+/-.04, -.40) -- co-located with the
     # drawer prop above. Measured (two independent ways: this file's own IK
     # convergence sweep, and OQ-003's separately-published reach probe in
@@ -387,9 +407,9 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     # explicitly, that fork_1/spoon_1 were never kinematically attached to
     # the drawer's slide joint in the first place, so "opening" it was
     # always symbolic and didn't literally reveal these bodies either way.
-    fork_pos, fork_euler = tableware_pose((-.32, -.05, .035))
-    spoon_pos, spoon_euler = tableware_pose((.32, -.05, .035))
-    napkin_pos, napkin_euler = tableware_pose((-.22, .02, .006))
+    fork_pos, fork_euler = tableware_pose((-.32, -.05, .004))
+    spoon_pos, spoon_euler = tableware_pose((.32, -.05, .004))
+    napkin_pos, napkin_euler = tableware_pose((-.22, .02, .003))
     worldbody.extend([
         # Rim half-height .016 (32mm full thickness), not the original .007
         # (14mm): the SO-101 gripper's own fully-closed pad gap is 21.3mm
@@ -428,6 +448,19 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
             "mass": ".02", "friction": "1.60 .006 .0002",
         }, euler=napkin_euler),
     ])
+    # A real, narrower fix for the same order-dependence bug the reverted
+    # contype/conaffinity scheme above was also (over-broadly) solving: an
+    # earlier-placed object could get physically shoved by a later PICK's
+    # approach before its own governed transition, turning a valid grasp
+    # into a scene-order-dependent failure. Excluding tableware-vs-
+    # tableware contact specifically (not touching arm-vs-anything or
+    # object-vs-table/pad collision at all) fixes that without exempting
+    # the arm from the environment -- explicit named pairs, not a bitmask,
+    # so the scope is exactly these five bodies and nothing else.
+    _TABLEWARE = ("plate_1", "cup_1", "fork_1", "spoon_1", "napkin_1")
+    for i, body1 in enumerate(_TABLEWARE):
+        for body2 in _TABLEWARE[i + 1:]:
+            ET.SubElement(contact, "exclude", {"body1": body1, "body2": body2})
 
     actuators = ET.SubElement(root, "actuator")
     source_actuators = source.find("actuator")
@@ -764,7 +797,7 @@ class IntelTableWorld(MockWorld):
         self, arm_offset: int, target_pos, target_rotation, *, roll_hint: float,
         iters: int = 360, max_dq: float = 0.04, position_tol: float = 0.012,
         orientation_tol: float = 0.18,
-    ) -> dict[str, float]:
+    ) -> dict[str, Any]:
         """Bounded 6D damped-least-squares solve for a pad pose.
 
         The residual combines metres and radians with an explicit scale. It
@@ -815,7 +848,7 @@ class IntelTableWorld(MockWorld):
         return {
             "position_error_m": round(position_error, 6),
             "orientation_error_rad": round(orientation_error, 6),
-            "orientation_satisfied": float(position_error <= position_tol and orientation_error <= orientation_tol),
+            "orientation_satisfied": bool(position_error <= position_tol and orientation_error <= orientation_tol),
         }
 
     def _set_gripper(self, arm_offset: int, value: float, *, settle_steps: int = 15) -> None:

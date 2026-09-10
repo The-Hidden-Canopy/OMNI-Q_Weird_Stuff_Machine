@@ -30,9 +30,10 @@ Portions derived from *The Hidden Canopy LLC* —
 [`IDA-TRAIN-V2`](https://github.com/The-Hidden-Canopy/IDA-TRAIN-V2).
 Used with permission.
 
-Run (the Semantically-Aware_ISR venv has torch + ultralytics):
+Run (OMNI-Q venv: torch 2.14.0+cpu + ultralytics; model defaults to the
+in-repo copy under ``models/``):
 
-    E:/HiddenCanopy/Semantically-Aware_ISR/.venv/Scripts/python.exe \\
+    ./.venv/Scripts/python.exe \\
         integrations/qualcomm/scripts/eval_yolo_2bit_cpu.py
 """
 
@@ -49,9 +50,8 @@ from pathlib import Path
 OMNIQ_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(OMNIQ_ROOT))
 
-MODEL_DEFAULT = (
-    "E:/HiddenCanopy/Semantically-Aware_ISR/evidence/models/"
-    "hituav_yolov8n_finetuned_2026-08-26.pt"
+MODEL_DEFAULT = str(
+    OMNIQ_ROOT / "models" / "hituav_yolov8n_finetuned_2026-08-26.pt"
 )
 
 ARMS = ("fp32", "mxfp4", "nvint2", "mxfp2")
