@@ -35,7 +35,7 @@ Status legend: ` ` todo · `~` in progress · `x` done.
 | x | OQ-018 | Gerron/Claude | Closed-loop verification/replanning | OQ-008, OQ-009, OQ-016 | After every manipulation, vision compares observed vs expected state and retries/replans when necessary — `OmniQ` verifies after every manipulate step + replans on mismatch/lost-capability/constraint; real perception swaps in at OQ-008 |
 | x | OQ-019 | Gerron/Kimi | Build table-layout evaluator | OQ-007 | Produces positional/orientation errors and PASS/FAIL for final setting |
 |   | OQ-020 | Bryan/Codex | Visualize bimanual execution | OQ-012, OQ-005 | UI shows ARM-A/ARM-B actions, parallel intervals, handoffs, barriers and object ownership live |
-|   | OQ-021 | Damion/Claude | Break the Intel demo deliberately | OQ-018 | Test moved objects, failed grasp, unreachable object, collision risk, missing detection, bad instruction; record behavior |
+| x | OQ-021 | Damion/Claude | Break the Intel demo deliberately | OQ-018 | Test moved objects, failed grasp, unreachable object, collision risk, missing detection, bad instruction; record behavior — see [`docs/oq-021-red-team-findings.md`](docs/oq-021-red-team-findings.md): 2 new latent findings (silent-false-positive perception on zero detections; scheduler "concurrency" is graph-level not real-time), 2 clean passes (unknown-zone, adversarial NL), 1 gap (mid-run perturbation untestable until grasp lands) |
 |   | OQ-022 | Gerron/GPT | Intel hardware/runtime packaging | OQ-016 | Demo can run through required Intel execution path rather than generic local-only code |
 
 ## P1 — Speechmatics, Qualcomm, unification, submission
