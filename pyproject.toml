@@ -25,6 +25,7 @@ intel = [
     "lerobot>=0.6",
     "optimum-intel[openvino]>=2.1",
     "nncf>=3.3",
+    "psutil>=5.9",  # integrations/intel/scripts/profile_yolo_openvino.py
 ]
 
 [project.scripts]

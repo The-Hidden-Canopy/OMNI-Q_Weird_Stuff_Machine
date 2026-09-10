@@ -120,6 +120,8 @@ the boundary between the frontend event surface and real provider work.
   ten seeded legacy table-setting trials with retained, hash-checked receipts; all grasp failures are preserved as exploratory evidence
 - [`evidence/benchmark_results/yolo_host_baseline_2026-09-10/README.md`](evidence/benchmark_results/yolo_host_baseline_2026-09-10/README.md) —
   host latency/memory baseline for the perception model (ONNX CPU vs PyTorch CUDA) anchoring the Qualcomm variants (OQ-029)
+- [`evidence/benchmark_results/openvino_inference_2026-09-10/README.md`](evidence/benchmark_results/openvino_inference_2026-09-10/README.md) —
+  first model actually run through OpenVINO on real Intel CPU + iGPU: FP32 device comparison + NNCF INT8 quantization, same protocol as the ONNX baseline above
 
 ## Documents
 

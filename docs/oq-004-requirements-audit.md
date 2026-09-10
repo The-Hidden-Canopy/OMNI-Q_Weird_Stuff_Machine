@@ -8,6 +8,17 @@
 > grasp implementation work this session, not just static code reading —
 > flagged where that applies. Re-run before submission; several gaps here are
 > actively being closed by the team in parallel.
+>
+> **Addendum, same day, commit `ea7818b`→later:** acted on this audit's own
+> priority #3 — exported the published thermal YOLO to OpenVINO IR and
+> benchmarked it (FP32 + NNCF INT8) on this machine's real Intel CPU+iGPU:
+> [`evidence/benchmark_results/openvino_inference_2026-09-10/`](../evidence/benchmark_results/openvino_inference_2026-09-10/README.md).
+> This moves "Intel execution" from a flat GAP to partial — the
+> export/optimize/benchmark pipeline is now proven end-to-end on real
+> hardware, though not yet on the fine-tuned table-setting detector (OQ-008
+> still pending) or on actual Core Ultra Series 2/3 silicon. The verdict
+> tables below are left as originally written (point-in-time record); read
+> them alongside this note, not as superseded.
 
 ## Method
 

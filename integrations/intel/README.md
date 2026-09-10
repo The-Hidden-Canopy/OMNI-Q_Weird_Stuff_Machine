@@ -164,7 +164,24 @@ alongside the YOLO perception node.
   `run_intel_table_evaluation_report(...)` retains one hashed receipt per seed
   and classifies observed outcomes. This is exploratory controller evidence,
   not a promotion claim.
-- [ ] Intel inference benchmark script (latency, throughput, device, precision)
+- [x] Intel inference benchmark script (latency, throughput, device, precision) —
+  first real model actually exported to OpenVINO IR and run through OpenVINO
+  inference anywhere in this repo. `integrations/intel/scripts/profile_yolo_openvino.py`
+  (same fixed-seed/warmup/iteration protocol as
+  `integrations/qualcomm/scripts/profile_yolo_host.py`, for direct
+  comparability) benchmarked on this machine's real Intel Core 5 210H CPU +
+  Intel iGPU: `evidence/benchmark_results/openvino_inference_2026-09-10/`.
+  FP32 CPU 42.2ms mean → iGPU 12.0ms (3.5× — device utilization) → NNCF
+  INT8 CPU 10.1ms / iGPU 8.5ms (4.2-5× over CPU FP32 — precision/quantization).
+  **Scope**: benchmarks the already-published thermal YOLO
+  (`KissTheHabit/yolov8n-hituav-thermal-finetune`), not yet the fine-tuned
+  7-class table-setting detector (OQ-008's `perception/` fine-tune hasn't
+  run — needs a 150-300k-image pull that doesn't fit a short session). This
+  proves the export→optimize→benchmark pipeline works end-to-end on real
+  Intel hardware; swap the `.pt` when the real fine-tune lands, same
+  commands. Also not yet run on actual Core Ultra Series 2/3 hardware
+  (this dev machine has a Core 5 210H) — re-run on target hardware before
+  submission per the brief's requirement.
 - [ ] Anomalib + OpenVINO defect path (onsite)
 - [ ] Natural-language instruction → capability graph binding
 - [x] Attempted: apply the contact-handoff grasp fix (fixed wrist-roll +
