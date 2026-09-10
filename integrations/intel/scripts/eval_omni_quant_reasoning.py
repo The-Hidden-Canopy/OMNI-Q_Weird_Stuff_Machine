@@ -22,17 +22,25 @@ measurements only. No accuracy or quality verdict is drawn by this harness —
 in fixture mode the run is explicitly labeled "plumbing validation on
 numerical fixture, not a capability result".
 
-Read-only consumer of IDA-TRAIN-V2 and Ask_IDA_CLI: nothing in those repos
-is created or modified. All evidence lands under
+Vendored harness, self-contained: the Omni inference harness and model
+closure live in ``integrations/intel/vendor/omni_reference/`` (see its
+SOURCE.md) — no code is imported from IDA-TRAIN-V2 or Ask_IDA_CLI. Only
+artifact paths (checkpoint/receipt/tokenizer defaults) may point into the
+IDA-TRAIN-V2 artifacts tree. All evidence lands under
 ``evidence/benchmark_results/omni_quant_2bit_<YYYYMMDD>/`` and the directory
 is never overwritten (a suffixed timestamp variant is created instead).
 
 Environment:
-    IDA_TRAIN_V2_ROOT   (default E:/HiddenCanopy/IDA-TRAIN-V2)
-    ASK_IDA_CLI_ROOT    (default E:/HiddenCanopy/Ask_IDA_CLI)
     OMNIQ_OMNI_CHECKPOINT / OMNIQ_OMNI_RECEIPT
                         (unset -> tiny CPU fixture under IDA-TRAIN-V2
-                         artifacts/omni_cuda_audit_p5200_20260908/)
+                         artifacts/omni_cuda_audit_p5200_20260908/ — an
+                         artifact path, not code)
+    OMNIQ_OMNI_REFERENCE_EXTERNAL=1
+                        (opt-in escape hatch, dev parity check only: load the
+                         harness/model from external checkouts instead of the
+                         vendored package; roots via OMNIQ_ASK_IDA_CLI_ROOT /
+                         OMNIQ_IDA_TRAIN_V2_ROOT, each defaulting to the
+                         E:/HiddenCanopy checkout)
 
 Portions derived from *The Hidden Canopy LLC* — [`IDA-TRAIN-V2`](https://github.com/The-Hidden-Canopy/IDA-TRAIN-V2). Used with permission.
 """
@@ -80,14 +88,17 @@ def _utc_now() -> str:
 
 
 def _resolve_paths() -> dict:
-    ida_root = Path(os.environ.get("IDA_TRAIN_V2_ROOT", "E:/HiddenCanopy/IDA-TRAIN-V2"))
-    ask_root = Path(os.environ.get("ASK_IDA_CLI_ROOT", "E:/HiddenCanopy/Ask_IDA_CLI"))
-    fixture_dir = ida_root / "artifacts" / "omni_cuda_audit_p5200_20260908"
-    checkpoint = Path(os.environ.get("OMNIQ_OMNI_CHECKPOINT", fixture_dir / "checkpoint-000001.pt"))
-    receipt = Path(os.environ.get("OMNIQ_OMNI_RECEIPT", fixture_dir / "receipt.json"))
+    checkpoint = Path(os.environ.get(
+        "OMNIQ_OMNI_CHECKPOINT",
+        "E:/HiddenCanopy/IDA-TRAIN-V2/artifacts/omni_cuda_audit_p5200_20260908"
+        "/checkpoint-000001.pt"))
+    receipt = Path(os.environ.get(
+        "OMNIQ_OMNI_RECEIPT",
+        "E:/HiddenCanopy/IDA-TRAIN-V2/artifacts/omni_cuda_audit_p5200_20260908"
+        "/receipt.json"))
     return {
-        "ida_root": ida_root,
-        "ask_root": ask_root,
+        "external": os.environ.get("OMNIQ_OMNI_REFERENCE_EXTERNAL", "").strip().lower()
+                    in {"1", "true", "yes", "on"},
         "checkpoint": checkpoint,
         "receipt": receipt,
         "fixture_mode": "OMNIQ_OMNI_CHECKPOINT" not in os.environ,
@@ -95,8 +106,14 @@ def _resolve_paths() -> dict:
 
 
 def _ensure_syspath(paths: dict) -> None:
-    for entry in (str(OMNIQ_ROOT), str(paths["ask_root"]), str(paths["ida_root"] / "src"),
-                  str(OMNIQ_ROOT / "integrations" / "qualcomm" / "lowbit")):
+    entries = [str(OMNIQ_ROOT),
+               str(OMNIQ_ROOT / "integrations" / "qualcomm" / "lowbit")]
+    if paths["external"]:
+        # Dev parity check only: expose the external checkouts' code.
+        entries += [os.environ.get("OMNIQ_ASK_IDA_CLI_ROOT", "E:/HiddenCanopy/Ask_IDA_CLI"),
+                    os.path.join(os.environ.get("OMNIQ_IDA_TRAIN_V2_ROOT",
+                                                "E:/HiddenCanopy/IDA-TRAIN-V2"), "src")]
+    for entry in entries:
         if entry not in sys.path:
             sys.path.insert(0, entry)
 
@@ -197,16 +214,19 @@ def run_arm(arm: str, spec, prompt: str, paths: dict, args) -> dict:
 
     receipt_meta = _read_receipt_metadata(paths["receipt"])
     tokenizer_path = None
-    rel = receipt_meta.get("receipt_tokenizer_path")
-    if rel:
-        candidate = paths["ida_root"] / rel
-        if candidate.exists():
-            tokenizer_path = candidate
+    if paths["external"]:
+        # Dev parity check only: mirror the pre-vendor tokenizer resolution
+        # (receipt-relative path inside the external IDA-TRAIN-V2 checkout).
+        ida_root = Path(os.environ.get("OMNIQ_IDA_TRAIN_V2_ROOT",
+                                       "E:/HiddenCanopy/IDA-TRAIN-V2"))
+        rel = receipt_meta.get("receipt_tokenizer_path")
+        if rel:
+            candidate = ida_root / rel
+            if candidate.exists():
+                tokenizer_path = candidate
 
     reasoner = OmniReferenceReasoner(
         paths["checkpoint"], paths["receipt"],
-        ask_ida_cli_root=paths["ask_root"],
-        ida_train_root=paths["ida_root"],
         tokenizer_path=tokenizer_path,
         device="cpu",
         max_new_tokens=args.max_new_tokens,

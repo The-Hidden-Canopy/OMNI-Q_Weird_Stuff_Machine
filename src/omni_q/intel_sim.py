@@ -157,6 +157,12 @@ class IntelSceneConfig:
 OBJECT_HALF_HEIGHT: dict[str, float] = {
     "plate_1": 0.016, "cup_1": 0.055, "fork_1": 0.004, "spoon_1": 0.004, "napkin_1": 0.003,
 }
+# Horizontal offset from an object's centre to the fixed pad target.  Large
+# flat fixtures are grasped at their rim/edge; targeting their centre puts the
+# pad inside the collision volume and drags them during the lift.
+OBJECT_GRASP_OFFSET: dict[str, float] = {
+    "plate_1": 0.078, "cup_1": 0.0, "fork_1": 0.006, "spoon_1": 0.0, "napkin_1": 0.050,
+}
 GRASP_CLEARANCE = 0.015  # m -- gap kept above an object's top surface before closing on it
 
 # Real MuJoCo (x, y, z) table-setting target per zone name, keyed by the same
@@ -490,15 +496,20 @@ class IntelTableWorld(MockWorld):
             # (e.g. the "drawer" fixture): a fixed coarse target, same as
             # before real grasping existed for tableware.
             target = list(HOME)
+            arm_command = True
             if op in {"PICK", "MOVE"}:
                 target[2], target[3], target[5] = 1.20, 0.85, GRIPPER_CLOSED
             elif op == "PLACE":
                 target[2], target[3], target[5] = 1.20, 0.85, GRIPPER_OPEN
             elif op == "OPEN" and obj == "drawer":
-                target[2], target[3] = 0.9, 0.3
+                # Opening a passive fixture must not move an arm away from
+                # its verified home pose. The previous coarse arm command
+                # made the next physically unrelated PICK depend on whether
+                # an OPEN step happened to precede it.
+                arm_command = False
                 self.data.qpos[self._drawer_qpos_adr] = DRAWER_OPEN
             elif op == "CLOSE" and obj == "drawer":
-                target[2], target[3] = 0.9, 0.3
+                arm_command = False
                 self.data.qpos[self._drawer_qpos_adr] = DRAWER_CLOSED
             elif op == "OPEN":
                 target[5] = GRIPPER_OPEN
@@ -510,8 +521,9 @@ class IntelTableWorld(MockWorld):
                 target[1], target[3], target[5] = -0.8, 0.3, GRIPPER_CLOSED
             elif op == "HANDOFF":
                 target[4] = 1.20 if arm_offset else -1.20
-            for index, value in enumerate(target, start=arm_offset):
-                self.data.ctrl[index] = value
+            if arm_command:
+                for index, value in enumerate(target, start=arm_offset):
+                    self.data.ctrl[index] = value
             self._mujoco.mj_step(self.model, self.data, nstep=20)
             self._controller_steps += 20
 
@@ -681,7 +693,7 @@ class IntelTableWorld(MockWorld):
         pad_y = np.array([0.0, 0.0, 1.0])
         pad_z = np.cross(pad_x, pad_y)
         target_rotation = np.column_stack((pad_x, pad_y, pad_z))
-        roll_hint = (1.65 if arm_offset == 0 else -1.65) - yaw
+        roll_hint = self._GRASP_WRIST_ROLL[arm_offset] - yaw
         return target_rotation, float(np.clip(roll_hint, -1.62, 1.62))
 
     def _ik_reach_pad_pose(
@@ -790,15 +802,24 @@ class IntelTableWorld(MockWorld):
         the actual pinch (see ``_ik_reach_pad``) -- close the gripper on the
         real object, lift, and report whether it's actually being carried
         (measured height gain), not just whether the motion finished."""
+        import numpy as np
+
         target_rotation, roll_hint = self._grasp_frame(arm_offset, obj)
+        attempt_snapshot = (
+            self.data.qpos.copy(), self.data.qvel.copy(), self.data.ctrl.copy(),
+            float(self.data.time), self._controller_steps,
+        )
         qpos_adr, _ = self._object_joints[obj]
         start_z = float(self.data.qpos[qpos_adr + 2])
         xy = self.data.qpos[qpos_adr:qpos_adr + 2].copy()
         half_h = OBJECT_HALF_HEIGHT.get(obj, 0.01)
         clear_z = start_z + half_h + GRASP_CLEARANCE  # just above the object's real top
+        opening_xy = -target_rotation[:2, 0]
+        grasp_offset = OBJECT_GRASP_OFFSET.get(obj, 0.0)
+        grasp_xy = xy - opening_xy * grasp_offset
 
         self._set_gripper(arm_offset, GRIPPER_OPEN)
-        self._move_to(arm_offset, (xy[0], xy[1], clear_z))
+        self._move_to(arm_offset, (grasp_xy[0], grasp_xy[1], clear_z))
 
         # First locate the actual pad with the bounded object-aware roll hint,
         # then hold that measured, reachable frame while descending. Asking
@@ -806,18 +827,19 @@ class IntelTableWorld(MockWorld):
         # over-constrain the proxy; the measured frame preserves the physical
         # wrist convention while still making yaw a live input.
         self._ik_reach_pad(
-            arm_offset, (xy[0], xy[1], clear_z),
+            arm_offset, (grasp_xy[0], grasp_xy[1], clear_z),
             iters=220, roll=roll_hint,
         )
         target_rotation = self.data.geom_xmat[self._pad_geom[arm_offset]].reshape(3, 3).copy()
         clear_pose = self._ik_reach_pad_pose(
-            arm_offset, (xy[0], xy[1], clear_z), target_rotation,
+            arm_offset, (grasp_xy[0], grasp_xy[1], clear_z), target_rotation,
             roll_hint=roll_hint, iters=220,
         )
         xy_now = self.data.qpos[qpos_adr:qpos_adr + 2].copy()
         z_now = float(self.data.qpos[qpos_adr + 2])
+        grasp_xy = xy_now - opening_xy * grasp_offset
         pinch_pose = self._ik_reach_pad_pose(
-            arm_offset, (xy_now[0], xy_now[1], z_now), target_rotation,
+            arm_offset, (grasp_xy[0], grasp_xy[1], z_now), target_rotation,
             roll_hint=roll_hint, iters=80,
         )
         # The final vertical approach is position-dominant: the reachable
@@ -825,7 +847,7 @@ class IntelTableWorld(MockWorld):
         # roll-pinned solve avoids twisting a pad into the object while the
         # jaws are entering contact.
         pinch_error = self._ik_reach_pad(
-            arm_offset, (xy_now[0], xy_now[1], z_now),
+            arm_offset, (grasp_xy[0], grasp_xy[1], z_now),
             iters=180, roll=roll_hint,
         )
 
@@ -837,6 +859,55 @@ class IntelTableWorld(MockWorld):
 
         lifted_z = float(self.data.qpos[qpos_adr + 2])
         lift = lifted_z - start_z
+        if lift <= 0.02:
+            # A bounded orientation search is still physical: each candidate
+            # starts from the exact pre-attempt simulator state and is judged
+            # by lift height.  This handles mirrored jaw conventions and
+            # small object-yaw errors without writing the object freejoint.
+            candidate_rolls = []
+            for candidate in (
+                self._GRASP_WRIST_ROLL[arm_offset],
+                -self._GRASP_WRIST_ROLL[arm_offset],
+                roll_hint - 0.25, roll_hint + 0.25,
+            ):
+                candidate = float(np.clip(candidate, -1.65, 1.65))
+                if all(abs(candidate - seen) > 1e-5 for seen in candidate_rolls):
+                    candidate_rolls.append(candidate)
+            for candidate in candidate_rolls:
+                if abs(candidate - roll_hint) < 1e-5:
+                    continue
+                self._restore_physics(attempt_snapshot)
+                self._set_gripper(arm_offset, GRIPPER_OPEN)
+                self._move_to(arm_offset, (grasp_xy[0], grasp_xy[1], clear_z))
+                self._ik_reach_pad(
+                    arm_offset, (grasp_xy[0], grasp_xy[1], clear_z),
+                    iters=220, roll=candidate,
+                )
+                target_rotation = self.data.geom_xmat[self._pad_geom[arm_offset]].reshape(3, 3).copy()
+                self._ik_reach_pad_pose(
+                    arm_offset, (xy[0], xy[1], clear_z), target_rotation,
+                    roll_hint=candidate, iters=120,
+                )
+                xy_retry = self.data.qpos[qpos_adr:qpos_adr + 2].copy()
+                z_retry = float(self.data.qpos[qpos_adr + 2])
+                grasp_xy_retry = xy_retry - opening_xy * grasp_offset
+                self._ik_reach_pad(
+                    arm_offset, (grasp_xy_retry[0], grasp_xy_retry[1], z_retry),
+                    iters=180, roll=candidate,
+                )
+                self._set_gripper(arm_offset, GRIPPER_CLOSED, settle_steps=180)
+                self._ik_reach_pad(
+                    arm_offset,
+                    (grasp_xy_retry[0], grasp_xy_retry[1], z_retry + (clear_z - start_z)),
+                    iters=280, roll=candidate,
+                )
+                retry_lift = float(self.data.qpos[qpos_adr + 2]) - start_z
+                if retry_lift > lift:
+                    lift = retry_lift
+                    lift_pose = {"position_error_m": round(lift_error, 6), "retry_roll_rad": round(candidate, 6)}
+                    roll_hint = candidate
+                if lift > 0.02:
+                    break
         return {
             "grasp": "contact", "reach_error_m": round(pinch_error, 6),
             "lift_height_m": round(lift, 4), "held": lift > 0.02,
@@ -877,16 +948,23 @@ class IntelTableWorld(MockWorld):
         roll_hint = float(self.data.qpos[arm_offset + 4])
 
         cur_pad_z = float(self.data.geom_xpos[self._pad_geom[arm_offset]][2])
+        # A broad, thin plate must be released above its rim. Driving a pad
+        # target through the plate centre makes contact solver impulses push
+        # the plate sideways before the jaws open; the other fixtures can be
+        # released at their centre-height target.
+        release_target = target_arr.copy()
+        if obj == "plate_1":
+            release_target[2] += half_h + GRASP_CLEARANCE
         self._ik_reach_pad(
-            arm_offset, (target_arr[0], target_arr[1], cur_pad_z),
+            arm_offset, (release_target[0], release_target[1], cur_pad_z),
             iters=240, roll=roll_hint,
         )
         place_error = self._ik_reach_pad(
-            arm_offset, target_arr, iters=300, roll=roll_hint,
+            arm_offset, release_target, iters=300, roll=roll_hint,
         )
         self._set_gripper(arm_offset, GRIPPER_OPEN, settle_steps=40)  # let it drop/settle
         lift_error = self._ik_reach_pad(
-            arm_offset, target_arr + clear, iters=240, roll=roll_hint,
+            arm_offset, release_target + clear, iters=240, roll=roll_hint,
         )  # retract straight up
 
         final_xy = self.data.qpos[qpos_adr:qpos_adr + 2].copy()

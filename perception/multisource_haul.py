@@ -402,7 +402,11 @@ def main() -> None:
     if missing:
         print(f"  WARNING: {len(missing)} annotated images missing from the zip", flush=True)
 
-    # ---- 2. LVIS val annotations (images == COCO val -> merge) -----------
+    # ---- 2. LVIS val annotations (images ARE COCO images -> merge) --------
+    # LVIS v1 val has NO file_name field — only coco_url — and its 19,809
+    # images span BOTH COCO val2017 and COCO train2017.  Names/splits are
+    # derived from coco_url; train2017 images are fetched per-image over HTTP
+    # (images.cocodataset.org serves single files, no auth).
     print("== LVIS v1 val", flush=True)
     lvis_zip = cache / "lvis_v1_val.json.zip"
     if not lvis_zip.exists():
@@ -410,28 +414,65 @@ def main() -> None:
     with zipfile.ZipFile(lvis_zip) as zf:
         lvis = json.loads(zf.read("lvis_v1_val.json"))
     lvis_rows = lvis_target_rows(lvis)
-    lvis_matched = sorted(set(lvis_rows) & set(coco_ids))
-    # LVIS images ARE COCO val images: an LVIS-only id still has its file in
-    # the val zip (COCO's own annotations may just lack our classes there).
-    lvis_file = {im["id"]: Path(im.get("file_name", "")).name for im in lvis["images"]}
-    lvis_new: list[int] = []
+    lvis_url = {im["id"]: im.get("coco_url", "") for im in lvis["images"]}
+
+    def _lvis_name(i: int) -> str:
+        return lvis_url.get(i, "").rstrip("/").rsplit("/", 1)[-1]
+
+    lvis_matched = sorted(i for i in lvis_rows if i in coco_file)
+    lvis_added = sorted(i for i in lvis_rows if i not in coco_file)
+    lvis_paths: dict[int, Path] = {}
+
     with zipfile.ZipFile(val_zip) as zf:
-        names = set(zf.namelist())
-        for i in sorted(set(lvis_rows) - set(coco_ids)):
-            member = f"val2017/{lvis_file.get(i, '')}"
-            dst = img_dir / lvis_file.get(i, "")
-            if member not in names:
+        names = {n for n in zf.namelist() if not n.endswith("/")}
+        for i in lvis_matched:
+            p = img_dir / coco_file[i]
+            if p.exists():
+                lvis_paths[i] = p
                 continue
-            if not dst.exists():
-                with zf.open(member) as src, dst.open("wb") as out:
+            member = f"val2017/{coco_file[i]}"
+            if member in names:
+                with zf.open(member) as src, p.open("wb") as out:
                     out.write(src.read())
-            coco_ids.append(i)
-            lvis_new.append(i)
-    print(f"  {len(lvis_matched)} LVIS images match COCO val ids "
+                lvis_paths[i] = p
+    # LVIS-annotated images beyond COCO's target set: pull from COCO train2017
+    # per-image (bounded by the same wall-clock budget).
+    from concurrent.futures import ThreadPoolExecutor
+    train_dir = cache / "coco_train_pull"
+    train_dir.mkdir(parents=True, exist_ok=True)
+    budget_s = args.budget_minutes * 60
+    todo = [i for i in lvis_added
+            if not (train_dir / _lvis_name(i)).exists()][:2000]
+    if todo and time.time() - t_start < budget_s:
+        print(f"  fetching {len(todo)} LVIS images from COCO train2017 "
+              f"(per-image HTTP)", flush=True)
+
+        def _pull(i: int):
+            url = lvis_url.get(i, "")
+            if not url:
+                return i, None
+            dst = train_dir / _lvis_name(i)
+            try:
+                r = requests.get(url, timeout=(10, 60))
+                r.raise_for_status()
+                dst.write_bytes(r.content)
+                return i, dst
+            except requests.RequestException:
+                dst.unlink(missing_ok=True)
+                return i, None
+
+        with ThreadPoolExecutor(8) as ex:
+            for n, (i, p) in enumerate(ex.map(_pull, todo)):
+                if p is not None:
+                    lvis_paths[i] = p
+                if n % 200 == 0:
+                    print(f"    lvis pull {n}/{len(todo)} "
+                          f"({time.time() - t_start:.0f}s)", flush=True)
+    n_new = len([i for i in lvis_added if i in lvis_paths])
+    print(f"  {len(lvis_matched)} LVIS images share COCO val ids "
           f"(cross-source dedup rate "
           f"{len(lvis_matched) / max(len(lvis_rows), 1):.1%}), "
-          f"{len(lvis_new)} LVIS-annotated images added beyond COCO's target set",
-          flush=True)
+          f"{n_new} LVIS images beyond COCO's target set fetched", flush=True)
 
     # ---- 3. Build the COCO+LVIS pool, hashing every kept image ----------
     print("== hashing COCO+LVIS pool", flush=True)

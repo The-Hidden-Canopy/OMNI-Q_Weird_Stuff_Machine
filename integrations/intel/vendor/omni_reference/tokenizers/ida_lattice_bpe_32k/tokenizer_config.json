@@ -1,0 +1,11 @@
+{
+  "backend": "tokenizers",
+  "bos_token": "<s>",
+  "eos_token": "</s>",
+  "is_local": true,
+  "local_files_only": false,
+  "model_max_length": 2048,
+  "pad_token": "<pad>",
+  "tokenizer_class": "TokenizersBackend",
+  "unk_token": "<unk>"
+}

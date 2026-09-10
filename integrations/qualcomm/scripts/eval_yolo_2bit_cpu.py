@@ -278,6 +278,15 @@ def main() -> int:
             "standing_note": ("a format is a format - all quantized arms are reported "
                               "symmetrically with measurements only"),
             "tier3": "ternary multiply-free Linear is a prototype, not production",
+            "latency": ("all arms execute the same fp32 torch kernels with identical "
+                        "FLOPs after the weight restore, so per-arm latency spread is "
+                        "co-residency timing noise on a shared dev box; the "
+                        "discriminative rows are footprint and Tier 2 dequant bandwidth"),
+            "rss": ("process-level peak RSS, dominated by the torch/ultralytics "
+                    "framework (~0.7 GB), not the 12 MB model"),
+            "decode_sanity": ("synthetic gaussian-noise inputs yield zero detections at "
+                              "conf=0.25 in every arm, so count parity is trivially 1.0; "
+                              "output cosine is the informative agreement metric"),
         },
         "environment": {
             "interpreter": sys.executable,
@@ -337,8 +346,11 @@ def main() -> int:
             packed, fp32_bytes, packed_bytes = {}, 0, 0
             for name, mod in _weight_modules(net):
                 fp32_bytes += mod.weight.numel() * 4
+            packed_bytes = fp32_bytes  # fp32 arm stores weights unpacked
+            packed_ratio = 1.0
         else:
             packed, fp32_bytes, packed_bytes = quantize_arm(net, arm)
+            packed_ratio = round(packed_bytes / fp32_bytes, 4)
         packed_by_arm[arm] = packed
 
         cosines = []
@@ -352,7 +364,7 @@ def main() -> int:
         arm_entry = {
             "fp32_weight_bytes": fp32_bytes,
             "packed_bytes": packed_bytes,
-            "packed_ratio": round(packed_bytes / fp32_bytes, 4) if fp32_bytes else None,
+            "packed_ratio": packed_ratio,
             "output_cosine_vs_fp32": {
                 "mean": round(float(cos.mean()), 6),
                 "std": round(float(cos.std()), 6),
