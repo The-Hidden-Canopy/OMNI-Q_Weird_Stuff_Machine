@@ -95,6 +95,24 @@ speech → semantic-state-mutation layer.
 | ~ | OQ-HAND-010 | Gerron/GPT | Napkin spread / fold-ish routine | OQ-HAND-003 | `NAPKIN_ROUTINE` / `SPREAD` / `NAPKIN_FLICK` in spec; sim primitive pending |
 | ~ | OQ-HAND-011 | Gerron/Claude | Dance-while-working: speech style-mode → scheduler idle-slack flourishes | OQ-HAND-005, OQ-015 | spoken vocab ("fancy", "together", "opposite", "freeze", "back to work") → `style` mode; scheduler fills idle-arm slack with non-blocking IDLE_FLOURISH, never adding a wave or reordering; last STYLE wins; `minimum_time` strips flourishes. Sim primitives pending |
 
+## Ontology layer — living scene graph between perception and OMNI-Q
+
+Cheap specialist detectors emit provenance-carrying **Claims**; the ontology
+reconciles them into authoritative entities + relations that OMNI-Q *reacts* to.
+Spec + fusion authority = Gerron/Claude (`src/omni_q/ontology.py`,
+`docs/ontology.md`); real specialist YOLOs = Gerron/GPT + Gerron/Kimi.
+
+| ✓ | ID | Owner | Task | Depends on | Done when |
+|---|----|-------|------|------------|-----------|
+| x | OQ-ONT-001 | Gerron/Claude | Claim / Entity / Relation / Delta types + IS-A hierarchy | OQ-001 | `mug`/`saucer`/`butter_knife` roll up; `Claim` carries source model, camera, ts, confidence, geometry |
+| x | OQ-ONT-002 | Gerron/Claude | Fusion authority: temporal association, canonical-bucket type vote, preserved disagreement | OQ-ONT-001 | two detectors disagreeing on vocab fuse to one entity; incompatible types on one box → `conflict=True` → `WorldState` FALLBACK (planner won't manipulate); 11 tests |
+| x | OQ-ONT-003 | Gerron/Claude | Relations + workspace-conflict rule + delta stream + `wakes()` attention filter | OQ-ONT-002 | `human` in an `arm` zone raises `workspace.conflict` / `workspace.clear`; `wakes(delta)` gates the expensive reasoner |
+| x | OQ-ONT-004 | Gerron/Claude | `OntologyObserver` (Observe contract) + `stub_swarm` | OQ-ONT-002 | drop-in for `FrameObserver`; runs the engine off a 2-specialist stub swarm |
+| ~ | OQ-ONT-005 | Gerron/GPT + Kimi | Real specialist detectors (objects via `perception/`, human/hand, hazard, affordance, robot-state) | OQ-008 | each emits Claims; ontology fuses without vocab fights |
+|   | OQ-ONT-006 | Gerron/GPT | Run the swarm at MXFP2/MXFP4 on Core Ultra; OMNI-Q wakes only on `wakes()` deltas | OQ-ONT-005, OQ-028 | measured compute saving vs per-frame reasoning |
+|   | OQ-ONT-007 | Gerron/Claude | `reachable_by` / `missing_from` relations from the OQ-006/007 table geometry | OQ-007, OQ-ONT-003 | ontology says "left setting incomplete; left_arm can reach the cup" |
+| ~ | OQ-ONT-008 | Bryan/Codex | UI renders the scene graph: entities, relations, conflicts, workspace flag, which model claimed what | OQ-ONT-003, OQ-005 | `ontology.snapshot()` on screen |
+
 ## Critical path (Intel)
 
 Protect this sequence above everything else:

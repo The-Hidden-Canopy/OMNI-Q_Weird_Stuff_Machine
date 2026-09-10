@@ -46,7 +46,8 @@ _ISA: dict[str, str] = {
     "butter_knife": "knife", "table_knife": "knife", "kitchen_knife": "knife",
     "soupspoon": "spoon", "teaspoon": "spoon", "tablespoon": "spoon",
     "serviette": "napkin", "place_mat": "napkin",
-    "hand": "human", "arm": "human", "person": "human", "finger": "human",
+    # people (a robot arm is NOT a person -> "arm" keeps its own type)
+    "hand": "human", "person": "human", "finger": "human", "wrist": "human",
 }
 
 
@@ -165,6 +166,7 @@ class Ontology:
         *,
         zone_map: Callable[[float, float], str] = grid_zone_map,
         iou_thresh: float = 0.3,
+        strong_iou: float = 0.5,     # overlap this high == same object even if types clash
         center_gate: float = 0.15,
         conflict_conf: float = 0.45,
         max_missed: int = 3,
@@ -172,6 +174,7 @@ class Ontology:
     ) -> None:
         self.zone_map = zone_map
         self.iou_thresh = iou_thresh
+        self.strong_iou = strong_iou
         self.center_gate = center_gate
         self.conflict_conf = conflict_conf
         self.max_missed = max_missed
@@ -186,14 +189,16 @@ class Ontology:
     # -- ingest --------------------------------------------------------
     def ingest(self, claims: list[Claim], frame: int) -> list[Delta]:
         out: list[Delta] = []
-        matched: set[str] = set()
+        # one claim per source model per entity per frame (lets DIFFERENT
+        # detectors fuse onto the same entity, but de-dupes a single detector)
+        frame_sources: dict[str, set[str]] = {}
         prev_zone = {e.id: e.zone for e in self.entities.values()}
         prev_conflict = {e.id: e.conflict for e in self.entities.values()}
         seen_ids: set[str] = set()
 
         for c in sorted(claims, key=lambda c: -c.confidence):
             ct = canonical(c.entity_type)
-            ent = self._associate(c, ct, matched)
+            ent = self._associate(c, ct, frame_sources)
             if ent is None:
                 ent = self._mint(c, ct, frame)
                 out.append(Delta("entity.appeared", ent.id,
@@ -201,7 +206,7 @@ class Ontology:
                                   "source": c.source_model}))
             else:
                 self._fuse(ent, c, frame)
-            matched.add(ent.id)
+            frame_sources.setdefault(ent.id, set()).add(c.source_model)
             seen_ids.add(ent.id)
 
         # age out / lose
@@ -232,21 +237,28 @@ class Ontology:
         self.deltas.extend(out)
         return out
 
-    def _associate(self, c: Claim, ct: str, matched: set[str]) -> Entity | None:
+    def _associate(self, c: Claim, ct: str,
+                   frame_sources: dict[str, set[str]]) -> Entity | None:
+        def used(e: Entity) -> bool:
+            return c.source_model in frame_sources.get(e.id, set())
+
+        # spatial-first: a big overlap means the SAME physical thing even if a
+        # different specialist labelled it differently (-> a recorded conflict).
         best, best_score = None, self.iou_thresh
         for e in self.entities.values():
-            if e.id in matched or e.canonical_type != ct:
+            if used(e):
                 continue
             v = iou(e.geometry, c.geometry)
-            if v >= best_score:
+            gate = self.iou_thresh if compatible(e.canonical_type, ct) else self.strong_iou
+            if v >= gate and v >= best_score:
                 best, best_score = e, v
         if best is not None:
             return best
-        # centre fallback for fast motion
+        # centre fallback — compatible types only (don't merge distinct objects)
         best, best_d = None, self.center_gate
         ex, ey = c.center
         for e in self.entities.values():
-            if e.id in matched or e.canonical_type != ct:
+            if used(e) or not compatible(e.canonical_type, ct):
                 continue
             gx = (e.geometry[0] + e.geometry[2]) / 2
             gy = (e.geometry[1] + e.geometry[3]) / 2
@@ -273,13 +285,21 @@ class Ontology:
         e.sources.add(c.source_model)
         e.attrs.update(c.attrs)
         e.votes[c.entity_type] = e.votes.get(c.entity_type, 0.0) + c.confidence
+        self._recompute_type(e)
 
-        best_type = max(e.votes, key=e.votes.get)
-        total = sum(e.votes.values())
-        e.type = best_type
-        e.type_conf = e.votes[best_type] / total if total else 0.0
-        strong = [t for t, v in e.votes.items() if v >= self.conflict_conf]
-        e.conflict = any(not compatible(a, b) for a in strong for b in strong if a != b)
+    def _recompute_type(self, e: Entity) -> None:
+        # bucket raw votes by canonical type: IS-A-compatible detectors reinforce
+        buckets: dict[str, float] = {}
+        for raw, v in e.votes.items():
+            buckets[canonical(raw)] = buckets.get(canonical(raw), 0.0) + v
+        total = sum(buckets.values()) or 1.0
+        win = max(buckets, key=buckets.get)
+        # display the most specific raw label that rolls up to the winning bucket
+        e.type = max((r for r in e.votes if canonical(r) == win),
+                     key=lambda r: e.votes[r])
+        e.type_conf = buckets[win] / total
+        strong = [b for b, v in buckets.items() if v >= self.conflict_conf]
+        e.conflict = len(strong) >= 2
 
     # -- projection to the rest of the stack -------------------------
     def world_state(self, frame: int, *, goal: str | None = None,
@@ -344,6 +364,11 @@ class Ontology:
         e = self.entities.get(eid)
         return e.type if e else eid
 
+    def live(self) -> list[Entity]:
+        """Entities observed on the most recent frame (relations are about
+        *now*, not memory)."""
+        return [e for e in self.entities.values() if e.missed == 0]
+
 
 # ---------------------------------------------------------------------------
 # relation rules
@@ -351,7 +376,7 @@ class Ontology:
 
 
 def near_rule(ont: Ontology, radius: float = 0.14) -> list[Relation]:
-    ents = list(ont.entities.values())
+    ents = ont.live()
     out: list[Relation] = []
     for i, a in enumerate(ents):
         acx = (a.geometry[0] + a.geometry[2]) / 2
@@ -369,8 +394,8 @@ def near_rule(ont: Ontology, radius: float = 0.14) -> list[Relation]:
 
 def workspace_conflict_rule(ont: Ontology) -> list[Relation]:
     """A human/hand entity in the same zone as an arm entity -> intersects."""
-    humans = [e for e in ont.entities.values() if canonical(e.type) == "human"]
-    arms = [e for e in ont.entities.values() if "arm" in e.type or e.type == "robot"]
+    humans = [e for e in ont.live() if canonical(e.type) == "human"]
+    arms = [e for e in ont.live() if "arm" in e.type or e.type == "robot"]
     out: list[Relation] = []
     for h in humans:
         for a in arms:
