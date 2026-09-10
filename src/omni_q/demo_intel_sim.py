@@ -15,15 +15,17 @@ forces serialisation; the engine executes the annotated graph unchanged and
 each manipulate step still steps real MuJoCo physics via
 ``IntelTableWorld.apply_transition``.
 
-    PYTHONPATH=src python -m omni_q.demo_intel_sim                    # headless text trace
-    PYTHONPATH=src python -m omni_q.demo_intel_sim --viewer           # + live interactive MuJoCo window
-    PYTHONPATH=src python -m omni_q.demo_intel_sim --render-dir out/  # + PNG per step + assembled trace.gif
+    PYTHONPATH=src python -m omni_q.demo_intel_sim                        # headless text trace
+    PYTHONPATH=src python -m omni_q.demo_intel_sim --viewer               # + live interactive MuJoCo window
+    PYTHONPATH=src python -m omni_q.demo_intel_sim --viewer --step-delay 2  # slower, easier to follow
+    PYTHONPATH=src python -m omni_q.demo_intel_sim --render-dir out/      # + PNG per step + assembled trace.gif
 
-Object placement is still an explicit scripted WorldState transition (see
-``intel_sim.py``) -- nothing here grips or carries anything in MuJoCo yet, so
-a rendered frame or the live viewer will show tableware sitting wherever
-gravity/contact left it, not neatly relocated. That gap is visible on purpose
-rather than hidden behind a text-only trace.
+PICK/MOVE/PLACE drive a real IK + contact grasp attempt (see intel_sim.py's
+module docstring for what that does and doesn't cover today -- notably,
+grasp success currently has a low pass rate; this adapter only solves 3-DOF
+position, not the jaw orientation a reliable pinch needs). A failed grasp
+is real physics, not a bug in the demo: the receipt reports it honestly and
+the engine replans, same as any other failure.
 """
 
 from __future__ import annotations
@@ -88,7 +90,7 @@ def _frame_recorder(engine, out_dir: Path) -> tuple[Callable[[Event], None], Cal
     return on_event, finish
 
 
-def _run_with_viewer(engine):
+def _run_with_viewer(engine, step_delay: float = VIEWER_STEP_DELAY):
     """Open a real, interactive MuJoCo window synced after every step (paced
     with a short sleep so the motion is actually watchable, not a ~10ms
     flash), then leave it open and responsive to mouse orbit/zoom until the
@@ -99,7 +101,7 @@ def _run_with_viewer(engine):
         def sync(event: Event) -> None:
             if event.kind == "step.finished":
                 viewer.sync()
-                time.sleep(VIEWER_STEP_DELAY)
+                time.sleep(step_delay)
 
         unsubscribe = engine.bus.subscribe(sync)
         try:
@@ -118,6 +120,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Intel Online dual-SO-101 demo")
     parser.add_argument("--viewer", action="store_true",
                         help="open a live, interactive MuJoCo window synced to each step")
+    parser.add_argument("--step-delay", type=float, default=VIEWER_STEP_DELAY,
+                        help=f"seconds paused after each step in --viewer mode (default {VIEWER_STEP_DELAY})")
     parser.add_argument("--render-dir", type=Path, default=None,
                         help="save a PNG per step plus an assembled trace.gif into this directory")
     args = parser.parse_args()
@@ -142,7 +146,7 @@ def main() -> None:
     print(f"Intel Online - real MuJoCo dual-SO-101 + scheduler, goal: {GOAL!r}")
     print("=" * 66)
 
-    receipt = _run_with_viewer(engine) if args.viewer else engine.run(GOAL)
+    receipt = _run_with_viewer(engine, args.step_delay) if args.viewer else engine.run(GOAL)
 
     if scheduled.last_error:
         print(f"\n! scheduler degraded to unscheduled graph: {scheduled.last_error}")

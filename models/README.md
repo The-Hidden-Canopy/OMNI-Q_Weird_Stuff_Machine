@@ -30,6 +30,21 @@ friction._
 GenieX carries the on-device reasoning / VLM node (LLM/VLM runtime). Model TBD
 from Hugging Face or Qualcomm AI Hub — must be small enough for GenieX to carry.
 
+## Datasets
+
+Sourcing plan for both the YOLO detector (OQ-008) and the Omni policy /
+planner — scoped to the one use case (bimanual dual-SO-101 table setting):
+[`../docs/datasets.md`](../docs/datasets.md).
+
+TL;DR (2 h to deadline): the detector is a **head-swap + fine-tune of our own
+`KissTheHabit/yolov8n-hituav-thermal-finetune`** on a **large real-image subset**
+(Open Images V7 + Objects365 + COCO + LVIS, filtered to the 7 tableware classes
+via FiftyOne), exported to OpenVINO IR + QAIRT; MuJoCo-rendered frames added on
+top for depth where real data is thin (`drawer`, the exact deploy camera,
+occlusion/clutter). Omni trains nothing now — `RulePlanner` +
+`ScheduledPlanner` + `RuntimeMutator` + the real MuJoCo path. Rest is a
+post-deadline appendix.
+
 ## Related owned assets
 
 IDA model family (IDA_AI ~966M, IDA_MoE, IDA_Swift/_Native), IDA-TRAIN-V2

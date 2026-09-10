@@ -60,7 +60,7 @@ alongside the YOLO perception node.
 
 - [x] SO-101 capability map + measurement probe — [`so101_capability_map.md`](so101_capability_map.md),
   [`scripts/probe_so101.py`](scripts/probe_so101.py), vendored MJCF in [`assets/menagerie_so_arm100/`](assets/menagerie_so_arm100/SOURCE.md) (OQ-003)
-- [x] MuJoCo dual SO-101 scene + controller smoke — `src/omni_q/intel_sim.py` builds a pinned two-arm proxy (`nu=12`) with tableware and two cameras; controller steps are real MuJoCo, while object placement is explicitly scripted pending OQ-010
+- [x] MuJoCo dual SO-101 scene + controller smoke — `src/omni_q/intel_sim.py` builds a pinned two-arm proxy (`nu=12`) with tableware and two cameras; the legacy table-setting route remains explicitly scripted
 - [x] Bimanual scheduler wired into the Intel sim path (zero-touch decorator, no
   edits to `intel_sim.py`/`scheduler.py`) — `src/omni_q/demo_intel_sim.py`
   (`PYTHONPATH=src python -m omni_q.demo_intel_sim` or `omni-q-intel-demo` once
@@ -101,6 +101,55 @@ alongside the YOLO perception node.
   Still open: bimanual primitives (OQ-011: HANDOFF has a minimal branch,
   STABILIZE/REGRASP/COOPERATIVE_ROTATE don't yet), and OPEN/CLOSE postcondition
   verification (currently a trivial pass, see `FakeVerifier`).
+- [x] Visual proof + kinematic object placement — `demo_intel_sim.py` gained
+  `--viewer` (live interactive MuJoCo window, synced + paced per step) and
+  `--render-dir` (PNG per step + assembled `trace.gif`, a first step toward
+  the brief's required demonstration video). Rendering the actual physics
+  surfaced that PICK/MOVE/PLACE only changed the WorldState zone label —
+  the MuJoCo body never moved, so a render showed tableware floating near
+  the grippers disconnected from what the receipt claimed happened.
+  `IntelTableWorld.apply_transition` now kinematically teleports the
+  object (lift-in-place on PICK, snap to `ZONE_POSITIONS[to]` on
+  MOVE/PLACE) so what's rendered matches the scripted plan. Still not IK
+  or a contact-driven grasp — nothing actually grips anything, it's
+  scripted all the way down to the render now instead of stopping at the
+  WorldState label.
+- [x] OQ-010 real IK + contact grasp for the general table-setting path —
+  replaced the kinematic teleport with a real weighted damped-least-squares
+  differential IK controller (`IntelTableWorld._ik_reach`/`_ik_track_line`/
+  `_move_to`) driving PICK/MOVE/PLACE for all five tracked objects, plus a
+  genuine contact grasp attempt (open/close the gripper, measure lift
+  height / placement error — no weld, no velocity override). Failure is
+  grounded in that measurement, not assumed: a real grasp/placement failure
+  reverts the WorldState change and reports the step failed, so the
+  engine's replan loop actually retries. Found and fixed two real,
+  previously-invisible bugs while getting this running:
+  (1) `dual_so101_xml()` silently dropped the source MJCF's
+  `<contact><exclude body1="Base" body2="Rotation_Pitch"/></contact>` when
+  assembling the dual-arm scene, so the shoulder joint self-collided and
+  jammed (actuator saturated, zero net motion) the instant anything tried
+  to rotate it off its resting angle on *either* arm — invisible until this
+  work was the first thing to ever command that joint. Re-declared per arm
+  with prefixed body names. (2) `FakeVerifier`'s fallback branch judged
+  *any* unrecognized op against "is the whole workspace tidy" (meant only
+  for the terminal `VERIFY` step); every new primitive fell through it and
+  was judged against global tidiness at the start of a run. Fixed in
+  `src/omni_q/fakes.py` (shared) to only apply to `op == "VERIFY"`.
+  **Honest current fidelity**: IK position convergence is reliable (~1cm)
+  once aimed at a target clearing the object's own volume, and a
+  shoulder-sweep hazard (unweighted redundant IK swinging the forearm
+  through tableware even for small vertical motions with no reach need)
+  is mitigated via joint-weighted IK + safe-transit-height waypointing.
+  The pinch itself has a low success rate: this is 3-DOF position-only
+  IK, so wrist orientation is whatever the redundant null-space settles
+  into, not controlled to face the jaws at the object. See below —
+  the parallel contact-handoff work independently hit and diagnosed the
+  same root cause, and has a proven fix pattern (fixed wrist-roll per
+  arm) this general path doesn't apply yet. Tests:
+  `tests/test_intel_sim_primitives.py` (IK/gripper/revert behavior;
+  updated to assert the *honest* outcome, not a success rate not yet
+  achieved), full suite green (173/173 after merging with the
+  contact-handoff/perception work below).
 - [ ] LeRobot dataset/demonstration capture from the MuJoCo scene
 - [ ] Train/fine-tune a VLA or imitation-learning policy (SmolVLA, Pi0.5, ACT, or other)
 - [ ] Capability-node wrappers for arm primitives
@@ -109,3 +158,22 @@ alongside the YOLO perception node.
 - [ ] Intel inference benchmark script (latency, throughput, device, precision)
 - [ ] Anomalib + OpenVINO defect path (onsite)
 - [ ] Natural-language instruction → capability graph binding
+- [ ] Apply the contact-handoff grasp fix (fixed wrist-roll per arm +
+  pad-geom IK target + iterative pad-bracket refinement, all proven 10/10
+  in `_ContactHandoffController`) to the general `_do_pick`/`_do_place`
+  path above, generalized across object geometries instead of one
+  hand-tuned cup sequence.
+### Contact-handoff evidence boundary
+
+The OQ-010/OQ-011 contact tranche is available through
+`src/omni_q/intel_sim.py` as the separate `simulation-contact-handoff` mode.
+It uses the pinned SO-ARM100 proxy, real joint interpolation and named MuJoCo
+pad contacts for one `cup_1` transfer. The deterministic acceptance gate is
+the pinned controller seed `19` (10/10 in the test suite). The
+`run_randomized_contact_handoff_report(root, trials=20)` helper retains every
+seeded receipt and labels the summary exploratory, not a promotion claim.
+
+This path never writes the cup free-joint pose, uses weld/equality attachment,
+or changes the existing `simulation-scripted-manipulation` table-setting
+route. It is MuJoCo-only evidence and does not claim camera perception, VLA
+control, hardware, complete table setting, or concurrent execution.

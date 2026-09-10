@@ -1,0 +1,14 @@
+# OQ-008 table-setting detector — YOLO dataset config.
+# Populated by build_dataset.py (real) + synth_ingest.py (MuJoCo top-up).
+path: ../data/table_yolo
+train: images/train
+val: images/val
+
+names:
+  0: plate
+  1: cup
+  2: fork
+  3: spoon
+  4: knife
+  5: napkin
+  6: drawer

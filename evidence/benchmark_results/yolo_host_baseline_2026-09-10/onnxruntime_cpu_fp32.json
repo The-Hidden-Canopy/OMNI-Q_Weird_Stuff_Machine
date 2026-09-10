@@ -1,0 +1,33 @@
+{
+  "input_shape": [
+    1,
+    3,
+    640,
+    640
+  ],
+  "iterations": 200,
+  "latency_ms": {
+    "max": 249.672,
+    "mean": 82.864,
+    "min": 64.968,
+    "p50": 76.964,
+    "p95": 117.316
+  },
+  "measured_at": "2026-09-10T17:26:04Z",
+  "memory_rss_mb": {
+    "after_peak": 130.3,
+    "before": 80.8,
+    "delta": 49.5
+  },
+  "onnx": "hituav_yolov8n_finetuned_2026-08-26.onnx",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "providers": [
+    "AzureExecutionProvider",
+    "CPUExecutionProvider"
+  ],
+  "python": "3.12.10",
+  "seed": 7,
+  "threads": "default",
+  "variant": "onnxruntime-cpu-fp32",
+  "warmup": 50
+}
