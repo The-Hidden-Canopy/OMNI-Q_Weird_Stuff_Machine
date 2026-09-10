@@ -1,0 +1,214 @@
+{
+  "grip_force": {
+    "method": "static 40 mm probe cylinder between pads, jaw closed in 24 steps",
+    "note": "controller stop bound, not a hardware-safe force calibration",
+    "samples": [
+      {
+        "jaw_deg": 93.1,
+        "jaw_rad": 1.625,
+        "max_normal_force_n": 21.692,
+        "n_pad_contacts": 1,
+        "pad_gap_m": null
+      },
+      {
+        "jaw_deg": 91.1,
+        "jaw_rad": 1.5901,
+        "max_normal_force_n": 24.404,
+        "n_pad_contacts": 1,
+        "pad_gap_m": null
+      },
+      {
+        "jaw_deg": 87.1,
+        "jaw_rad": 1.5205,
+        "max_normal_force_n": 24.327,
+        "n_pad_contacts": 1,
+        "pad_gap_m": null
+      },
+      {
+        "jaw_deg": 82.8,
+        "jaw_rad": 1.4452,
+        "max_normal_force_n": 24.33,
+        "n_pad_contacts": 1,
+        "pad_gap_m": null
+      },
+      {
+        "jaw_deg": 78.5,
+        "jaw_rad": 1.3693,
+        "max_normal_force_n": 24.356,
+        "n_pad_contacts": 1,
+        "pad_gap_m": null
+      },
+      {
+        "jaw_deg": 74.4,
+        "jaw_rad": 1.2994,
+        "max_normal_force_n": 23.001,
+        "n_pad_contacts": 2,
+        "pad_gap_m": null
+      },
+      {
+        "jaw_deg": 70.2,
+        "jaw_rad": 1.2259,
+        "max_normal_force_n": 24.337,
+        "n_pad_contacts": 1,
+        "pad_gap_m": null
+      },
+      {
+        "jaw_deg": 65.9,
+        "jaw_rad": 1.1503,
+        "max_normal_force_n": 24.776,
+        "n_pad_contacts": 1,
+        "pad_gap_m": null
+      },
+      {
+        "jaw_deg": 61.6,
+        "jaw_rad": 1.0745,
+        "max_normal_force_n": 25.346,
+        "n_pad_contacts": 1,
+        "pad_gap_m": null
+      }
+    ]
+  },
+  "mujoco_version": "3.13.0",
+  "probe_revision": 1,
+  "probed_at": "2026-09-10T18:42:41Z",
+  "schema_version": 1,
+  "shared_workspace": {
+    "arm_envelope": {
+      "left": {
+        "x": [
+          -0.6,
+          0.078
+        ],
+        "y": [
+          -0.184,
+          0.432
+        ],
+        "z": [
+          -0.119,
+          0.43
+        ]
+      },
+      "right": {
+        "x": [
+          -0.081,
+          0.6
+        ],
+        "y": [
+          -0.183,
+          0.426
+        ],
+        "z": [
+          -0.122,
+          0.43
+        ]
+      }
+    },
+    "handoff_note": "overlap region is where a plate/cup can be passed without either arm re-mounting",
+    "method": "20000 random FK samples/arm, 2 cm grid overlap",
+    "mounts": {
+      "left": [
+        -0.26,
+        0.2,
+        0.0
+      ],
+      "right": [
+        0.26,
+        0.2,
+        0.0
+      ]
+    },
+    "overlap_bbox_m": {
+      "x": [
+        -0.08,
+        0.08
+      ],
+      "y": [
+        -0.06,
+        0.26
+      ],
+      "z": [
+        -0.06,
+        0.32
+      ]
+    },
+    "overlap_cell_count_2cm": 549
+  },
+  "sources": {
+    "mjcf": "integrations/intel/assets/menagerie_so_arm100/so_arm100.xml"
+  },
+  "velocity_limits": {
+    "method": "position-actuator step command, 1.2 s sweep, model kp=50 forcerange+/-3.5",
+    "rows": [
+      {
+        "joint": "Rotation",
+        "peak_joint_speed_deg_s": 463.5,
+        "peak_joint_speed_rad_s": 8.089,
+        "peak_tcp_speed_m_s": 1.571,
+        "sweep_to": "max"
+      },
+      {
+        "joint": "Rotation",
+        "peak_joint_speed_deg_s": 463.5,
+        "peak_joint_speed_rad_s": 8.089,
+        "peak_tcp_speed_m_s": 1.571,
+        "sweep_to": "min"
+      },
+      {
+        "joint": "Pitch",
+        "peak_joint_speed_deg_s": 462.9,
+        "peak_joint_speed_rad_s": 8.08,
+        "peak_tcp_speed_m_s": 1.34,
+        "sweep_to": "max"
+      },
+      {
+        "joint": "Pitch",
+        "peak_joint_speed_deg_s": 429.3,
+        "peak_joint_speed_rad_s": 7.493,
+        "peak_tcp_speed_m_s": 1.241,
+        "sweep_to": "min"
+      },
+      {
+        "joint": "Elbow",
+        "peak_joint_speed_deg_s": 415.0,
+        "peak_joint_speed_rad_s": 7.244,
+        "peak_tcp_speed_m_s": 1.151,
+        "sweep_to": "max"
+      },
+      {
+        "joint": "Elbow",
+        "peak_joint_speed_deg_s": 436.1,
+        "peak_joint_speed_rad_s": 7.611,
+        "peak_tcp_speed_m_s": 1.205,
+        "sweep_to": "min"
+      },
+      {
+        "joint": "Wrist_Pitch",
+        "peak_joint_speed_deg_s": 41.5,
+        "peak_joint_speed_rad_s": 0.724,
+        "peak_tcp_speed_m_s": 0.067,
+        "sweep_to": "max"
+      },
+      {
+        "joint": "Wrist_Pitch",
+        "peak_joint_speed_deg_s": 676.9,
+        "peak_joint_speed_rad_s": 11.814,
+        "peak_tcp_speed_m_s": 1.04,
+        "sweep_to": "min"
+      },
+      {
+        "joint": "Wrist_Roll",
+        "peak_joint_speed_deg_s": 823.9,
+        "peak_joint_speed_rad_s": 14.379,
+        "peak_tcp_speed_m_s": 0.08,
+        "sweep_to": "max"
+      },
+      {
+        "joint": "Wrist_Roll",
+        "peak_joint_speed_deg_s": 369.7,
+        "peak_joint_speed_rad_s": 6.453,
+        "peak_tcp_speed_m_s": 0.036,
+        "sweep_to": "min"
+      }
+    ]
+  }
+}

@@ -321,10 +321,21 @@ class IntelTableWorld(MockWorld):
     def apply_transition(self, request: TransitionRequest) -> TransitionResult:
         op = request.op
         obj = request.args.get("object")
+        physics_snapshot = None
+        if op in {"PICK", "MOVE", "PLACE"} and obj in self._object_joints:
+            # A failed real attempt must not leave the next governed retry
+            # starting from a disturbed arm/object configuration. WorldState
+            # rollback alone is insufficient because MuJoCo has already
+            # integrated joint and free-body dynamics.
+            physics_snapshot = (
+                self.data.qpos.copy(), self.data.qvel.copy(), self.data.ctrl.copy(),
+                float(self.data.time), self._controller_steps,
+            )
         # captured before super() mutates WorldState, so a failed real grasp
         # can be reverted below rather than leaving a scripted "success" that
         # the physics never actually delivered.
         prev_zone = self._objects[obj].zone if obj in self._objects else None
+        prev_owner = self._ownership.get(obj) if obj in self._ownership else None
 
         result = super().apply_transition(request)
         arm_offset = 6 if request.actor and "right" in request.actor else 0
@@ -333,13 +344,16 @@ class IntelTableWorld(MockWorld):
         if op == "PICK" and obj in self._object_joints:
             grasp_info = self._do_pick(arm_offset, obj)
             if not grasp_info["held"]:
-                self._ownership[obj] = None  # revert the scripted grasp claim
+                self._ownership[obj] = prev_owner  # revert the scripted grasp claim
+                self._restore_physics(physics_snapshot)
                 result = replace(result, ok=False)
         elif op in {"MOVE", "PLACE"} and obj in self._object_joints:
             grasp_info = self._do_place(arm_offset, obj, request.args.get("to"))
             if not grasp_info["placed"]:
                 if prev_zone is not None:
                     self._objects[obj] = replace(self._objects[obj], zone=prev_zone)
+                self._ownership[obj] = prev_owner
+                self._restore_physics(physics_snapshot)
                 result = replace(result, ok=False)
         else:
             # OQ-010 fallback pose for ops with no dedicated IK behaviour, or
@@ -385,6 +399,18 @@ class IntelTableWorld(MockWorld):
             ),
         }
         return replace(result, detail=detail)
+
+    def _restore_physics(self, snapshot) -> None:
+        """Restore a pre-attempt MuJoCo state after a rejected transition."""
+        if snapshot is None:
+            return
+        qpos, qvel, ctrl, sim_time, controller_steps = snapshot
+        self.data.qpos[:] = qpos
+        self.data.qvel[:] = qvel
+        self.data.ctrl[:] = ctrl
+        self.data.time = sim_time
+        self._mujoco.mj_forward(self.model, self.data)
+        self._controller_steps = controller_steps
 
     # -- OQ-010: real IK + contact grasp for tracked tableware ----------
 
