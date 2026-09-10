@@ -50,6 +50,8 @@ alongside the YOLO perception node.
 
 ## TODO
 
+- [x] SO-101 capability map + measurement probe — [`so101_capability_map.md`](so101_capability_map.md),
+  [`scripts/probe_so101.py`](scripts/probe_so101.py), vendored MJCF in [`assets/menagerie_so_arm100/`](assets/menagerie_so_arm100/SOURCE.md) (OQ-003)
 - [ ] MuJoCo dual SO-101 scene + control interface (online)
 - [ ] LeRobot dataset/demonstration capture from the MuJoCo scene
 - [ ] Train/fine-tune a VLA or imitation-learning policy (SmolVLA, Pi0.5, ACT, or other)

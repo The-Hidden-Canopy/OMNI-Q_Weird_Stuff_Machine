@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import shutil
+from pathlib import Path
+from uuid import uuid4
+
 import pytest
 
 from omni_q import build_mock_engine
@@ -182,9 +186,12 @@ def test_authorization_receipt_failure_fails_closed_before_driver_execution():
     assert "authorization.failed" in [event.kind for event in engine.bus.log]
 
 
-def test_durable_ledger_writes_authorizations_before_a_parent_chained_receipt(tmp_path):
+def test_durable_ledger_writes_authorizations_before_a_parent_chained_receipt():
+    # Some locked-down Windows runners deny pytest's global temp root.  Keep
+    # this isolated under the repository-owned receipt directory instead.
+    root = Path("evidence") / "receipts" / f"test-{uuid4().hex}"
     world = MockWorld.sample()
-    ledger = EvidenceLedger(tmp_path / "receipts")
+    ledger = EvidenceLedger(root)
     engine = OmniQ(
         world=world,
         observer=FakeObserver(),
@@ -195,11 +202,14 @@ def test_durable_ledger_writes_authorizations_before_a_parent_chained_receipt(tm
         recorder=ledger,
     )
 
-    receipt = engine.run("inspect and correct the workspace")
+    try:
+        receipt = engine.run("inspect and correct the workspace")
 
-    run_dir = tmp_path / "receipts" / "runs" / receipt.run_id
-    assert (run_dir / "authorizations.jsonl").exists()
-    assert (run_dir / "receipt.json").exists()
-    manifest = (tmp_path / "receipts" / "manifest.jsonl").read_text(encoding="utf-8")
-    assert receipt.content_hash in manifest
-    assert receipt.inputs["mode"] == "mock"
+        run_dir = root / "runs" / receipt.run_id
+        assert (run_dir / "authorizations.jsonl").exists()
+        assert (run_dir / "receipt.json").exists()
+        manifest = (root / "manifest.jsonl").read_text(encoding="utf-8")
+        assert receipt.content_hash in manifest
+        assert receipt.inputs["mode"] == "mock"
+    finally:
+        shutil.rmtree(root)

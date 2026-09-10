@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Omni Q — Table-Setting Mission</title>
+    <link rel="stylesheet" href="/ui/styles.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">OMNI Q / INTEL ONLINE</p>
+          <h1>Adaptive Table-Setting Mission</h1>
+        </div>
+        <output id="mode" class="badge mock">MOCK MODE — NOT HARDWARE</output>
+      </header>
+
+      <section class="control" aria-label="Mission controls">
+        <label>
+          Operator objective
+          <input id="goal" value="set the table" autocomplete="off" />
+        </label>
+        <label>
+          Optional operator constraint
+          <select id="constraint-kind">
+            <option value="">None</option>
+            <option value="keep_local">Keep inference local</option>
+            <option value="forbid_object">Do not touch connector</option>
+          </select>
+        </label>
+        <label>
+          Justification
+          <input id="justification" value="judge demonstration" autocomplete="off" />
+        </label>
+        <button id="start">Start mission</button>
+      </section>
+
+      <p id="connection" class="connection">Awaiting an operator-started mission.</p>
+
+      <section class="grid">
+        <article>
+          <h2>Observation <small id="scene-revision">No live frame</small></h2>
+          <ul id="scene" class="list"><li>No observation received.</li></ul>
+        </article>
+        <article>
+          <h2>Execution graph <small id="graph-revision">rev —</small></h2>
+          <ol id="graph" class="list"><li>No graph compiled.</li></ol>
+        </article>
+        <article>
+          <h2>Arms and device state</h2>
+          <dl id="devices" class="facts">
+            <div><dt>LEFT ARM</dt><dd>unknown</dd></div>
+            <div><dt>RIGHT ARM</dt><dd>unknown</dd></div>
+            <div><dt>CURRENT ACTION</dt><dd>none</dd></div>
+          </dl>
+        </article>
+        <article>
+          <h2>Verification and authority</h2>
+          <dl id="verification" class="facts">
+            <div><dt>VERDICT</dt><dd>not evaluated</dd></div>
+            <div><dt>AUTONOMY MODE</dt><dd>NOMINAL</dd></div>
+            <div><dt>RECEIPT</dt><dd>pending</dd></div>
+          </dl>
+        </article>
+      </section>
+
+      <section class="trace">
+        <h2>Why Omni did that</h2>
+        <ol id="trace" class="trace-list"><li>Every decision and rejection appears here.</li></ol>
+      </section>
+    </main>
+    <script type="module" src="/ui/app.js"></script>
+  </body>
+</html>

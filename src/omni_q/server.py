@@ -1,45 +1,24 @@
-"""Minimal SSE bridge from the EventBus to a browser (stdlib only).
+"""Session-scoped SSE bridge for the judge-facing Omni Q UI.
 
-Not the UI — that's OQ-005 (Bryan/Codex). This just exposes the engine's event
-stream so a thin TS front end has something to consume:
-
-    GET  /events        text/event-stream of engine events (JSON per line)
-    POST /run           body {"goal": "..."} -> starts a mock run
-    POST /constraint    body {"kind": "...", "value": ...} -> queues a constraint
-    GET  /health        {"ok": true}
-
-    python -m omni_q.server  [--port 8770]
+``POST /sessions`` starts one explicit mock session. Constraints are scoped to
+that session and require an operator justification. ``GET /sessions/<id>/events``
+replays causal events after a numeric cursor so a browser can reconnect without
+silently dropping or duplicating state.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import queue
-import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
 
 from . import build_mock_engine
-from .events import Event, EventBus
-
-_bus = EventBus()
-_subscribers: list[queue.Queue] = []
-_lock = threading.Lock()
+from .sessions import SessionError, SessionManager
 
 
-def _fanout(event: Event) -> None:
-    with _lock:
-        targets = list(_subscribers)
-    for q in targets:
-        q.put(event.as_dict())
-
-
-_bus.subscribe(_fanout)
-
-
-def _run_async(goal: str) -> None:
-    engine = build_mock_engine(_bus)
-    threading.Thread(target=engine.run, args=(goal,), daemon=True).start()
+_sessions = SessionManager(build_mock_engine)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -57,11 +36,42 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _body(self) -> dict:
+        length = int(self.headers.get("Content-Length", 0))
+        raw = self.rfile.read(length) if length else b"{}"
+        try:
+            body = json.loads(raw or b"{}")
+        except json.JSONDecodeError as exc:
+            raise ValueError("bad json") from exc
+        if not isinstance(body, dict):
+            raise ValueError("JSON body must be an object")
+        return body
+
     def do_GET(self) -> None:
-        if self.path == "/health":
-            return self._json(200, {"ok": True})
-        if self.path != "/events":
-            return self._json(404, {"error": "not found"})
+        parsed = urlparse(self.path)
+        if parsed.path == "/health":
+            return self._json(200, {"ok": True, "mode": "mock"})
+
+        segments = [part for part in parsed.path.split("/") if part]
+        if len(segments) == 2 and segments[0] == "sessions":
+            try:
+                return self._json(200, _sessions.summary(segments[1]))
+            except SessionError as exc:
+                return self._json(404, {"error": str(exc)})
+        if len(segments) == 3 and segments[0] == "sessions" and segments[2] == "events":
+            query = parse_qs(parsed.query)
+            try:
+                cursor = int(query.get("cursor", ["0"])[0])
+            except ValueError:
+                return self._json(400, {"error": "cursor must be an integer"})
+            return self._events(segments[1], cursor)
+        return self._json(404, {"error": "not found"})
+
+    def _events(self, session_id: str, cursor: int) -> None:
+        try:
+            _sessions.get(session_id)
+        except SessionError as exc:
+            return self._json(404, {"error": str(exc)})
 
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
@@ -69,38 +79,73 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Connection", "keep-alive")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
-
-        q: queue.Queue = queue.Queue()
-        with _lock:
-            _subscribers.append(q)
         try:
             while True:
-                event = q.get()
-                self.wfile.write(f"data: {json.dumps(event)}\n\n".encode())
-                self.wfile.flush()
+                for event in _sessions.events_after(session_id, cursor):
+                    cursor = event.seq
+                    self.wfile.write(f"id: {event.seq}\n".encode())
+                    self.wfile.write(f"data: {json.dumps(event.as_dict())}\n\n".encode())
+                    self.wfile.flush()
+                summary = _sessions.summary(session_id)
+                if summary["status"] in {"finished", "failed"}:
+                    self.wfile.write(f"event: terminal\ndata: {json.dumps(summary)}\n\n".encode())
+                    self.wfile.flush()
+                    return
+                time.sleep(0.05)
         except (BrokenPipeError, ConnectionResetError):
-            pass
-        finally:
-            with _lock:
-                if q in _subscribers:
-                    _subscribers.remove(q)
+            return
 
     def do_POST(self) -> None:
-        length = int(self.headers.get("Content-Length", 0))
-        raw = self.rfile.read(length) if length else b"{}"
         try:
-            body = json.loads(raw or b"{}")
-        except json.JSONDecodeError:
-            return self._json(400, {"error": "bad json"})
+            body = self._body()
+        except ValueError as exc:
+            return self._json(400, {"error": str(exc)})
 
-        if self.path == "/run":
-            _run_async(body.get("goal", "inspect and correct the workspace"))
-            return self._json(202, {"started": True})
-        if self.path == "/constraint":
-            _bus.publish("constraint.queued", kind=body.get("kind"),
-                         value=body.get("value"))
-            return self._json(202, {"queued": True})
+        parsed = urlparse(self.path)
+        if parsed.path in {"/sessions", "/run"}:
+            return self._create_session(body)
+
+        segments = [part for part in parsed.path.split("/") if part]
+        if len(segments) == 3 and segments[0] == "sessions" and segments[2] == "constraints":
+            return self._add_constraint(segments[1], body)
+        if parsed.path == "/constraint":  # compatibility path, still session-scoped
+            session_id = body.get("session_id")
+            if not isinstance(session_id, str):
+                return self._json(400, {"error": "session_id is required"})
+            return self._add_constraint(session_id, body)
         return self._json(404, {"error": "not found"})
+
+    def _create_session(self, body: dict) -> None:
+        goal = body.get("goal", "set the table")
+        if not isinstance(goal, str) or not goal.strip():
+            return self._json(400, {"error": "goal must be a non-empty string"})
+        session = _sessions.create()
+        try:
+            for constraint in body.get("constraints", []):
+                if not isinstance(constraint, dict):
+                    raise ValueError("constraints must contain objects")
+                _sessions.add_constraint(
+                    session.session_id,
+                    constraint.get("kind"),
+                    constraint.get("value"),
+                    justification=constraint.get("justification"),
+                )
+            _sessions.start(session.session_id, goal)
+        except (SessionError, ValueError) as exc:
+            return self._json(400, {"error": str(exc), "session_id": session.session_id})
+        return self._json(202, _sessions.summary(session.session_id))
+
+    def _add_constraint(self, session_id: str, body: dict) -> None:
+        try:
+            _sessions.add_constraint(
+                session_id,
+                body.get("kind"),
+                body.get("value"),
+                justification=body.get("justification"),
+            )
+        except (SessionError, ValueError) as exc:
+            return self._json(400, {"error": str(exc)})
+        return self._json(202, _sessions.summary(session_id))
 
 
 def main() -> None:
@@ -108,7 +153,7 @@ def main() -> None:
     ap.add_argument("--port", type=int, default=8770)
     args = ap.parse_args()
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    print(f"omni-q SSE bridge on http://127.0.0.1:{args.port}  (GET /events, POST /run)")
+    print(f"omni-q SSE bridge on http://127.0.0.1:{args.port}  (mock mode)")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
