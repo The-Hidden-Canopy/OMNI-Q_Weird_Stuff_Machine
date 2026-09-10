@@ -13,6 +13,9 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
+# Intel online challenge stack — MuJoCo dual-SO-101 sim, LeRobot policy
+# training, OpenVINO edge inference. See docs/challenge-briefs/.
+intel = ["mujoco>=3.13", "openvino>=2026.3", "lerobot>=0.6"]
 
 [project.scripts]
 omni-q-demo = "omni_q.demo:main"

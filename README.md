@@ -68,6 +68,12 @@ cd OMNI-Q_Weird_Stuff_Machine
 pip install -e ".[dev]" && pytest       # 6 tests, OQ-001 acceptance
 ```
 
+For the Intel online track (MuJoCo + LeRobot + OpenVINO), add the `intel` extra:
+
+```
+pip install -e ".[dev,intel]"
+```
+
 ## Working the backlog
 
 - [`BACKLOG.md`](BACKLOG.md) — all 48 tasks (OQ-001…OQ-048), owners, dependencies, critical path
@@ -78,6 +84,8 @@ pip install -e ".[dev]" && pytest       # 6 tests, OQ-001 acceptance
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — capability nodes, graph compilation, placement
 - [`DEMO.md`](DEMO.md) — the one reproducible behavior and how to run it
 - [`docs/strategy-notes.md`](docs/strategy-notes.md) — track analysis and rubric strategy
+- [`docs/challenge-briefs/intel-online-physical-ai-challenge.md`](docs/challenge-briefs/intel-online-physical-ai-challenge.md) —
+  official Intel Online Challenge brief (transcription + [source PDF](docs/challenge-briefs/intel-online-physical-ai-challenge.pdf))
 
 ## License
 

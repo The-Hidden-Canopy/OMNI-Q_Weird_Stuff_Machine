@@ -90,15 +90,23 @@ camera → YOLO on Qualcomm → scene state → GenieX local model → OMNI Q de
 
 ## Intel online stack (confirmed)
 
-Per Intel's published brief, the dual-arm MuJoCo track is pinned to a specific
-toolchain rather than left open:
+Per the official brief
+([`docs/challenge-briefs/intel-online-physical-ai-challenge.md`](docs/challenge-briefs/intel-online-physical-ai-challenge.md)),
+the dual-arm MuJoCo track — "Bimanual VLA Manipulation with Multi-Modal
+Reasoning" — is pinned to a specific toolchain rather than left open:
 
 ```
-Simulation Engine   MuJoCo
-Data Collection      LeRobot + OMPL (motion planning)
-Model Training        local or cloud, unconstrained
-Model Inference        Intel OpenVINO + OpenVINO Physical AI (Core Ultra Series 2/3)
+Simulation Engine   MuJoCo (or compatible LeRobot Gym env)
+Policy               Hugging Face LeRobot training/fine-tuning
+                     candidate policies: SmolVLA, Pi0.5, ACT, or other VLA/IL
+Model Training        local or cloud, unconstrained (Intel provides no training infra)
+Model Inference        Intel OpenVINO (+ OpenVINO Physical AI), Core Ultra Series 2/3
 ```
+
+OMPL is not named in the official brief — drop it as a confirmed dependency;
+it's optional internal plumbing for `MOVE`/`GRASP` at most. Judged on a 100-point
+rubric (task completion 30, VLA reasoning 20, robustness across 10 randomized
+seeds 15, OpenVINO optimization 20, reproducibility 10, innovation 5).
 
 See [`integrations/intel/README.md`](integrations/intel/README.md) for how this
 maps onto the `LEFT_ARM`/`RIGHT_ARM`/`GRASP`/`MOVE`/`VERIFY` capability nodes.

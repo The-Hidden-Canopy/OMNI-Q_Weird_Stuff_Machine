@@ -5,6 +5,11 @@
 > cleaned from an export (escape artifacts removed); two chat turns were mashed
 > together in the original around the "spreading attention evenly" line and are
 > left as-is.
+>
+> Superseded for the Intel online track by the official host brief:
+> [`docs/challenge-briefs/intel-online-physical-ai-challenge.md`](challenge-briefs/intel-online-physical-ai-challenge.md).
+> Where this document speculates ("after the screenshots" section) and the brief
+> states something different, the brief is authoritative.
 
 ## Track situation (as of Sept 9)
 
