@@ -96,10 +96,10 @@ def _classify_goal(text: str) -> tuple[str, list[str]]:
 
 _CLAUSE_END = r"(?=,|\.|;|$|\s+and\b|\s+but\b|\s+then\b|\s+while\b|\s+alone\b)"
 
-Rule = Callable[[str], list[tuple[str, Any]]]
+Rule = Callable[[str, "dict[str, str] | None"], "list[tuple[str, Any]]"]
 
 
-def _rule_stop_using_arm(text: str) -> list[tuple[str, Any]]:
+def _rule_stop_using_arm(text: str, vocab: dict[str, str] | None) -> list[tuple[str, Any]]:
     # "don't use the left arm" / "stop using the right hand" -> prefer the other
     out: list[tuple[str, Any]] = []
     pat = re.compile(
@@ -112,14 +112,14 @@ def _rule_stop_using_arm(text: str) -> list[tuple[str, Any]]:
     return out
 
 
-def _rule_style(text: str) -> list[tuple[str, Any]]:
+def _rule_style(text: str, vocab: dict[str, str] | None) -> list[tuple[str, Any]]:
     if re.search(r"\b(show(ing)? off|showboat|flourish|be fancy|with flair|fancy"
                  r"|razzle|make it look good)\b", text):
         return [("style", "show_off")]
     return []
 
 
-def _rule_forbid(text: str) -> list[tuple[str, Any]]:
+def _rule_forbid(text: str, vocab: dict[str, str] | None) -> list[tuple[str, Any]]:
     out: list[tuple[str, Any]] = []
     verbs = r"(?:do ?n['’]?t|do not|never|no)\s+(?:touch|move|disturb|bump|take|grab)"
     leave = r"(?:leave|avoid|keep away from|stay away from|don['’]?t go near)"
@@ -131,14 +131,11 @@ def _rule_forbid(text: str) -> list[tuple[str, Any]]:
             obj = m.group("obj").strip()
             if not obj or obj in _ARM_WORDS:
                 continue
-            out.append(("forbid_object", resolve(obj, _rule_forbid.vocab)))  # type: ignore[attr-defined]
+            out.append(("forbid_object", resolve(obj, vocab)))
     return out
 
 
-_rule_forbid.vocab = None  # type: ignore[attr-defined]  # set per-parse()
-
-
-def _rule_keep_local(text: str) -> list[tuple[str, Any]]:
+def _rule_keep_local(text: str, vocab: dict[str, str] | None) -> list[tuple[str, Any]]:
     if re.search(r"\b(keep (everything|it|inference|things|the model)?\s*"
                  r"(local|on[- ]device)|on[- ]device|no cloud|stay local"
                  r"|stay offline|fully local|all local|locally only"
@@ -147,9 +144,9 @@ def _rule_keep_local(text: str) -> list[tuple[str, Any]]:
     return []
 
 
-def _rule_prefer_arm(text: str) -> list[tuple[str, Any]]:
-    m = re.search(r"\b(use|prefer|with|favou?r)\s+(the\s+)?(?P<side>left|right)"
-                  r"(\s+(arm|hand))?\b", text)
+def _rule_prefer_arm(text: str, vocab: dict[str, str] | None) -> list[tuple[str, Any]]:
+    m = re.search(r"\b(use|using|prefer|preferring|with|favou?r(?:ing)?|just)\s+"
+                  r"(the\s+)?(?P<side>left|right)(\s+(arm|hand))?\b", text)
     if not m:
         m = re.search(r"\b(?P<side>left|right)[- ](arm|hand)\s+only\b", text)
     return [("prefer_arm", m.group("side"))] if m else []
@@ -186,9 +183,18 @@ class ParsedInstruction:
     notes: list[str] = field(default_factory=list)
 
     def apply_to(self, engine: Any) -> str:
-        """Push the constraints onto a live engine; return the goal to run."""
+        """Push the constraints onto a live engine; return the goal to run.
+
+        Passes a ``justification`` (the raw instruction) when the engine's
+        ``add_constraint`` accepts one — the operator-provenance path — and
+        degrades to the positional call otherwise.
+        """
+        why = f"parsed from operator instruction: {self.raw!r}"
         for kind, value in self.constraints:
-            engine.add_constraint(kind, value)
+            try:
+                engine.add_constraint(kind, value, justification=why)
+            except TypeError:
+                engine.add_constraint(kind, value)
         return self.goal
 
     def as_dict(self) -> dict[str, Any]:
@@ -204,20 +210,16 @@ def parse(text: str, *, vocab: dict[str, str] | None = None) -> ParsedInstructio
     low = " " + re.sub(r"\s+", " ", text.strip().lower()) + " "
     goal, notes = _classify_goal(low)
 
-    _rule_forbid.vocab = vocab  # type: ignore[attr-defined]
     constraints: list[tuple[str, Any]] = []
     seen: set[tuple[str, Any]] = set()
-    try:
-        for rule in _CONSTRAINT_RULES:
-            for kind, value in rule(low):
-                if kind in _SINGLETON_KINDS and any(k == kind for k, _ in constraints):
-                    continue
-                if (kind, value) in seen:
-                    continue
-                seen.add((kind, value))
-                constraints.append((kind, value))
-    finally:
-        _rule_forbid.vocab = None  # type: ignore[attr-defined]
+    for rule in _CONSTRAINT_RULES:
+        for kind, value in rule(low, vocab):
+            if kind in _SINGLETON_KINDS and any(k == kind for k, _ in constraints):
+                continue
+            if (kind, value) in seen:
+                continue
+            seen.add((kind, value))
+            constraints.append((kind, value))
 
     for pat in _NOTE_PATTERNS:
         for m in pat.finditer(low):
