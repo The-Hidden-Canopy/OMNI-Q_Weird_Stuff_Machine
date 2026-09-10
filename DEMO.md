@@ -28,11 +28,24 @@ Then, on camera, one of these happens and the audience watches Omni Q react:
 
 ## Run
 
+Mock mode works today — no hardware, no third-party deps (Python 3.10+):
+
 ```
-./demo/run_demo.sh
+./demo/run_demo.sh                 # or:  PYTHONPATH=src python -m omni_q.demo
 ```
 
-_TODO: prerequisites, hardware/sim setup, expected output, screen recording._
+Prints all three states end-to-end: NORMAL resolves in one graph;
+CONSTRAINT CHANGE recompiles onto the right arm when the left goes offline;
+WORLD CHANGE replans after an object is knocked away mid-run. Each run emits a
+receipt with metrics and SHA-256 hashes of inputs / plan / actions.
+
+Event stream for the UI (OQ-005):
+
+```
+PYTHONPATH=src python -m omni_q.server      # GET /events (SSE), POST /run
+```
+
+_TODO: hardware/sim setup (OQ-006), real perception (OQ-008), screen recording._
 
 ## Presentation timing (≤ 5 min)
 
