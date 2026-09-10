@@ -37,6 +37,7 @@ from .vendor.mxfp_scales import encode_scale, safe_scale
 
 FORMATS = ("mxfp4", "nvint2", "mxfp2")
 BLOCK_SIZES = {"mxfp4": 32, "nvint2": BLOCK_SIZE_NVINT2, "mxfp2": BLOCK_SIZE_MXFP2}
+CODE_BITS = {"mxfp4": 4, "nvint2": 2, "mxfp2": 2}
 
 # MXFP4 (E2M1) payload ladder, magnitudes only; sign is bit 0x08.
 _MXFP4_MAGNITUDES = np.array([0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0], dtype=np.float64)
@@ -68,6 +69,34 @@ def unpack_codes(payload: bytes | np.ndarray, numel: int) -> np.ndarray:
     codes[2::4] = (b >> 4) & 0x03
     codes[3::4] = (b >> 6) & 0x03
     return codes[:numel]
+
+
+def pack_nibbles(codes: np.ndarray) -> bytes:
+    """Pack per-element 4-bit codes (uint8 0..15) two per byte, low nibble
+    first (4-bit formats: mxfp4)."""
+    c = np.asarray(codes, dtype=np.uint8).reshape(-1)
+    pad = (-c.size) % 2
+    if pad:
+        c = np.concatenate([c, np.zeros(pad, dtype=np.uint8)])
+    out = (c[0::2] | (c[1::2] << 4)).astype(np.uint8)
+    return out.tobytes()
+
+
+def unpack_nibbles(payload: bytes | np.ndarray, numel: int) -> np.ndarray:
+    """Inverse of :func:`pack_nibbles`; returns the first ``numel`` codes."""
+    b = np.frombuffer(payload, dtype=np.uint8).reshape(-1)
+    codes = np.empty(b.size * 2, dtype=np.uint8)
+    codes[0::2] = b & 0x0F
+    codes[1::2] = (b >> 4) & 0x0F
+    return codes[:numel]
+
+
+def _pack_codes_auto(codes: np.ndarray, fmt: str) -> bytes:
+    return pack_nibbles(codes) if CODE_BITS[fmt] == 4 else pack_codes(codes)
+
+
+def _unpack_codes_auto(payload: bytes | np.ndarray, numel: int, fmt: str) -> np.ndarray:
+    return unpack_nibbles(payload, numel) if CODE_BITS[fmt] == 4 else unpack_codes(payload, numel)
 
 
 # --------------------------------------------------------------------------- #
@@ -174,12 +203,12 @@ def quantize_tensor(values: np.ndarray, fmt: str, *, mode: str = "rne") -> Packe
         codes, scales, tensor_scale = encode_tensor_2bit(flat, fmt="nvint2", mode="rne")
     restored = dequantize_tensor(PackedTensor(
         fmt=fmt, shape=arr.shape, numel=flat.size,
-        payload=pack_codes(codes), scales=scales.tobytes(),
+        payload=_pack_codes_auto(codes, fmt), scales=scales.tobytes(),
         tensor_scale=float(tensor_scale)))
     rel, cos = _rel_cos(restored.reshape(-1), flat.astype(np.float64))
     return PackedTensor(
         fmt=fmt, shape=arr.shape, numel=flat.size,
-        payload=pack_codes(codes), scales=scales.tobytes(),
+        payload=_pack_codes_auto(codes, fmt), scales=scales.tobytes(),
         tensor_scale=float(tensor_scale),
         stats={"weight_rel_err": rel, "weight_cosine": cos,
                "block_size": BLOCK_SIZES[fmt], "mode": mode,
@@ -189,7 +218,7 @@ def quantize_tensor(values: np.ndarray, fmt: str, *, mode: str = "rne") -> Packe
 
 def dequantize_tensor(packed: PackedTensor) -> np.ndarray:
     """Restore a float32 weight tensor from its low-bit master."""
-    codes = unpack_codes(packed.payload, packed.numel)
+    codes = _unpack_codes_auto(packed.payload, packed.numel, packed.fmt)
     scales = np.frombuffer(packed.scales, dtype=np.uint8)
     if packed.fmt == "mxfp4":
         flat = _decode_mxfp4(codes, scales, packed.numel)
