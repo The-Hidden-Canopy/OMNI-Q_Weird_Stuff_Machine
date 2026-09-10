@@ -1,7 +1,7 @@
 # Speechmatics integration (stackable bonus)
 
-Not a primary track — a bonus award that stacks on whichever primary track we
-enter. One project competes twice.
+Not an entry track — a bonus award that stacks on our Intel online entry (the
+only track we qualify for). One project competes twice.
 
 ## Role in the loop
 

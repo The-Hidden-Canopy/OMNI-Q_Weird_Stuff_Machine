@@ -3,20 +3,28 @@
 > One nasty, visible, reproducible behavior — and a repo that proves it wasn't
 > smoke and mirrors.
 
+This demo is built for the **Intel Online Physical AI Challenge** — the only
+track we qualify to enter. Everything not on that path (Qualcomm, Intel
+onsite, Speechmatics) is bonus work layered on top, not the entry.
+
 ## The behavior
 
-> "Inspect this workspace, identify the misplaced component, fix it, and verify
-> the result."
+Intel online entry scenario, "Setting Up a Dinner Table":
+
+> "Open the top drawer, pick up the plate with arm A, place it on the table,
+> pick up the mug with arm B, pour water into the mug with arm A."
 
 The system visibly runs:
 
 ```
-Speechmatics        → natural-language goal
-Qualcomm Snapdragon → YOLO / local perception → structured world state
-OMNI Q              → execution graph → task decomposition → device / capability assignment
-Intel robotics      → physical action
-Qualcomm vision     → verification → success / replan
+NATURAL-LANGUAGE GOAL → OMNI Q → execution graph → task decomposition
+       → LEFT_ARM / RIGHT_ARM capability assignment → dual SO-101 manipulation (MuJoCo)
+       → camera verification → success / replan
 ```
+
+Bonus, not part of the entry: a Speechmatics voice layer can supply the goal
+and live constraints by speech instead of text (see
+[`integrations/speechmatics/README.md`](integrations/speechmatics/README.md)).
 
 Then, on camera, one of these happens and the audience watches Omni Q react:
 
@@ -78,8 +86,8 @@ screen recording, VLA/OpenVINO, and hardware evidence._
 
 - 0:00–0:30  What Omni Q is
 - 0:30–1:00  Why fixed AI workflows suck
-- 1:00–3:30  Live demo behavior
-- 3:30–4:20  Qualcomm / Intel / Speechmatics integration
+- 1:00–3:30  Live demo behavior (Intel online entry)
+- 3:30–4:20  Intel online integration details (+ any bonus Speechmatics/Qualcomm demo)
 - 4:20–5:00  Business value + why this is different
 
 ## Screen layout
@@ -87,13 +95,13 @@ screen recording, VLA/OpenVINO, and hardware evidence._
 ```
 ┌──────────────┬─────────────────────┬────────────────┐
 │ CAMERA       │ OMNI EXECUTION      │ DEVICE STATE   │
-│ live scene   │ GRAPH               │ Snapdragon ✓   │
-│              │ SEE → PLAN → ACT    │ Intel arm ✓    │
-│              │      → VERIFY       │ Speech ✓       │
+│ live scene   │ GRAPH               │ Intel arm A ✓  │
+│              │ SEE → PLAN → ACT    │ Intel arm B ✓  │
+│              │      → VERIFY       │ Speech (bonus) │
 └──────────────┴─────────────────────┴────────────────┘
 
-GOAL:           "Inspect and correct the workspace."
-CURRENT ACTION: STABILIZE(object_4)
-WHY:            Required before INSERT(connector_2)
-EXECUTING ON:   Intel SO-101
+GOAL:           "Set the table."
+CURRENT ACTION: PICK(plate) → ARM_A
+WHY:            Required before PLACE(plate, table)
+EXECUTING ON:   Dual SO-101 (MuJoCo)
 ```
