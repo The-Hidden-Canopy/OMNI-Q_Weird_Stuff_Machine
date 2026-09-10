@@ -24,14 +24,17 @@ mid-task and it notices and replans.
 
 ## Hackathon context
 
-Built for a LabLab hackathon across sponsor tracks:
+Built for a LabLab hackathon. **We qualify to enter only the Intel Online
+Physical AI Challenge** — that's the actual submission goal. Everything else
+below is optional bonus work explored during planning, not part of what we're
+entering:
 
-| Track | Omni Q manifestation |
-| --- | --- |
-| **Qualcomm** (primary) | Distributed edge brain — model on Snapdragon X Elite, hardware endpoint on Arduino UNO Q, device-to-device capability routing |
-| **Intel online** | Bimanual planner — two simulated SO-101 arms in MuJoCo, camera reasoning, cooperative manipulation |
-| **Intel onsite** | Inspect-and-remediate — detect defect, reason, physically correct with one arm |
-| **Speechmatics** (bonus) | Voice layer on top of the chosen track — spoken constraints and commands mutate the graph |
+| Track | Status | Omni Q manifestation |
+| --- | --- | --- |
+| **Intel online** | **Entry track — the only one we qualify for** | Bimanual planner — two simulated SO-101 arms in MuJoCo, camera reasoning, cooperative manipulation, per the official [Intel Physical AI Online Challenge brief](docs/challenge-briefs/intel-online-physical-ai-challenge.md) |
+| **Speechmatics** | Bonus, stacks on the Intel online entry | Voice layer — spoken constraints and commands mutate the graph |
+| **Qualcomm** | Not an entry — exploratory/bonus only | Distributed edge brain — model on Snapdragon X Elite, hardware endpoint on Arduino UNO Q, device-to-device capability routing |
+| **Intel onsite** | Not an entry — exploratory/bonus only | Inspect-and-remediate — detect defect, reason, physically correct with one arm |
 
 Full reasoning in [`docs/strategy-notes.md`](docs/strategy-notes.md).
 

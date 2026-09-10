@@ -1,8 +1,10 @@
 # Intel integration
 
-Two separate challenges — pick per submission.
+Two separate challenges. **Intel online is the entry track — the only one we
+qualify for** (see the top-level [`README.md`](../../README.md)). Intel
+onsite below is exploratory/bonus, not part of what we're submitting.
 
-## Intel online (priority)
+## Intel online (entry track)
 
 Official title: **"Bimanual VLA Manipulation with Multi-Modal Reasoning"**, challenge
 option **"Setting Up a Dinner Table"**. Full brief:
@@ -47,10 +49,11 @@ OpenVINO. Treat classical motion planning (OMPL or otherwise) as an optional
 internal implementation detail behind `MOVE`/`GRASP`, not a scored/required
 component.
 
-## Intel onsite
+## Intel onsite (bonus, not an entry)
 
-One **SO-101** arm, autonomous defect detection + physical response. Uses Intel
-Physical AI Studio, **Anomalib**, and **OpenVINO** on Core Ultra Series 3.
+Not a track we qualify for — kept only as exploratory notes. One **SO-101**
+arm, autonomous defect detection + physical response. Uses Intel Physical AI
+Studio, **Anomalib**, and **OpenVINO** on Core Ultra Series 3.
 
 Omni Q role: **inspect-and-remediate** — detect defect, reason about it,
 physically correct it with one arm. Anomalib should appear in the workflow

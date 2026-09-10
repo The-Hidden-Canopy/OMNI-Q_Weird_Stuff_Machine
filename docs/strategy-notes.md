@@ -10,6 +10,16 @@
 > [`docs/challenge-briefs/intel-online-physical-ai-challenge.md`](challenge-briefs/intel-online-physical-ai-challenge.md).
 > Where this document speculates ("after the screenshots" section) and the brief
 > states something different, the brief is authoritative.
+>
+> **Track priority is settled: Intel online is the entry track — the only one
+> we qualify for.** Qualcomm and Intel onsite are exploratory/bonus, not part
+> of the entry; Speechmatics is a bonus that stacks on the Intel online entry.
+> Earlier sections below ("Ranking," "Priority stack," "Prioritize: Qualcomm
+> first, Intel online second") reflect the pre-brief speculation of Sept 9,
+> when Qualcomm's own brief wasn't public yet, briefs hadn't landed, and
+> eligibility wasn't yet settled. They're kept as-is for the historical
+> record, not as current guidance — see `README.md` and `BACKLOG.md` for the
+> live priority.
 
 ## Track situation (as of Sept 9)
 

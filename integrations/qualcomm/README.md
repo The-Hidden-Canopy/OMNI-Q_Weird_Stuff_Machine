@@ -1,4 +1,9 @@
-# Qualcomm integration (primary track)
+# Qualcomm integration (bonus, not an entry)
+
+We only qualify to enter the **Intel online** track — see
+[`integrations/intel/README.md`](../intel/README.md) and the top-level
+[`README.md`](../../README.md). This Qualcomm work is exploratory/bonus, not
+part of what we're actually submitting.
 
 **Challenge:** use GenieX, select and deploy a model from Hugging Face or
 Qualcomm AI Hub, then bring it to life through on-device AI, hardware
