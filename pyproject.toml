@@ -14,8 +14,18 @@ dependencies = []
 [project.optional-dependencies]
 dev = ["pytest>=7"]
 # Intel online challenge stack — MuJoCo dual-SO-101 sim, LeRobot policy
-# training, OpenVINO edge inference. See docs/challenge-briefs/.
-intel = ["mujoco>=3.13", "openvino>=2026.3", "lerobot>=0.6"]
+# training, OpenVINO edge export/quantization/inference. See docs/challenge-briefs/.
+# NOTE: lerobot pulls in a CPU-only torch by default. On a machine with an
+# NVIDIA GPU, follow up with a matching CUDA build from
+# https://download.pytorch.org/whl/<cuXXX> for local training — see
+# integrations/intel/README.md.
+intel = [
+    "mujoco>=3.13",
+    "openvino>=2026.3",
+    "lerobot>=0.6",
+    "optimum-intel[openvino]>=2.1",
+    "nncf>=3.3",
+]
 
 [project.scripts]
 omni-q-demo = "omni_q.demo:main"
