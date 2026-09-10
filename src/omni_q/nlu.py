@@ -175,12 +175,51 @@ _SINGLETON_KINDS = {"keep_local", "style", "prefer_arm"}
 # ---------------------------------------------------------------------------
 
 
+def _rule_spin(text: str, vocab: dict[str, str] | None) -> list[tuple[str, dict[str, Any]]]:
+    out: list[tuple[str, dict[str, Any]]] = []
+    pat = re.compile(r"\b(spin|rotate|turn|twirl|flip)\s+(the\s+|that\s+|this\s+)?"
+                     r"(?P<obj>[a-z][a-z ]*?)\s*(?P<deg>\d{2,3})?\s*(deg|degrees|°)?"
+                     rf"\s*{_CLAUSE_END}")
+    for m in pat.finditer(text):
+        obj = m.group("obj").strip()
+        if not obj or obj in _ARM_WORDS:
+            continue
+        d: dict[str, Any] = {"object": resolve(obj, vocab)}
+        if m.group("deg"):
+            d["degrees"] = int(m.group("deg"))
+        out.append(("spin", d))
+    return out
+
+
+def _rule_nudge(text: str, vocab: dict[str, str] | None) -> list[tuple[str, dict[str, Any]]]:
+    out: list[tuple[str, dict[str, Any]]] = []
+    pat = re.compile(
+        r"\b(move|nudge|shift|scoot|slide)\s+(the\s+|that\s+)?(?P<obj>[a-z][a-z ]*?)\s+"
+        r"(?P<amount>a bit|a little|slightly|farther|further|way|much)?\s*"
+        r"(to the\s+|towards the\s+|toward\s+)?(?P<dir>left|right|back|forward|up|down|centre|center)"
+        rf"\s*{_CLAUSE_END}")
+    for m in pat.finditer(text):
+        obj = m.group("obj").strip()
+        if not obj or obj in _ARM_WORDS:
+            continue
+        out.append(("nudge", {
+            "object": resolve(obj, vocab),
+            "direction": m.group("dir"),
+            "amount": (m.group("amount") or "a bit").replace("further", "farther"),
+        }))
+    return out
+
+
+_MUTATION_RULES = [_rule_spin, _rule_nudge]
+
+
 @dataclass
 class ParsedInstruction:
     raw: str
     goal: str
     constraints: list[tuple[str, Any]] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    mutations: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
 
     def apply_to(self, engine: Any) -> str:
         """Push the constraints onto a live engine; return the goal to run.
@@ -203,6 +242,7 @@ class ParsedInstruction:
             "goal": self.goal,
             "constraints": [list(c) for c in self.constraints],
             "notes": list(self.notes),
+            "mutations": [[k, v] for k, v in self.mutations],
         }
 
 
@@ -221,11 +261,20 @@ def parse(text: str, *, vocab: dict[str, str] | None = None) -> ParsedInstructio
             seen.add((kind, value))
             constraints.append((kind, value))
 
+    mutations: list[tuple[str, dict[str, Any]]] = []
+    for rule in _MUTATION_RULES:
+        for kind, payload in rule(low, vocab):
+            if (kind, tuple(sorted(payload.items()))) not in {
+                (k, tuple(sorted(p.items()))) for k, p in mutations
+            }:
+                mutations.append((kind, payload))
+
     for pat in _NOTE_PATTERNS:
         for m in pat.finditer(low):
             notes.append(f"unhandled layout hint: {m.group(0).strip()}")
 
-    return ParsedInstruction(raw=text, goal=goal, constraints=constraints, notes=notes)
+    return ParsedInstruction(raw=text, goal=goal, constraints=constraints,
+                             notes=notes, mutations=mutations)
 
 
 def _main() -> None:  # pragma: no cover - manual smoke
