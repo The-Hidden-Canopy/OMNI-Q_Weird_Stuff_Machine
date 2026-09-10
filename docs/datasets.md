@@ -18,12 +18,20 @@ the train→export→deploy pipeline is proven. Transfer-learn from it:
 
 1. Load those `.pt` weights, swap the detection head to **7 classes** (the vocab
    above), keep the backbone.
-2. **Data (this is the whole job):** render ~2–5k labelled frames from the
-   OQ-006/OQ-007 MuJoCo scene. Ground-truth object poses → exact YOLO-txt boxes,
-   free. Randomise light / table texture / camera pose / object placement /
-   distractors. Split 80/20.
-3. Fine-tune ~30–60 epochs, backbone frozen for the first ~10, `imgsz=640`,
-   `yolov8n`. On one GPU this is minutes, not hours.
+2. **Data (this is the whole job) — breadth over repetition:** render a *large,
+   varied* synthetic set from the OQ-006/OQ-007 MuJoCo scene, every frame
+   distinct. Ground-truth object poses → exact YOLO-txt boxes, free.
+   - **Keep it similar to deploy:** the challenge's third-person table camera
+     intrinsics/extrinsics, the real object meshes, plausible place-setting
+     layouts. Don't drift the scene.
+   - **Randomise only the nuisances:** lighting, table/wall texture, small
+     camera jitter, object count/pose/occlusion, distractors, initial
+     placement (the brief's perturbation axes).
+   - Target ~15–30k frames, 90/10 split. More unique frames, not more passes.
+3. Fine-tune **~2–5 epochs** (one pass warm-up with the backbone frozen, then
+   1–2 with it unfrozen), `imgsz=640`, `yolov8n`. Watch val mAP50 per epoch and
+   stop when it plateaus — the model should see many images a few times, never
+   the same few images many times. Minutes on one GPU.
 4. Export `best.pt → ONNX`, then ONNX → **OpenVINO IR** (Intel track) and
    ONNX → **QAIRT/QNN** (Qualcomm track). Detector emits `class, bbox,
    center, conf` + a stable per-object id (track by IoU + class).
