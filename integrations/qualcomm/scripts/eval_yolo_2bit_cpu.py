@@ -167,15 +167,18 @@ def forward_output(net, x):
 def ternary_prototype() -> dict:
     """Tier 3: multiply-free Linear via ternary codes {+1, 0, -1} (mxfp2).
 
-    y = x @ Wq.T computed as x @ W_pos.T - x @ W_neg.T with 0/1 masks (the
-    one-hot form hardware would turn into adds). Compared against the fp32
-    matmul with the same dequantized ternary weights (should match closely)
-    and the pre-quantization fp32 weight (shows the quantization error).
+    y[b, o] = sum_k scale[k] * (sum_{i in block k} x[b, i] * sign(W[o, i]))
+    computed as an einsum against the 0/+-1 sign payload with the UE8M0 block
+    scale applied once per 32-input block -- the shape a ternary accelerator
+    would execute (adds for the payload, one multiply per block). Compared
+    against the fp32 matmul with the same dequantized ternary weights and the
+    pre-quantization fp32 weight.
     """
     import numpy as np
     import torch
 
     from integrations.qualcomm.lowbit import dequantize_tensor, quantize_tensor
+    from integrations.qualcomm.lowbit.vendor.mxfp_scales import safe_scale
 
     torch.manual_seed(11)
     rng = np.random.default_rng(11)
@@ -183,24 +186,27 @@ def ternary_prototype() -> dict:
     w_np = rng.standard_normal((1024, 1024), dtype=np.float32)
 
     pt = quantize_tensor(w_np, "mxfp2")
-    wq = dequantize_tensor(pt)  # ternary {-s, 0, +s} after block scales
+    wq = torch.from_numpy(np.ascontiguousarray(dequantize_tensor(pt)))
+
+    block = 32
+    nblocks = 1024 // block
+    sign_np = np.sign(wq.numpy()).astype(np.float32)  # +-1/0 ternary payload
+    sign = torch.from_numpy(sign_np.reshape(1024, nblocks, block))
+    scales = torch.from_numpy(
+        safe_scale(np.frombuffer(pt.scales, dtype=np.uint8)).astype(np.float32))
 
     x = torch.from_numpy(x_np)
-    w_pos = torch.from_numpy((wq > 0).astype(np.float32))
-    w_neg = torch.from_numpy((wq < 0).astype(np.float32))
-    wq_t = torch.from_numpy(np.ascontiguousarray(wq))
-    w_t = torch.from_numpy(w_np)
-
     with torch.no_grad():
         t0 = time.perf_counter()
-        y_proto = x @ w_pos.T - x @ w_neg.T
+        partial = torch.einsum("bk,okn->bok", x.reshape(512, nblocks, block), sign)
+        y_proto = (partial * scales).sum(-1)
         t_proto = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()
-        y_fp32wq = x @ wq_t.T
+        y_fp32wq = x @ wq.T
         t_fp32wq = (time.perf_counter() - t0) * 1000.0
 
-        y_ref = x @ w_t.T
+        y_ref = x @ torch.from_numpy(w_np).T
 
     def _cos(a, b):
         a = a.reshape(-1).double()
@@ -242,6 +248,7 @@ def main() -> int:
     import torch
 
     import integrations.qualcomm.lowbit as lowbit
+    from integrations.qualcomm.lowbit import lowbit_formats
 
     started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     stamp = time.strftime("%Y%m%d")
@@ -297,7 +304,8 @@ def main() -> int:
         "codec": {
             "module": "integrations/qualcomm.lowbit",
             "formats": {f: {"block_size": lowbit.BLOCK_SIZES[f],
-                            "code_bits": lowbit.CODE_BITS[f]} for f in lowbit.FORMATS},
+                            "code_bits": lowbit_formats.CODE_BITS[f]}
+                        for f in lowbit.FORMATS},
         },
         "tiers": {},
     }
@@ -319,6 +327,7 @@ def main() -> int:
                    for i in range(args.n_inputs)]
 
     arms = {}
+    packed_by_arm = {}
     for arm in ARMS:
         print(f"[eval] arm {arm} ...", flush=True)
         if arm == "fp32":
@@ -328,7 +337,6 @@ def main() -> int:
             packed, fp32_bytes, packed_bytes = {}, 0, 0
             for name, mod in _weight_modules(net):
                 fp32_bytes += mod.weight.numel() * 4
-            arm_stats = {"weight_cosine": 1.0, "weight_rel_err": 0.0}
         else:
             packed, fp32_bytes, packed_bytes = quantize_arm(net, arm)
         packed_by_arm[arm] = packed
@@ -337,7 +345,7 @@ def main() -> int:
         for i in range(args.n_inputs):
             out = forward_output(net, torch.from_numpy(inputs[i:i + 1].copy()))
             a = out.double()
-            b = ref_outputs[i]
+            b = ref_outputs[i].double()
             cosines.append(float(torch.dot(a, b) / (a.norm() * b.norm())))
         cos = np.asarray(cosines)
 
@@ -399,19 +407,16 @@ def main() -> int:
     detect_counts = {}
     try:
         for arm in ARMS:
-            if arm != "fp32":
-                restore_arm(packed if arm == ARMS[-1] else arms[arm]["_packed"])
-            # weights for this arm need to be in place; re-apply explicitly
             if arm == "fp32":
                 with torch.no_grad():
                     for name, mod in _weight_modules(net):
                         mod.weight.copy_(ref_weights[name])
             else:
-                restore_arm(arms[arm]["_packed"])
+                restore_arm(packed_by_arm[arm])
             counts = []
             for i in range(args.n_inputs):
-                r = yolo.predict(inputs[i], verbose=False, conf=args.conf,
-                                 device="cpu", imgsz=640)
+                r = yolo.predict(inputs[i].transpose(1, 2, 0), verbose=False,
+                                 conf=args.conf, device="cpu", imgsz=640)
                 counts.append(int(len(r[0].boxes)))
             detect_counts[arm] = counts
         parity = {}
@@ -431,9 +436,6 @@ def main() -> int:
             "method": "ultralytics predict path",
             "status": f"failed: {type(exc).__name__}: {exc}; output cosine above stands",
         }
-    finally:
-        for arm in ARMS:
-            arms[arm].pop("_packed", None)
 
     # ---- Tier 3 ternary prototype ------------------------------------------
     print("[eval] tier 3 ternary Linear prototype ...", flush=True)
