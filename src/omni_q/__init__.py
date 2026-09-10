@@ -11,8 +11,11 @@ seams every provider plugs into:
 
 from .contracts import (
     CONTRACTS,
+    ActionAuthorization,
+    AuthorizationVerdict,
     AutonomyMode,
     Constraint,
+    ConstraintValidationError,
     DataStatus,
     Detection,
     Device,
@@ -28,16 +31,22 @@ from .contracts import (
     Receipt,
     ReceiptRecord,
     Step,
+    TransitionRejected,
+    TransitionRequest,
+    TransitionResult,
     Verify,
     VerifyResult,
     WorldState,
+    World,
     content_hash_of,
     merge_mode,
+    validate_operator_constraint,
     verify_chain,
 )
 from .devices import DeviceRouter, default_devices
 from .engine import OmniQ
-from .events import Event, EventBus
+from .evidence import EvidenceLedger
+from .events import Event, EventBus, EventValidationError, validate_event_chain
 from .fakes import (
     FakeManipulator,
     FakeObserver,
@@ -49,8 +58,11 @@ from .world import MockWorld
 
 __all__ = [
     "CONTRACTS",
+    "ActionAuthorization",
+    "AuthorizationVerdict",
     "AutonomyMode",
     "Constraint",
+    "ConstraintValidationError",
     "DataStatus",
     "Detection",
     "Device",
@@ -66,17 +78,25 @@ __all__ = [
     "Receipt",
     "ReceiptRecord",
     "Step",
+    "TransitionRejected",
+    "TransitionRequest",
+    "TransitionResult",
     "Verify",
     "VerifyResult",
     "WorldState",
+    "World",
     "content_hash_of",
     "merge_mode",
+    "validate_operator_constraint",
     "verify_chain",
     "DeviceRouter",
     "default_devices",
     "OmniQ",
     "Event",
     "EventBus",
+    "EventValidationError",
+    "validate_event_chain",
+    "EvidenceLedger",
     "FakeManipulator",
     "FakeObserver",
     "FakeRecorder",
@@ -89,8 +109,12 @@ __all__ = [
 __version__ = "0.1.0"
 
 
-def build_mock_engine(bus: "EventBus | None" = None) -> "OmniQ":
-    """A fully wired OmniQ with mock providers — the OQ-001 end-to-end path."""
+def build_mock_engine(bus: "EventBus | None" = None, recorder: "object | None" = None) -> "OmniQ":
+    """A fully wired OmniQ with mock providers — the OQ-001 end-to-end path.
+
+    ``recorder`` overrides the in-memory FakeRecorder, e.g. with an
+    :class:`omni_q.evidence.EvidenceLedger` for durable receipts (OQ-037).
+    """
     world = MockWorld.sample()
     return OmniQ(
         world=world,
@@ -99,6 +123,6 @@ def build_mock_engine(bus: "EventBus | None" = None) -> "OmniQ":
         manipulator=FakeManipulator(world),
         verifier=FakeVerifier(),
         device=default_devices(),
-        recorder=FakeRecorder(),
+        recorder=recorder if recorder is not None else FakeRecorder(),
         bus=bus,
     )

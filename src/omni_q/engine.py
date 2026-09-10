@@ -10,7 +10,6 @@ fails, or verification finds a mismatch. Every transition is published on the
 from __future__ import annotations
 
 import time
-import uuid
 from dataclasses import replace
 from typing import Any
 
@@ -151,13 +150,18 @@ class OmniQ:
         self._run_id = run_id
         self._actions = []
         self._decisions = []
-        world = self._effective_world()
         self.bus.begin_run(run_id)
+        # Queued operator constraints are part of this run's authority.  Apply
+        # them before observing or planning so the first graph cannot be
+        # compiled under broader authority than the durable run identity.
+        self._apply_constraints()
+        world = self._effective_world()
         self.bus.publish("run.started", goal=goal, envelope=self.envelope.digest(),
                          state_revision=world.revision)
         obs = self.observer.observe(world)
         self.bus.publish("observed", frame=obs.frame,
                          misplaced=[d.object_id for d in obs.misplaced()],
+                         observation=obs.as_dict(),
                          state_revision=world.revision)
 
         self.graph = self.planner.plan(goal, world)
@@ -259,6 +263,12 @@ class OmniQ:
     def _run_config(self, goal: str) -> dict[str, Any]:
         """Stable run identity; excludes observation ticks and mutable ownership."""
         state = self._effective_world()
+        # Pending constraints have passed the operator-only validation gate,
+        # but are not yet present in ``state``.  They must nevertheless alter
+        # the deterministic identity; otherwise two materially different runs
+        # collide in the durable ledger.
+        constraints = [constraint.as_dict() for constraint in state.constraints]
+        constraints.extend(constraint.as_dict() for constraint in self._pending_constraints)
         return {
             "goal": goal,
             "org_id": state.org_id,
@@ -272,7 +282,7 @@ class OmniQ:
                 }
                 for object_id, detection in sorted(state.objects.items())
             },
-            "constraints": [constraint.as_dict() for constraint in state.constraints],
+            "constraints": constraints,
         }
 
     def _next_step(self, executed: set[str]) -> Step | None:

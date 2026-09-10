@@ -8,18 +8,39 @@ showing the three observable states from DEMO.md:
     3. FAILURE / WORLD CHANGE  object nudged mid-run -> verify fails -> replan
 
 No hardware, no third-party deps:  python -m omni_q.demo
+
+Set OMNIQ_RECEIPTS_DIR to persist every run's receipt to disk (OQ-037):
+each invocation writes a parent-chained evidence bundle under
+``$OMNIQ_RECEIPTS_DIR/demo-<timestamp>/`` via omni_q.evidence.EvidenceLedger.
 """
 
 from __future__ import annotations
+
+import os
+from datetime import datetime, timezone
+from pathlib import Path
 
 from .events import Event, EventBus
 from . import build_mock_engine
 from .world import MockWorld
 from .engine import OmniQ
+from .evidence import EvidenceLedger
 from .fakes import FakeManipulator, FakeObserver, FakeRecorder, FakeVerifier, RulePlanner
 from .devices import default_devices
 
 GOAL = "inspect and correct the workspace"
+
+
+def _durable_recorder() -> EvidenceLedger | None:
+    """Opt-in durable receipts (OQ-037). One bundle per demo invocation so
+    deterministic run ids never collide across repeated runs."""
+    root = os.environ.get("OMNIQ_RECEIPTS_DIR")
+    if not root:
+        return None
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    ledger = EvidenceLedger(Path(root) / f"demo-{stamp}")
+    print(f"  receipts -> {ledger.root}")
+    return ledger
 
 
 def _printer(event: Event) -> None:
@@ -48,19 +69,19 @@ def _banner(title: str) -> None:
     print("\n" + "=" * 66 + f"\n{title}\n" + "=" * 66)
 
 
-def scenario_normal() -> None:
+def scenario_normal(recorder: EvidenceLedger | None = None) -> None:
     _banner("1. NORMAL")
     bus = EventBus()
     bus.subscribe(_printer)
-    engine = build_mock_engine(bus)
+    engine = build_mock_engine(bus, recorder=recorder)
     engine.run(GOAL)
 
 
-def scenario_constraint_change() -> None:
+def scenario_constraint_change(recorder: EvidenceLedger | None = None) -> None:
     _banner("2. CONSTRAINT CHANGE  (keep-local, then lose the left arm)")
     bus = EventBus()
     bus.subscribe(_printer)
-    engine = build_mock_engine(bus)
+    engine = build_mock_engine(bus, recorder=recorder)
     engine.add_constraint("keep_local", justification="spoken operator command: keep inference local")
     engine.add_constraint("prefer_arm", "left", justification="spoken operator preference")
     # the left arm disappears before the run
@@ -68,7 +89,7 @@ def scenario_constraint_change() -> None:
     engine.run(GOAL)
 
 
-def scenario_world_change() -> None:
+def scenario_world_change(recorder: EvidenceLedger | None = None) -> None:
     _banner("3. FAILURE / WORLD CHANGE  (object nudged mid-run)")
     bus = EventBus()
     bus.subscribe(_printer)
@@ -80,7 +101,7 @@ def scenario_world_change() -> None:
         manipulator=FakeManipulator(world),
         verifier=FakeVerifier(),
         device=default_devices(),
-        recorder=FakeRecorder(),
+        recorder=recorder if recorder is not None else FakeRecorder(),
         bus=bus,
     )
 
@@ -100,9 +121,10 @@ def scenario_world_change() -> None:
 
 
 def main() -> None:
-    scenario_normal()
-    scenario_constraint_change()
-    scenario_world_change()
+    recorder = _durable_recorder()
+    scenario_normal(recorder)
+    scenario_constraint_change(recorder)
+    scenario_world_change(recorder)
     print("\nAll scenarios completed.\n")
 
 

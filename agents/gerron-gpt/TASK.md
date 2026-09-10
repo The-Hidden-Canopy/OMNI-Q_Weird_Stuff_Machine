@@ -8,7 +8,7 @@ and the launchers. You own the Intel critical path's execution half and OQ-002.
 | ✓ | ID | Pri | Task | Depends on |
 |---|----|-----|------|------------|
 |   | OQ-002 | P0 | Agent-control repo scaffold: five agent dirs, task files, repo maps, coding pointers, active scopes | — |
-|   | OQ-006 | P0 | Intel MuJoCo dual-SO-101 environment boots + accepts joint / end-effector actions | OQ-003 |
+| x | OQ-006 | P0 | Intel MuJoCo dual-SO-101 environment boots + accepts joint / end-effector actions | OQ-003 |
 |   | OQ-007 | P0 | Table-setting scene/object pack (plates, cups, forks, spoons, napkins + target settings) | OQ-006 |
 |   | OQ-008 | P0 | Adapt YOLO pipeline to tabletop objects: class, bbox/center, conf, stable IDs | OQ-007 |
 |   | OQ-010 | P0 | Basic arm primitives: PICK, PLACE, MOVE, OPEN, CLOSE, ROTATE, PRESENT | OQ-006 |

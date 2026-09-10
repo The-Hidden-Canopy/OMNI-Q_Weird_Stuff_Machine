@@ -15,6 +15,57 @@ from typing import Any
 from .contracts import ActionAuthorization, ReceiptRecord, PlanGraph, content_hash_of, sha256_of
 from .provenance import build_provenance
 
+MODEL_REF_KEYS = frozenset({"model", "model_id", "model_ref", "checkpoint", "weights"})
+
+
+def extract_model_refs(obj: Any) -> list[str]:
+    """Best-effort model identifiers (e.g. Hugging Face ids) found in a payload.
+
+    Conservative on purpose: only explicit key names count, so arbitrary
+    strings with slashes don't pollute provenance.
+    """
+    refs: set[str] = set()
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            if key in MODEL_REF_KEYS and isinstance(value, str):
+                refs.add(value)
+            else:
+                refs.update(extract_model_refs(value))
+    elif isinstance(obj, (list, tuple)):
+        for item in obj:
+            refs.update(extract_model_refs(item))
+    return sorted(refs)
+
+
+def verify_ledger(root: str | Path) -> list[str]:
+    """Check every receipt listed in ``manifest.jsonl``: content hash recomputes
+    and the parent chain is unbroken. Returns human-readable problems (empty ==
+    clean) so acceptance tooling (OQ-038) can assert on it."""
+    root = Path(root)
+    manifest = root / "manifest.jsonl"
+    if not manifest.exists():
+        return [f"no manifest at {manifest}"]
+    problems: list[str] = []
+    prev_hash: str | None = None
+    for index, line in enumerate(manifest.read_text(encoding="utf-8").splitlines()):
+        if not line.strip():
+            continue
+        entry = json.loads(line)
+        receipt_path = root / entry["path"]
+        if not receipt_path.exists():
+            problems.append(f"entry {index} ({entry['run_id']}): missing {entry['path']}")
+            continue
+        record = json.loads(receipt_path.read_text(encoding="utf-8"))
+        if content_hash_of(record) != entry["content_hash"]:
+            problems.append(f"entry {index} ({entry['run_id']}): content hash mismatch (tampered or moved)")
+        if prev_hash is None and entry["parent_hash"] != "GENESIS":
+            problems.append(f"entry {index} ({entry['run_id']}): genesis entry claims a parent")
+        expected_parent = "GENESIS" if prev_hash is None else prev_hash
+        if entry["parent_hash"] != expected_parent:
+            problems.append(f"entry {index} ({entry['run_id']}): parent link broken")
+        prev_hash = entry["content_hash"]
+    return problems
+
 
 class EvidenceLedger:
     """Local parent-chained receipts with fail-closed authorization writes."""
@@ -96,6 +147,10 @@ class EvidenceLedger:
             raise FileExistsError(f"evidence already exists for deterministic run {run_id}")
 
         plan_d = plan.as_dict()
+        provenance = build_provenance("omni_q.evidence")
+        model_refs = extract_model_refs(inputs)
+        if model_refs:
+            provenance["model_refs"] = model_refs
         base = ReceiptRecord(
             run_id=run_id,
             goal=goal,
@@ -110,7 +165,7 @@ class EvidenceLedger:
             },
             decisions=tuple(decisions or ()),
             rejected=tuple(rejected or ()),
-            provenance=build_provenance("omni_q.evidence"),
+            provenance=provenance,
             parent_hash=self._last_hash,
         )
         receipt = ReceiptRecord(

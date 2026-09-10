@@ -15,7 +15,7 @@ flourish envelope, Qualcomm profiling, receipts, comparative trials.
 |   | OQ-019 | P0 | Table-layout evaluator: positional/orientation errors + PASS/FAIL for final setting | OQ-007 |
 |   | OQ-026 | P1 | Characterize flourish envelope: safe rotation amounts, handoff poses, velocity limits, failure rates | OQ-003, OQ-014 |
 |   | OQ-029 | P1 | Qualcomm quantization/perf experiment: latency, memory, accuracy per deployment variant | OQ-028 |
-|   | OQ-037 | P1 | Evidence/receipt collector: inputs, model/version, task graph, actions, metrics, hashes per run | OQ-018, OQ-028 |
+| ~ | OQ-037 | P1 | Evidence/receipt collector: inputs, model/version, task graph, actions, metrics, hashes per run | OQ-018, OQ-028 (stub behind frozen Receipt contract — mock runs today) |
 |   | OQ-046 | P2 | Comparative trials: sequential vs bimanual vs bimanual+flourish (completion, errors, collisions, time) | OQ-045 |
 
 ## Start here

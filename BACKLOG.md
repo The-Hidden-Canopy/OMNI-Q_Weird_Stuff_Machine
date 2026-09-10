@@ -18,7 +18,7 @@ Status legend: ` ` todo · `~` in progress · `x` done.
 | x | OQ-003 | Gerron/Kimi | Inspect SO-101/MuJoCo implementation and write arm capability map | — | Joint names, limits, gripper range, workspace assumptions, wrist-roll limits, control API, cameras documented |
 |   | OQ-004 | Damion/Claude | Independently audit Intel challenge requirements against intended design | — | Written PASS/GAP matrix for natural language, camera reasoning, two-arm coordination, multi-step table setting, Intel execution |
 |   | OQ-005 | Bryan/Codex | Build minimal live Omni graph UI shell | OQ-001 | UI can display goal, observations, both arms, graph nodes, current action, verification state |
-|   | OQ-006 | Gerron/GPT | Stand up Intel MuJoCo dual-SO-101 environment | OQ-003 | Two simulated arms boot reliably and accept commanded joint/end-effector actions |
+| x | OQ-006 | Gerron/GPT | Stand up Intel MuJoCo dual-SO-101 environment | OQ-003 | Two simulated arms boot reliably and accept commanded joint/end-effector actions â€” pinned dual proxy loads (`nu=12`) and controller smoke passes; contact-rich grasping remains OQ-010 |
 |   | OQ-007 | Gerron/GPT | Create table-setting scene/object pack | OQ-006 | Plates, cups, forks, spoons, napkins and target place settings exist with usable mass/friction/collision properties |
 |   | OQ-008 | Gerron/GPT | Adapt your YOLO pipeline to tabletop objects | OQ-007 | Detector outputs class, bbox/center, confidence and stable object IDs from simulated camera frames |
 |   | OQ-009 | Gerron/Claude | Implement world-state representation | OQ-001, OQ-008 | Omni maintains objects, positions, orientations, ownership, goals and constraints across frames |
@@ -54,7 +54,7 @@ Status legend: ` ` todo · `~` in progress · `x` done.
 |   | OQ-034 | Gerron/Claude | Unified Omni provider abstraction | OQ-022, OQ-031 | Intel and Qualcomm appear as capabilities under the same Omni graph instead of separate demos |
 |   | OQ-035 | Gerron/GPT | Unified demo launcher | OQ-034 | One command selects Intel simulation, Qualcomm hardware, or mock mode |
 |   | OQ-036 | Bryan/Codex | Judge-facing demo mode | OQ-020, OQ-032 | One screen communicates goal → perception → plan → execution → verification without developer explanation |
-|   | OQ-037 | Gerron/Kimi | Evidence/receipt collector | OQ-018, OQ-028 | Each run records inputs, model/version, task graph, actions, final metrics and hashes |
+| ~ | OQ-037 | Gerron/Kimi | Evidence/receipt collector | OQ-018, OQ-028 | Each run records inputs, model/version, task graph, actions, final metrics and hashes |
 |   | OQ-038 | Damion/Claude | End-to-end acceptance suite | OQ-035, OQ-037 | Clean-machine or clean-environment reproduction passes documented demo cases |
 |   | OQ-039 | Bryan/Codex | GitHub judge path | OQ-035 | README gets a short "run this" path, architecture image, demo GIF/video link and sponsor-tech mapping |
 |   | OQ-040 | Gerron + Bryan | Product description | OQ-036 | ~1-paragraph description explains what it does, why it matters and what is original without jargon sludge |

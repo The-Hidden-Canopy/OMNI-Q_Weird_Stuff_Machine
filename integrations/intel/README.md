@@ -52,7 +52,7 @@ alongside the YOLO perception node.
 
 - [x] SO-101 capability map + measurement probe — [`so101_capability_map.md`](so101_capability_map.md),
   [`scripts/probe_so101.py`](scripts/probe_so101.py), vendored MJCF in [`assets/menagerie_so_arm100/`](assets/menagerie_so_arm100/SOURCE.md) (OQ-003)
-- [ ] MuJoCo dual SO-101 scene + control interface (online)
+- [x] MuJoCo dual SO-101 scene + controller smoke â€” `src/omni_q/intel_sim.py` builds a pinned two-arm proxy (`nu=12`) with tableware and two cameras; controller steps are real MuJoCo, while object placement is explicitly scripted pending OQ-010
 - [ ] LeRobot dataset/demonstration capture from the MuJoCo scene
 - [ ] Train/fine-tune a VLA or imitation-learning policy (SmolVLA, Pi0.5, ACT, or other)
 - [ ] Capability-node wrappers for arm primitives

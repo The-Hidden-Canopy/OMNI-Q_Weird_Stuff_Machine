@@ -12,13 +12,22 @@ import argparse
 import json
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import build_mock_engine
+from .nlu import parse
 from .sessions import SessionError, SessionManager
 
 
 _sessions = SessionManager(build_mock_engine)
+_UI_ROOT = Path(__file__).resolve().parents[2] / "ui"
+_STATIC_FILES = {
+    "/": ("index.html", "text/html; charset=utf-8"),
+    "/ui/index.html": ("index.html", "text/html; charset=utf-8"),
+    "/ui/app.js": ("app.js", "text/javascript; charset=utf-8"),
+    "/ui/styles.css": ("styles.css", "text/css; charset=utf-8"),
+}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -49,6 +58,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
+        if self._static(parsed.path):
+            return
         if parsed.path == "/health":
             return self._json(200, {"ok": True, "mode": "mock"})
 
@@ -64,8 +75,24 @@ class Handler(BaseHTTPRequestHandler):
                 cursor = int(query.get("cursor", ["0"])[0])
             except ValueError:
                 return self._json(400, {"error": "cursor must be an integer"})
+            last_event_id = self.headers.get("Last-Event-ID")
+            if last_event_id and last_event_id.isdigit():
+                cursor = max(cursor, int(last_event_id))
             return self._events(segments[1], cursor)
         return self._json(404, {"error": "not found"})
+
+    def _static(self, path: str) -> bool:
+        item = _STATIC_FILES.get(path)
+        if item is None:
+            return False
+        filename, content_type = item
+        body = (_UI_ROOT / filename).read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        return True
 
     def _events(self, session_id: str, cursor: int) -> None:
         try:
@@ -119,8 +146,16 @@ class Handler(BaseHTTPRequestHandler):
         goal = body.get("goal", "set the table")
         if not isinstance(goal, str) or not goal.strip():
             return self._json(400, {"error": "goal must be a non-empty string"})
+        instruction = parse(goal)
         session = _sessions.create()
         try:
+            for kind, value in instruction.constraints:
+                _sessions.add_constraint(
+                    session.session_id,
+                    kind,
+                    value,
+                    justification=f"parsed from operator instruction: {goal!r}",
+                )
             for constraint in body.get("constraints", []):
                 if not isinstance(constraint, dict):
                     raise ValueError("constraints must contain objects")
@@ -130,10 +165,13 @@ class Handler(BaseHTTPRequestHandler):
                     constraint.get("value"),
                     justification=constraint.get("justification"),
                 )
-            _sessions.start(session.session_id, goal)
+            _sessions.start(session.session_id, instruction.goal)
         except (SessionError, ValueError) as exc:
             return self._json(400, {"error": str(exc), "session_id": session.session_id})
-        return self._json(202, _sessions.summary(session.session_id))
+        return self._json(202, {
+            **_sessions.summary(session.session_id),
+            "instruction": instruction.as_dict(),
+        })
 
     def _add_constraint(self, session_id: str, body: dict) -> None:
         try:

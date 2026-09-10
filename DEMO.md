@@ -39,13 +39,30 @@ CONSTRAINT CHANGE recompiles onto the right arm when the left goes offline;
 WORLD CHANGE replans after an object is knocked away mid-run. Each run emits a
 receipt with metrics and SHA-256 hashes of inputs / plan / actions.
 
-Event stream for the UI (OQ-005):
+Judge UI and event stream (OQ-005):
 
 ```
-PYTHONPATH=src python -m omni_q.server      # GET /events (SSE), POST /run
+PYTHONPATH=src python -m omni_q.server
+# open http://127.0.0.1:8770
+# POST /sessions -> GET /sessions/<id>/events?cursor=<seq>
 ```
 
-_TODO: hardware/sim setup (OQ-006), real perception (OQ-008), screen recording._
+The dashboard is deliberately labelled **MOCK MODE — NOT HARDWARE**. It only
+renders causal events supplied by the active session: observations, graph
+revisions, authorization decisions, arm/device state, verification, autonomy
+mode, and final receipt hash. Operator constraints require a justification and
+are scoped to one session.
+
+Intel simulation smoke (OQ-006 seed):
+
+```
+PYTHONPATH=src .venv/Scripts/python -m pytest tests/test_intel_sim.py -q
+```
+
+This is a real MuJoCo dual-arm/controller step using the pinned SO-ARM100
+mechanical proxy, but tableware placement remains an explicitly labelled
+scripted transition. _TODO: camera perception (OQ-008), contact-rich grasping,
+screen recording, VLA/OpenVINO, and hardware evidence._
 
 ## Presentation timing (≤ 5 min)
 

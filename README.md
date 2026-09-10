@@ -65,14 +65,26 @@ no hardware and no third-party dependencies (Python 3.10+):
 git clone https://github.com/The-Hidden-Canopy/OMNI-Q_Weird_Stuff_Machine.git
 cd OMNI-Q_Weird_Stuff_Machine
 ./demo/run_demo.sh                      # PYTHONPATH=src python -m omni_q.demo
-pip install -e ".[dev]" && pytest       # 6 tests, OQ-001 acceptance
+pip install -e ".[dev]" && pytest       # governed core + API/UI tests
 ```
 
-For the Intel online track (MuJoCo + LeRobot + OpenVINO), add the `intel` extra:
+For the current Intel online simulation adapter, install only its measured
+MuJoCo dependency:
 
 ```
-pip install -e ".[dev,intel]"
+py -3 -m venv .venv
+.venv/Scripts/python -m pip install -r integrations/intel/requirements.txt
+PYTHONPATH=src .venv/Scripts/python -m pytest tests/test_intel_sim.py -q
 ```
+
+The current Intel slice loads a real dual-arm MuJoCo scene from the pinned
+SO-ARM100 mechanical proxy, moves both controller stacks, and records
+explicitly labelled `simulation-scripted-manipulation` state transitions. It is
+not camera perception, contact-rich grasp control, a trained VLA, OpenVINO, or
+hardware evidence yet.
+
+The `intel` project extra tracks the later LeRobot/OpenVINO policy stack; it is
+not required for, nor proof of, the current MuJoCo controller smoke.
 
 ## Working the backlog
 

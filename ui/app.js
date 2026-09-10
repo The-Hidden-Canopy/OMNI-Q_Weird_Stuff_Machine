@@ -45,6 +45,9 @@ function handleEvent(event) {
     setText("#connection", `Session ${state.sessionId}: executing governed ${event.run_id || "mock"} run.`);
   } else if (event.kind === "observed") {
     setText("#scene-revision", `frame ${data.frame} / state ${event.state_revision ?? "—"}`);
+    if (data.observation?.detections) {
+      renderList("#scene", data.observation.detections, (detection) => `${detection.object_id}: ${detection.zone} → ${detection.target_zone} [${detection.status}]`);
+    }
     appendTrace(`Observed ${data.misplaced?.length || 0} misplaced object(s).`);
   } else if (event.kind === "graph.compiled" || event.kind === "graph.recompiled") {
     const graph = data.graph;
