@@ -7,7 +7,11 @@ fork, spoon, napkin -- distinct masses/friction/collision per OQ-007), and a
 passive slide-jointed drawer holding the cutlery, matching the brief's
 "open the top drawer, retrieve spoons and forks" scenario.  Tableware state
 transitions remain explicitly scripted in the table adapter and are labelled
-``simulation-scripted-manipulation``.  The separate OQ-010/OQ-011 contact
+``simulation-scripted-manipulation``: PICK/MOVE/PLACE kinematically teleport
+the object's MuJoCo body to match the WorldState zone change (lift-in-place,
+then snap to the target zone's table position) so a render/viewer matches
+what the receipt claims happened, but this is not IK and not a contact-driven
+grasp -- nothing actually grips anything. The separate OQ-010/OQ-011 contact
 adapter uses only MuJoCo contact dynamics for a bounded ``cup_1`` handoff. It
 is a SO-ARM100 mechanical-proxy simulation, not evidence of perception, VLA
 control, hardware, complete table setting, or concurrent execution.
@@ -56,6 +60,20 @@ GRIPPER_OPEN = 1.5     # Jaw joint, rad -- near the SO-101 open end of its range
 GRIPPER_CLOSED = 0.0
 DRAWER_OPEN = 0.12     # drawer_slide qpos, m -- matches its MJCF range max
 DRAWER_CLOSED = 0.0
+PICK_LIFT = 0.03       # m -- visual "grasped and lifted" cue on PICK
+
+# Real MuJoCo (x, y, z) table-setting target per zone name, keyed by the same
+# strings IntelTableWorld/IntelTablePlanner use as Detection target_zones.
+# Kinematic teleport destinations for MOVE/PLACE (see apply_transition) --
+# unrelated to scheduler.DEFAULT_LAYOUT, which is an abstract reachability
+# space, not a physical coordinate frame (see that dict's comment).
+ZONE_POSITIONS: dict[str, tuple[float, float, float]] = {
+    "center": (0.00, -0.10, 0.02),        # plate
+    "upper_right": (0.16, 0.02, 0.055),   # cup
+    "left": (-0.16, -0.10, 0.015),        # fork
+    "right": (0.16, -0.10, 0.015),        # spoon
+    "lower_left": (-0.16, 0.05, 0.012),   # napkin
+}
 
 
 class IntelSimulationUnavailable(RuntimeError):
@@ -214,6 +232,14 @@ class IntelTableWorld(MockWorld):
         self._controller_steps = 0
         drawer_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "drawer_slide")
         self._drawer_qpos_adr = self.model.jnt_qposadr[drawer_joint_id]
+        # (qpos address, dof/qvel address) per tableware freejoint, for the
+        # kinematic PICK/MOVE/PLACE teleport below -- a freejoint is 7 qpos
+        # (xyz + quat) but only 6 dof (linvel + angvel), so the two addresses
+        # are not interchangeable.
+        self._object_joints: dict[str, tuple[int, int]] = {}
+        for obj_id in ("plate_1", "cup_1", "fork_1", "spoon_1", "napkin_1"):
+            jid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, f"{obj_id}_free")
+            self._object_joints[obj_id] = (self.model.jnt_qposadr[jid], self.model.jnt_dofadr[jid])
         for index, value in enumerate(HOME * 2):
             self.data.ctrl[index] = value
         mujoco.mj_forward(self.model, self.data)
@@ -251,6 +277,26 @@ class IntelTableWorld(MockWorld):
             target[1], target[3], target[5] = -0.8, 0.3, GRIPPER_CLOSED
         elif op == "HANDOFF":
             target[4] = 1.20 if arm_offset else -1.20
+
+        # Kinematic follow (OQ-010): the WorldState zone already changed via
+        # super().apply_transition() above; without this, the physical body
+        # never moves and visibly floats disconnected from what the receipt
+        # claims happened. This is a teleport, not IK or a contact-driven
+        # grasp -- PICK lifts the object in place, MOVE/PLACE teleports it to
+        # the target zone's real table position. Still "explicitly scripted",
+        # just scripted all the way down to the render instead of stopping at
+        # the WorldState label.
+        if op == "PICK" and obj in self._object_joints:
+            qpos_adr, dof_adr = self._object_joints[obj]
+            self.data.qpos[qpos_adr + 2] += PICK_LIFT
+            self.data.qvel[dof_adr:dof_adr + 6] = 0.0
+        elif op in {"MOVE", "PLACE"} and obj in self._object_joints:
+            pos = ZONE_POSITIONS.get(request.args.get("to"))
+            if pos is not None:
+                qpos_adr, dof_adr = self._object_joints[obj]
+                self.data.qpos[qpos_adr:qpos_adr + 3] = pos
+                self.data.qpos[qpos_adr + 3:qpos_adr + 7] = (1.0, 0.0, 0.0, 0.0)  # upright
+                self.data.qvel[dof_adr:dof_adr + 6] = 0.0
 
         for index, value in enumerate(target, start=arm_offset):
             self.data.ctrl[index] = value

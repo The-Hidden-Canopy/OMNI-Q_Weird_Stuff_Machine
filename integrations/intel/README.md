@@ -101,6 +101,19 @@ alongside the YOLO perception node.
   Still open: bimanual primitives (OQ-011: HANDOFF has a minimal branch,
   STABILIZE/REGRASP/COOPERATIVE_ROTATE don't yet), and OPEN/CLOSE postcondition
   verification (currently a trivial pass, see `FakeVerifier`).
+- [x] Visual proof + kinematic object placement — `demo_intel_sim.py` gained
+  `--viewer` (live interactive MuJoCo window, synced + paced per step) and
+  `--render-dir` (PNG per step + assembled `trace.gif`, a first step toward
+  the brief's required demonstration video). Rendering the actual physics
+  surfaced that PICK/MOVE/PLACE only changed the WorldState zone label —
+  the MuJoCo body never moved, so a render showed tableware floating near
+  the grippers disconnected from what the receipt claimed happened.
+  `IntelTableWorld.apply_transition` now kinematically teleports the
+  object (lift-in-place on PICK, snap to `ZONE_POSITIONS[to]` on
+  MOVE/PLACE) so what's rendered matches the scripted plan. Still not IK
+  or a contact-driven grasp — nothing actually grips anything, it's
+  scripted all the way down to the render now instead of stopping at the
+  WorldState label.
 - [ ] LeRobot dataset/demonstration capture from the MuJoCo scene
 - [ ] Train/fine-tune a VLA or imitation-learning policy (SmolVLA, Pi0.5, ACT, or other)
 - [ ] Capability-node wrappers for arm primitives
