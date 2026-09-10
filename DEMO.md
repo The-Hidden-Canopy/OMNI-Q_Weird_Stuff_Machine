@@ -47,11 +47,21 @@ PYTHONPATH=src python -m omni_q.server
 # POST /sessions -> GET /sessions/<id>/events?cursor=<seq>
 ```
 
-The dashboard is deliberately labelled **MOCK MODE — NOT HARDWARE**. It only
-renders causal events supplied by the active session: observations, graph
-revisions, authorization decisions, arm/device state, verification, autonomy
-mode, and final receipt hash. Operator constraints require a justification and
-are scoped to one session.
+The judge-facing dashboard is deliberately labelled **MOCK MODE — NOT
+HARDWARE**. It renders the causal event stream supplied by the active session:
+
+- mission objective and structured workspace observation
+- Observe → Plan → Act → Verify phase state
+- compiled graph steps, graph revisions, and arm/device placement
+- authorization decisions, constraints, replans, and capability failures
+- verification results, autonomy mode, final metrics, and receipt hash
+
+The **Apply live constraint** control exercises the same session-scoped path as
+Speechmatics: the operator supplies a justified `keep_local`, `forbid_object`,
+or `prefer_arm` constraint, the engine queues it, and the graph recompiles on
+the next loop iteration. The UI only renders events from the active session; it
+does not call hardware directly. See [`docs/ui.md`](docs/ui.md) for the full
+screen map and scope boundary.
 
 Intel simulation smoke (OQ-006 seed):
 

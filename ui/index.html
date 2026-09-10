@@ -3,73 +3,107 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Omni Q — Table-Setting Mission</title>
+    <meta name="theme-color" content="#0b1011" />
+    <title>Omni Q — Mission control</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/ui/styles.css" />
   </head>
   <body>
-    <main>
-      <header>
-        <div>
-          <p class="eyebrow">OMNI Q / INTEL ONLINE</p>
-          <h1>Adaptive Table-Setting Mission</h1>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div><p class="brand-name">OMNI <span>Q</span></p><p class="brand-caption">Adaptive workcell OS</p></div>
         </div>
-        <output id="mode" class="badge mock">MOCK MODE — NOT HARDWARE</output>
-      </header>
+        <div class="environment-pill"><span class="status-dot"></span><span>Mock environment</span><span class="pill-arrow">↗</span></div>
+        <nav class="sidebar-nav" aria-label="Mission navigation">
+          <a class="nav-item active" href="#mission"><span class="nav-icon">◈</span> Mission <span class="nav-count">01</span></a>
+          <a class="nav-item" href="#graph-panel"><span class="nav-icon">⌁</span> Execution graph</a>
+          <a class="nav-item" href="#audit-panel"><span class="nav-icon">◌</span> Audit trail</a>
+        </nav>
+        <div class="sidebar-section">
+          <div class="sidebar-heading"><span>CAPABILITY NODES</span><span class="node-count">04</span></div>
+          <div class="capability-list">
+            <div class="capability-item"><span class="capability-icon camera-icon">⌾</span><div><strong>Perception</strong><small>Structured scene state</small></div><span class="tiny-status ready"></span></div>
+            <div class="capability-item"><span class="capability-icon arm-icon">↙</span><div><strong>Left SO-101</strong><small>Intel simulation</small></div><span class="tiny-status ready"></span></div>
+            <div class="capability-item"><span class="capability-icon arm-icon right-arm">↘</span><div><strong>Right SO-101</strong><small>Intel simulation</small></div><span class="tiny-status ready"></span></div>
+            <div class="capability-item muted-node"><span class="capability-icon voice-icon">◖</span><div><strong>Voice layer</strong><small>Speechmatics adapter</small></div><span class="tiny-status standby"></span></div>
+          </div>
+        </div>
+        <div class="sidebar-foot"><div class="mono-label">RUN SAFETY</div><p>Every manipulation is authorized before execution and checked against the next observation.</p><div class="safety-line"><span class="status-dot green"></span> Mission envelope active</div></div>
+      </aside>
 
-      <section class="control" aria-label="Mission controls">
-        <label>
-          Operator objective
-          <input id="goal" value="set the table" autocomplete="off" />
-        </label>
-        <label>
-          Optional operator constraint
-          <select id="constraint-kind">
-            <option value="">None</option>
-            <option value="keep_local">Keep inference local</option>
-            <option value="forbid_object">Do not touch connector</option>
-          </select>
-        </label>
-        <label>
-          Justification
-          <input id="justification" value="judge demonstration" autocomplete="off" />
-        </label>
-        <button id="start">Start mission</button>
-      </section>
+      <main class="workspace" id="mission">
+        <header class="topbar">
+          <div><p class="breadcrumb"><span>WORKCELL</span><i>/</i> MISSION CONTROL</p><h1>Make the workspace right.</h1></div>
+          <div class="topbar-actions"><div class="live-clock"><span class="live-signal"></span><span id="run-clock">STANDBY</span></div><output id="mode" class="mode-badge mock"><span class="mode-dot"></span> MOCK MODE — NOT HARDWARE</output></div>
+        </header>
 
-      <p id="connection" class="connection">Awaiting an operator-started mission.</p>
+        <section class="mission-composer card" aria-label="Mission composer">
+          <div class="composer-copy"><p class="eyebrow">01 / DEFINE THE OBJECTIVE</p><h2>Give Omni Q the outcome.<br /><em>It composes the path.</em></h2><p class="muted-copy">Natural language in. A routed, verified capability graph out.</p></div>
+          <form id="mission-form" class="composer-form">
+            <label class="field field-goal"><span>Operator objective</span><input id="goal" value="Inspect this workspace and correct the misplaced component." autocomplete="off" /></label>
+            <div class="composer-row">
+              <label class="field"><span>Live constraint</span><select id="constraint-kind"><option value="">No additional constraint</option><option value="keep_local">Keep inference on-device</option><option value="forbid_object">Do not touch connector_2</option><option value="prefer_arm">Prefer the left arm</option></select></label>
+              <label class="field field-justification"><span>Why this constraint?</span><input id="justification" value="operator direction" autocomplete="off" /></label>
+            </div>
+            <div class="composer-actions"><button id="start" class="primary-button" type="submit"><span>Start mission</span><b>→</b></button><button id="apply-constraint" class="secondary-button" type="button" disabled>Apply live constraint</button></div>
+          </form>
+        </section>
 
-      <section class="grid">
-        <article>
-          <h2>Observation <small id="scene-revision">No live frame</small></h2>
-          <ul id="scene" class="list"><li>No observation received.</li></ul>
-        </article>
-        <article>
-          <h2>Execution graph <small id="graph-revision">rev —</small></h2>
-          <ol id="graph" class="list"><li>No graph compiled.</li></ol>
-        </article>
-        <article>
-          <h2>Arms and device state</h2>
-          <dl id="devices" class="facts">
-            <div><dt>LEFT ARM</dt><dd>unknown</dd></div>
-            <div><dt>RIGHT ARM</dt><dd>unknown</dd></div>
-            <div><dt>CURRENT ACTION</dt><dd>none</dd></div>
-          </dl>
-        </article>
-        <article>
-          <h2>Verification and authority</h2>
-          <dl id="verification" class="facts">
-            <div><dt>VERDICT</dt><dd>not evaluated</dd></div>
-            <div><dt>AUTONOMY MODE</dt><dd>NOMINAL</dd></div>
-            <div><dt>RECEIPT</dt><dd>pending</dd></div>
-          </dl>
-        </article>
-      </section>
+        <div id="connection" class="connection-bar"><span class="connection-icon">⌁</span><span>Awaiting an operator-started mission.</span><span class="connection-seq">EVENT STREAM / READY</span></div>
 
-      <section class="trace">
-        <h2>Why Omni did that</h2>
-        <ol id="trace" class="trace-list"><li>Every decision and rejection appears here.</li></ol>
-      </section>
-    </main>
+        <section class="overview-grid">
+          <article class="card scene-card" id="scene-panel">
+            <div class="card-heading"><div><p class="eyebrow">OBSERVE</p><h2>Workspace view</h2></div><div class="heading-meta"><span id="scene-status" class="status-label">WAITING FOR FRAME</span><span id="scene-revision" class="mono-meta">FRAME —</span></div></div>
+            <div class="scene-body">
+              <div class="workcell-stage" id="workcell-stage" aria-label="Structured workspace visualization"><div class="stage-grid"></div><span class="stage-label stage-label-top">WORKSPACE BOUNDARY</span><span class="stage-label stage-label-bottom">CAMERA / STRUCTURED STATE</span><div class="stage-axis axis-x"></div><div class="stage-axis axis-y"></div><div id="scene-objects" class="scene-objects"><div class="empty-stage">No live frame yet</div></div><div class="stage-target target-a">TARGET / BIN</div><div class="stage-target target-b">TARGET / SETTING</div></div>
+              <div class="scene-summary"><div class="scene-summary-main"><span class="summary-value" id="scene-count">—</span><span class="summary-label">objects in frame</span></div><div class="scene-summary-row"><span><i class="legend-dot misplaced"></i> Needs action</span><strong id="misplaced-count">—</strong></div><div class="scene-summary-row"><span><i class="legend-dot settled"></i> Already right</span><strong id="settled-count">—</strong></div><div class="scene-summary-row"><span><i class="legend-dot clear"></i> Workspace</span><strong id="workspace-clear">—</strong></div><div class="scene-source"><span class="source-line"></span><span id="scene-source-label">No observation received</span></div></div>
+            </div>
+          </article>
+
+          <article class="card pulse-card" id="pulse-panel">
+            <div class="card-heading"><div><p class="eyebrow">MISSION PULSE</p><h2>Observe → Verify</h2></div><span id="progress-label" class="progress-label">0% COMPLETE</span></div>
+            <div class="progress-track"><span id="progress-bar"></span></div>
+            <div class="phase-list" id="phase-list">
+              <div class="phase-row" data-phase="observe"><span class="phase-marker">01</span><div><strong>Observe</strong><small>Read the structured world state</small></div><span class="phase-state">queued</span></div>
+              <div class="phase-row" data-phase="plan"><span class="phase-marker">02</span><div><strong>Plan</strong><small>Compile and route the graph</small></div><span class="phase-state">queued</span></div>
+              <div class="phase-row" data-phase="act"><span class="phase-marker">03</span><div><strong>Act</strong><small>Authorize each capability call</small></div><span class="phase-state">queued</span></div>
+              <div class="phase-row" data-phase="verify"><span class="phase-marker">04</span><div><strong>Verify</strong><small>Compare expected vs observed</small></div><span class="phase-state">queued</span></div>
+            </div>
+            <div class="pulse-callout"><span class="callout-mark">✦</span><div><span class="mono-label">CURRENT REASON</span><p id="current-reason">Waiting for an objective to be committed.</p></div></div>
+          </article>
+        </section>
+
+        <section class="execution-grid">
+          <article class="card graph-card" id="graph-panel">
+            <div class="card-heading graph-heading"><div><p class="eyebrow">PLAN / ROUTE / EXECUTE</p><h2>Execution graph <span id="graph-revision" class="inline-meta">REV —</span></h2></div><span id="graph-state" class="status-label">NOT COMPILED</span></div>
+            <div id="graph" class="graph-list"><div class="graph-empty"><span class="empty-glyph">⌁</span><p>The graph will appear when a mission starts.</p><small>Omni Q keeps function separate from placement.</small></div></div>
+            <div class="graph-footer"><span><i class="line-key teal"></i> capability path</span><span><i class="line-key amber"></i> replan / constraint</span><span id="graph-step-count" class="mono-meta">0 STEPS</span></div>
+          </article>
+
+          <article class="card device-card">
+            <div class="card-heading"><div><p class="eyebrow">PLACEMENT</p><h2>Capability nodes</h2></div><span class="status-label">ROUTED LIVE</span></div>
+            <div id="devices" class="device-list">
+              <div class="device-row" data-device="perception"><div class="device-icon vision">⌾</div><div class="device-copy"><strong>Perception</strong><small>Observe / verify · structured state</small></div><span class="device-state">READY</span></div>
+              <div class="device-row" data-device="left"><div class="device-icon arm">↙</div><div class="device-copy"><strong>Intel / Left SO-101</strong><small>Manipulate · simulation</small></div><span class="device-state">READY</span></div>
+              <div class="device-row" data-device="right"><div class="device-icon arm">↘</div><div class="device-copy"><strong>Intel / Right SO-101</strong><small>Manipulate · simulation</small></div><span class="device-state">READY</span></div>
+              <div class="device-row" data-device="reasoning"><div class="device-icon reasoning">✦</div><div class="device-copy"><strong>Omni reasoning</strong><small>Plan / replan · local host</small></div><span class="device-state">READY</span></div>
+              <div class="device-row offline" data-device="qualcomm"><div class="device-icon qualcomm">Q</div><div class="device-copy"><strong>Qualcomm track</strong><small>Available when hardware is connected</small></div><span class="device-state">STANDBY</span></div>
+            </div>
+            <div class="routing-note"><span class="routing-arrow">↗</span><p><strong>Function is separate from placement.</strong> If a node disappears, Omni Q recompiles the same objective onto what remains.</p></div>
+          </article>
+        </section>
+
+        <section class="audit-grid">
+          <article class="card audit-card" id="audit-panel"><div class="card-heading"><div><p class="eyebrow">DECISION EVIDENCE</p><h2>Why Omni did that</h2></div><span id="event-count" class="status-label">0 EVENTS</span></div><div id="trace" class="trace-list"><div class="trace-empty"><span>◌</span><p>Every decision, authorization, and rejection will appear here.</p></div></div></article>
+          <article class="card receipt-card"><div class="card-heading"><div><p class="eyebrow">CLOSE THE LOOP</p><h2>Run receipt</h2></div><span id="receipt-state" class="status-label">PENDING</span></div><div class="receipt-status"><span id="receipt-icon" class="receipt-icon">◌</span><div><strong id="receipt-title">No mission committed</strong><p id="receipt-copy">A finalized receipt will be created after verification.</p></div></div><div class="receipt-metrics"><div><span>Revisions</span><strong id="metric-revisions">—</strong></div><div><span>Actions</span><strong id="metric-actions">—</strong></div><div><span>Mode</span><strong id="metric-mode">NOMINAL</strong></div></div><div class="hash-row"><span>CONTENT HASH</span><code id="receipt-hash">waiting</code><button id="copy-hash" type="button" title="Copy receipt hash" disabled>⧉</button></div></article>
+        </section>
+        <footer class="workspace-footer"><span>OMNI Q / GOVERNED ADAPTIVE EXECUTION</span><span>LOCAL SESSION <b id="session-label">—</b></span></footer>
+      </main>
+    </div>
     <script type="module" src="/ui/app.js"></script>
   </body>
 </html>
