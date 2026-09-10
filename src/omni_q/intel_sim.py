@@ -2,8 +2,11 @@
 
 This module uses the pinned SO-ARM100 Menagerie MJCF as the documented
 six-joint mechanical proxy for SO-101.  It creates one real MuJoCo scene with
-two independently actuated arms and tableware.  Tableware state transitions
-remain explicitly scripted in the table adapter and are labelled
+two independently actuated arms, a table-setting object pack (plate, cup,
+fork, spoon, napkin -- distinct masses/friction/collision per OQ-007), and a
+passive slide-jointed drawer holding the cutlery, matching the brief's
+"open the top drawer, retrieve spoons and forks" scenario.  Tableware state
+transitions remain explicitly scripted in the table adapter and are labelled
 ``simulation-scripted-manipulation``.  The separate OQ-010/OQ-011 contact
 adapter uses only MuJoCo contact dynamics for a bounded ``cup_1`` handoff. It
 is a SO-ARM100 mechanical-proxy simulation, not evidence of perception, VLA
@@ -72,7 +75,24 @@ def _prefixed(element: ET.Element, prefix: str) -> ET.Element:
 def _body(name: str, pos: str, geom: dict[str, str]) -> ET.Element:
     body = ET.Element("body", {"name": name, "pos": pos})
     ET.SubElement(body, "freejoint", {"name": f"{name}_free"})
-    ET.SubElement(body, "geom", geom)
+    ET.SubElement(body, "geom", {"name": name, **geom})
+    return body
+
+
+def _drawer(pos: str) -> ET.Element:
+    """A shallow drawer on a slide joint (OQ-007). Passive -- no actuator, so
+    it doesn't change ``model.nu``. Opens toward the arms along +y; a future
+    OQ-010 ``OPEN``/``CLOSE`` primitive drives ``data.qpos`` for
+    ``drawer_slide`` (or contacts a handle, once grasping is contact-driven)."""
+    body = ET.Element("body", {"name": "drawer", "pos": pos})
+    ET.SubElement(body, "joint", {
+        "name": "drawer_slide", "type": "slide", "axis": "0 1 0",
+        "range": "0 .12", "limited": "true", "damping": "3",
+    })
+    ET.SubElement(body, "geom", {
+        "name": "drawer", "type": "box", "size": ".12 .045 .015",
+        "rgba": ".30 .19 .11 1", "mass": ".2", "friction": "0.4 .004 .0001",
+    })
     return body
 
 
@@ -105,12 +125,30 @@ def dual_so101_xml() -> str:
         arm_body.set("pos", pos)
         worldbody.append(arm_body)
 
+    worldbody.append(_drawer("0 -.40 .01"))
     worldbody.extend([
-        _body("plate_1", "-.13 -.08 .018", {"type": "cylinder", "size": ".095 .007", "rgba": ".93 .93 .91 1", "mass": ".18"}),
-        _body("cup_1", ".16 -.06 .055", {"type": "cylinder", "size": ".032 .055", "rgba": ".22 .58 .78 1", "mass": ".12"}),
-        _body("fork_1", "-.21 -.20 .011", {"type": "box", "size": ".012 .075 .004", "rgba": ".72 .73 .75 1", "mass": ".04"}),
-        _body("spoon_1", ".22 -.20 .011", {"type": "box", "size": ".013 .07 .004", "rgba": ".72 .73 .75 1", "mass": ".04"}),
-        _body("napkin_1", "-.22 .02 .006", {"type": "box", "size": ".07 .05 .003", "rgba": ".90 .40 .38 1", "mass": ".02"}),
+        _body("plate_1", "-.13 -.08 .018", {
+            "type": "cylinder", "size": ".095 .007", "rgba": ".93 .93 .91 1",
+            "mass": ".18", "friction": "0.35 .003 .0001",  # ceramic
+        }),
+        _body("cup_1", ".16 -.06 .055", {
+            "type": "cylinder", "size": ".032 .055", "rgba": ".22 .58 .78 1",
+            "mass": ".12", "friction": "0.45 .004 .0001",  # ceramic, needs grip for the pour scenario
+        }),
+        # fork/spoon start inside the drawer -- retrieval is gated on OPEN, matching
+        # the brief's scenario ("open the top drawer, retrieve spoons and forks").
+        _body("fork_1", "-.04 -.40 .035", {
+            "type": "box", "size": ".012 .075 .004", "rgba": ".72 .73 .75 1",
+            "mass": ".04", "friction": "0.5 .003 .0001",  # metal cutlery, small grasp footprint
+        }),
+        _body("spoon_1", ".04 -.40 .035", {
+            "type": "box", "size": ".013 .07 .004", "rgba": ".72 .73 .75 1",
+            "mass": ".04", "friction": "0.5 .003 .0001",
+        }),
+        _body("napkin_1", "-.22 .02 .006", {
+            "type": "box", "size": ".07 .05 .003", "rgba": ".90 .40 .38 1",
+            "mass": ".02", "friction": "0.9 .006 .0002",  # cloth
+        }),
     ])
 
     actuators = ET.SubElement(root, "actuator")
@@ -142,12 +180,18 @@ class IntelTableWorld(MockWorld):
     mode = "simulation-scripted-manipulation"
 
     def __init__(self) -> None:
+        # Distinct starting zones (OQ-007): a shared literal zone string for
+        # every object collapses the scheduler's workspace-conflict check
+        # into full serialization regardless of arm (see
+        # integrations/intel/README.md). fork_1/spoon_1 sharing "drawer" is
+        # the one intentional exception -- they really do start in the same
+        # physical drawer cavity (see dual_so101_xml()).
         super().__init__([
-            Detection("plate_1", "plate", "staging", "center"),
-            Detection("cup_1", "cup", "staging", "upper_right"),
-            Detection("fork_1", "fork", "staging", "left"),
-            Detection("spoon_1", "spoon", "staging", "right"),
-            Detection("napkin_1", "napkin", "staging", "lower_left"),
+            Detection("plate_1", "plate", "tray_plate", "center"),
+            Detection("cup_1", "cup", "tray_cup", "upper_right"),
+            Detection("fork_1", "fork", "drawer", "left"),
+            Detection("spoon_1", "spoon", "drawer", "right"),
+            Detection("napkin_1", "napkin", "tray_napkin", "lower_left"),
         ])
         mujoco = _mujoco()
         self.model = load_dual_so101_model()

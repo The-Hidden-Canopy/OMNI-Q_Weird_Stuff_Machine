@@ -54,7 +54,10 @@ class Region:
 
 
 # Covers the MockWorld.sample zones plus generic table zones. An unknown zone is
-# treated as the contention-prone centre (see ``_region_for``).
+# treated as the contention-prone centre (see ``_region_for``) -- every unmapped
+# zone name falls back to x_center=0.0, so *any* two unmapped zones "conflict"
+# regardless of how different their names are. Real x-centers below fix that
+# for the Intel table-setting pack (OQ-007, ``intel_sim.IntelTableWorld``).
 DEFAULT_LAYOUT: dict[str, Region] = {
     "A": Region("A", -0.25),
     "bin": Region("bin", -0.30),
@@ -68,6 +71,24 @@ DEFAULT_LAYOUT: dict[str, Region] = {
     "table": Region("table", 0.0),
     "home_left": Region("home_left", 0.35),
     "home_right": Region("home_right", -0.35),
+    # Intel table-setting object pack (OQ-007, IntelTableWorld) -- start and
+    # target zones, spread out so the scheduler's conflict/parallelism
+    # reasoning reflects the scene instead of every unmapped zone colliding
+    # at x_center=0. Signs follow THIS module's convention (< 0 right, > 0
+    # left, matching arm_reaches()), matched to IntelTablePlanner's fixed
+    # arm choice per object (plate_1/fork_1/napkin_1 -> left, cup_1/spoon_1
+    # -> right). NOTE: this is the opposite sign of dual_so101_xml()'s real
+    # MJCF x-coordinates, where the "left" arm body is mounted at x<0 -- the
+    # scheduler's regions are a reachability abstraction, not a physical
+    # coordinate frame, and nothing in intel_sim.py reads Region.x_center for
+    # real motion (apply_transition only branches on the actor string).
+    "tray_plate": Region("tray_plate", 0.13),
+    "tray_cup": Region("tray_cup", -0.16),
+    "tray_napkin": Region("tray_napkin", 0.22),
+    "upper_right": Region("upper_right", -0.22),
+    "left": Region("left", 0.20),
+    "right": Region("right", -0.30),
+    "lower_left": Region("lower_left", 0.28),
 }
 
 

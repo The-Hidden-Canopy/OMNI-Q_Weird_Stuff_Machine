@@ -65,10 +65,23 @@ alongside the YOLO perception node.
   edits to `intel_sim.py`/`scheduler.py`) — `src/omni_q/demo_intel_sim.py`
   (`PYTHONPATH=src python -m omni_q.demo_intel_sim` or `omni-q-intel-demo` once
   installed), `tests/test_intel_sim_scheduled.py`. Confirms real MuJoCo physics
-  step under a scheduled graph; surfaced a real gap for OQ-007/OQ-017: every
-  tableware item shares the literal zone `"staging"`, so the scheduler's
-  workspace-conflict check correctly serializes every pickup
-  (`max_parallelism` stays 1) until objects get distinct staging positions.
+  step under a scheduled graph.
+- [x] Table-setting object pack + drawer (OQ-007 first pass) —
+  `dual_so101_xml()` now adds a passive slide-jointed `drawer` (opens toward
+  the arms, no actuator so `nu` stays 12) holding `fork_1`/`spoon_1`, matching
+  the brief's "open the top drawer, retrieve spoons and forks" scenario; every
+  tableware geom has an explicit per-material `friction` (ceramic plate/cup,
+  metal cutlery, cloth napkin). Fixed the `max_parallelism=1` gap noted above:
+  `IntelTableWorld` now gives each object a distinct start zone instead of one
+  shared `"staging"` string, and `scheduler.DEFAULT_LAYOUT` got real x-centers
+  for those zones (they were previously falling back to `x_center=0.0` for
+  *every* unmapped zone, which re-collapsed concurrency even with distinct
+  names). Net effect on `set the table`: 11 waves → 7, `max_parallelism` 1 → 2,
+  `serialized_conflicts` 12 → 0. Tests: `tests/test_intel_sim_scene.py`,
+  extended `tests/test_intel_sim_scheduled.py`. Object placement is still
+  explicitly scripted (OQ-010 territory) — the drawer isn't yet gated behind
+  an `OPEN` primitive, and pose-based (rather than zone-label) region
+  inference is still open.
 - [ ] LeRobot dataset/demonstration capture from the MuJoCo scene
 - [ ] Train/fine-tune a VLA or imitation-learning policy (SmolVLA, Pi0.5, ACT, or other)
 - [ ] Capability-node wrappers for arm primitives
