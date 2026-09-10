@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from .contracts import (
+    ActionAuthorization,
     AutonomyMode,
     Detection,
     ManipResult,
@@ -153,7 +154,9 @@ class FakeManipulator:
     }
 
     def __init__(self, world_ref: Any) -> None:
-        # world_ref is the mutable MockWorld so MOVE has an effect.
+        # Kept for constructor compatibility with existing providers/tests.
+        # State changes are deliberately applied by World.apply_transition(),
+        # never by this executor.
         self._world = world_ref
 
     def supports(self, op: str) -> bool:
@@ -164,10 +167,9 @@ class FakeManipulator:
         if op == "MOVE":
             obj = step.args["object"]
             zone = step.args["to"]
-            self._world.move_object(obj, zone)
-            return ManipResult(step.id, True, {"moved": obj, "to": zone})
+            return ManipResult(step.id, True, {"requested_move": obj, "to": zone})
         if op == "PICK":
-            return ManipResult(step.id, True, {"grasped": step.args.get("object")})
+            return ManipResult(step.id, True, {"requested_pick": step.args.get("object")})
         if op == "LOCATE":
             return ManipResult(step.id, True,
                                {"misplaced": [d.object_id for d in world.misplaced()]})
@@ -182,6 +184,26 @@ class FakeManipulator:
 
 class FakeVerifier:
     def check(self, step: Step, observation: Observation) -> VerifyResult:
+        by_id = {d.object_id: d for d in observation.detections}
+        obj_id = step.args.get("object")
+        if step.op == "PICK":
+            ok = obj_id in by_id
+            return VerifyResult(
+                ok=ok,
+                expected={"object_present": obj_id},
+                observed={"object_present": obj_id in by_id},
+                mismatch=() if ok else (str(obj_id),),
+            )
+        if step.op in {"MOVE", "PLACE"}:
+            target = step.args.get("to")
+            observed = by_id.get(obj_id)
+            ok = observed is not None and observed.zone == target
+            return VerifyResult(
+                ok=ok,
+                expected={"object": obj_id, "zone": target},
+                observed={"object": obj_id, "zone": observed.zone if observed else None},
+                mismatch=() if ok else (str(obj_id),),
+            )
         remaining = [d.object_id for d in observation.misplaced()]
         expected = {"workspace_clear": True}
         observed = {"workspace_clear": observation.workspace_clear,
@@ -204,9 +226,26 @@ class FakeRecorder:
 
     def __init__(self) -> None:
         self.records: list[ReceiptRecord] = []
+        self.authorizations: list[ActionAuthorization] = []
 
     def _last_hash(self) -> str:
         return self.records[-1].content_hash if self.records else "GENESIS"
+
+    def authorize(self, authorization: ActionAuthorization) -> ActionAuthorization:
+        """Finalize the action authorization before the engine invokes a driver."""
+        base = authorization.as_dict()
+        finalized = ActionAuthorization(
+            run_id=authorization.run_id,
+            step_id=authorization.step_id,
+            op=authorization.op,
+            verdict=authorization.verdict,
+            reason=authorization.reason,
+            state_revision=authorization.state_revision,
+            envelope_digest=authorization.envelope_digest,
+            content_hash=content_hash_of(base),
+        )
+        self.authorizations.append(finalized)
+        return finalized
 
     def record(
         self,

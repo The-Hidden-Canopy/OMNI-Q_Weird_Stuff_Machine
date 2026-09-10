@@ -11,9 +11,12 @@ from __future__ import annotations
 
 import time
 import uuid
+from dataclasses import replace
 from typing import Any
 
 from .contracts import (
+    ActionAuthorization,
+    AuthorizationVerdict,
     AutonomyMode,
     Constraint,
     Device,
@@ -24,6 +27,8 @@ from .contracts import (
     PlanGraph,
     ReceiptRecord,
     Step,
+    TransitionRejected,
+    TransitionRequest,
     Verify,
     WorldState,
     merge_mode,
@@ -64,6 +69,7 @@ class OmniQ:
         self._pending_constraints: list[Constraint] = []
         self._actions: list[dict[str, Any]] = []
         self._decisions: list[dict[str, Any]] = []
+        self._run_id = ""
 
     # -- external control (Speechmatics / UI feed into these) ----------
     def add_constraint(self, kind: str, value: Any = None) -> None:
@@ -102,17 +108,34 @@ class OmniQ:
         self._capture_decision()
         self._emit_graph("graph.recompiled", reason=reason)
 
+    def _effective_world(self) -> WorldState:
+        """Return a snapshot with immutable mission authority applied.
+
+        Mission-envelope restrictions never mutate the world and therefore
+        cannot be removed or widened by a later graph constraint/replan.
+        """
+        state = self.world.state()
+        inherited = list(state.constraints)
+        inherited.extend(
+            Constraint("forbid_object", object_id)
+            for object_id in self.envelope.forbidden_objects
+        )
+        if self.envelope.local_only:
+            inherited.append(Constraint("keep_local"))
+        return replace(state, constraints=tuple(inherited))
+
     # -- run --------------------------------------------------------
     def run(self, goal: str) -> ReceiptRecord:
         run_id = uuid.uuid4().hex[:12]
         started = time.time()
-        self.world.goal = goal
+        self._run_id = run_id
+        self.world.start_mission(goal)
         self._actions = []
         self._decisions = []
         self.bus.publish("run.started", run_id=run_id, goal=goal,
                          envelope=self.envelope.digest())
 
-        world = self.world.state()
+        world = self._effective_world()
         obs = self.observer.observe(world)
         self.bus.publish("observed", frame=obs.frame,
                          misplaced=[d.object_id for d in obs.misplaced()])
@@ -127,14 +150,14 @@ class OmniQ:
         while True:
             if self._apply_constraints():
                 revisions += 1
-                self._recompile(self.world.state(), "constraint change")
+                self._recompile(self._effective_world(), "constraint change")
                 executed.clear()
 
             step = self._next_step(executed)
             if step is None:
                 break
 
-            world = self.world.state()
+            world = self._effective_world()
 
             # capability lost? -> recompile onto what remains
             if step.contract == "manipulate" and not self.manipulator.supports(step.op):
@@ -169,21 +192,18 @@ class OmniQ:
                 if revisions > self.max_revisions:
                     self._escalate(AutonomyMode.HOLD)
                     break
-                self._recompile(self.world.state(), f"{step.id} failed")
+                self._recompile(self._effective_world(), f"{step.id} failed")
                 executed.clear()
                 continue
 
-            if step.contract == "verify":
-                fresh_obs = self.observer.observe(self.world.state())
-                result = self.verifier.check(step, fresh_obs)
-                self.bus.publish("verified", step=step.id, ok=result.ok,
-                                 mismatch=list(result.mismatch))
+            if step.contract in {"manipulate", "verify"}:
+                result = self._verify_step(step)
                 if not result.ok:
                     revisions += 1
                     if revisions > self.max_revisions:
                         self._escalate(AutonomyMode.HOLD)
                         break
-                    self._recompile(self.world.state(), "verification mismatch")
+                    self._recompile(self._effective_world(), "verification mismatch")
                     executed.clear()
                     continue
 
@@ -220,13 +240,45 @@ class OmniQ:
         return None
 
     def _run_step(self, step: Step, world: WorldState) -> bool:
+        if step.contract == "manipulate":
+            authorization = self._authorize(step, world)
+            if authorization.verdict is not AuthorizationVerdict.ALLOW:
+                step.state = "denied"
+                step.result = {"authorization": authorization.as_dict()}
+                self._actions.append({
+                    "step": step.id, "op": step.op, "arm": step.arm,
+                    "device": step.device, "state": step.state,
+                    "result": step.result,
+                })
+                self.bus.publish("step.denied", **step.as_dict())
+                return False
+
         step.state = "running"
         self.bus.publish("step.started", **step.as_dict())
         if step.contract == "manipulate":
             res = self.manipulator.execute(step, world)
-            step.result = res.detail
-            step.state = "done" if res.ok else "failed"
-            ok = res.ok
+            if res.ok:
+                request = TransitionRequest(
+                    step_id=step.id,
+                    op=step.op,
+                    args=dict(step.args),
+                    expected_revision=world.revision,
+                    actor=step.device,
+                )
+                try:
+                    transition = self.world.apply_transition(request)
+                except TransitionRejected as exc:
+                    step.result = {"error": str(exc)}
+                    step.state = "failed"
+                    ok = False
+                else:
+                    step.result = {**res.detail, **transition.detail}
+                    step.state = "done" if transition.ok else "failed"
+                    ok = transition.ok
+            else:
+                step.result = res.detail
+                step.state = "failed"
+                ok = False
         else:
             step.result = {"noted": step.op}
             step.state = "done"
@@ -237,6 +289,53 @@ class OmniQ:
         })
         self.bus.publish("step.finished", **step.as_dict())
         return ok
+
+    def _authorize(self, step: Step, world: WorldState) -> ActionAuthorization:
+        """Persist an ALLOW/DENY receipt before asking a manipulator to act."""
+        reason = "permitted by mission envelope and current live state"
+        verdict = AuthorizationVerdict.ALLOW
+        obj_id = step.args.get("object")
+        if not self.envelope.op_permitted(step.op):
+            verdict = AuthorizationVerdict.DENY
+            reason = f"operation {step.op} is outside the mission envelope"
+        elif obj_id in set(self.envelope.forbidden_objects) or obj_id in world.forbidden():
+            verdict = AuthorizationVerdict.DENY
+            reason = f"object {obj_id} is forbidden"
+        elif obj_id and obj_id in world.objects and not world.objects[obj_id].authoritative:
+            verdict = AuthorizationVerdict.REQUIRE_APPROVAL
+            reason = f"object {obj_id} is not backed by live observation"
+
+        proposed = ActionAuthorization(
+            run_id=self._run_id,
+            step_id=step.id,
+            op=step.op,
+            verdict=verdict,
+            reason=reason,
+            state_revision=world.revision,
+            envelope_digest=self.envelope.digest(),
+        )
+        try:
+            finalized = self.recorder.authorize(proposed)
+        except Exception as exc:
+            finalized = ActionAuthorization(
+                run_id=proposed.run_id,
+                step_id=proposed.step_id,
+                op=proposed.op,
+                verdict=AuthorizationVerdict.DENY,
+                reason=f"authorization receipt could not be persisted: {exc}",
+                state_revision=proposed.state_revision,
+                envelope_digest=proposed.envelope_digest,
+            )
+            self.bus.publish("authorization.failed", step=step.id, error=str(exc))
+        self.bus.publish("step.authorized", **finalized.as_dict())
+        return finalized
+
+    def _verify_step(self, step: Step):
+        fresh_obs = self.observer.observe(self.world.state())
+        result = self.verifier.check(step, fresh_obs)
+        self.bus.publish("verified", step=step.id, ok=result.ok,
+                         mismatch=list(result.mismatch))
+        return result
 
     def _emit_graph(self, kind: str, **extra: Any) -> None:
         self.bus.publish(kind, graph=self.graph.as_dict(), **extra)

@@ -103,6 +103,8 @@ class WorldState:
     objects: dict[str, Detection]
     goal: str | None = None
     constraints: tuple[Constraint, ...] = ()
+    revision: int = 0
+    ownership: dict[str, str | None] = field(default_factory=dict)
 
     def misplaced(self) -> list[Detection]:
         return [o for o in self.objects.values() if o.misplaced]
@@ -116,9 +118,11 @@ class WorldState:
     def as_dict(self) -> dict[str, Any]:
         return {
             "frame": self.frame,
+            "revision": self.revision,
             "goal": self.goal,
             "constraints": [c.as_dict() for c in self.constraints],
             "objects": {k: asdict(v) for k, v in self.objects.items()},
+            "ownership": dict(self.ownership),
         }
 
 
@@ -131,7 +135,7 @@ class Step:
     deps: tuple[str, ...] = ()
     arm: str | None = None              # left | right | None (planner may leave open)
     device: str | None = None          # filled by a Device provider
-    state: str = "pending"             # pending | running | done | failed | skipped
+    state: str = "pending"             # pending | running | done | failed | denied | skipped
     result: dict[str, Any] | None = None
     rationale: str = ""
 
@@ -191,6 +195,67 @@ class ManipResult:
     step_id: str
     ok: bool
     detail: dict[str, Any] = field(default_factory=dict)
+
+
+class TransitionRejected(ValueError):
+    """A world rejected a command before it could alter authoritative state."""
+
+
+@dataclass(frozen=True)
+class TransitionRequest:
+    """A revision-bound request to alter the authoritative world.
+
+    Providers may propose or execute a physical command, but only the world
+    adapter applies its represented state change.  ``expected_revision`` keeps
+    a stale plan from silently overwriting newer observations.
+    """
+
+    step_id: str
+    op: str
+    args: dict[str, Any]
+    expected_revision: int
+    actor: str | None = None
+
+
+@dataclass(frozen=True)
+class TransitionResult:
+    step_id: str
+    ok: bool
+    state_revision: int
+    detail: dict[str, Any] = field(default_factory=dict)
+
+
+class AuthorizationVerdict(str, Enum):
+    ALLOW = "ALLOW"
+    LIMIT = "LIMIT"
+    REQUIRE_APPROVAL = "REQUIRE_APPROVAL"
+    DENY = "DENY"
+
+
+@dataclass(frozen=True)
+class ActionAuthorization:
+    """Finalized authorization evidence emitted before a step can execute."""
+
+    run_id: str
+    step_id: str
+    op: str
+    verdict: AuthorizationVerdict
+    reason: str
+    state_revision: int
+    envelope_digest: str
+    content_hash: str = ""
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "run_id": self.run_id,
+            "step_id": self.step_id,
+            "op": self.op,
+            "verdict": self.verdict.value,
+            "reason": self.reason,
+            "state_revision": self.state_revision,
+            "envelope_digest": self.envelope_digest,
+            "content_hash": self.content_hash,
+        }
 
 
 @dataclass(frozen=True)
@@ -369,6 +434,23 @@ class Observe(Protocol):
 
 
 @runtime_checkable
+class World(Protocol):
+    """The sole authority for mutable scene state.
+
+    This is deliberately separate from ``Manipulate``: an arm driver may
+    report a command result, but it cannot mutate a planner's snapshot.
+    """
+
+    def state(self) -> WorldState: ...
+
+    def start_mission(self, goal: str) -> None: ...
+
+    def apply_transition(self, request: TransitionRequest) -> TransitionResult: ...
+
+    def add_constraint(self, constraint: Constraint) -> None: ...
+
+
+@runtime_checkable
 class Plan(Protocol):
     def plan(self, goal: str, world: WorldState) -> PlanGraph: ...
 
@@ -396,6 +478,8 @@ class Device(Protocol):
 
 @runtime_checkable
 class Receipt(Protocol):
+    def authorize(self, authorization: ActionAuthorization) -> ActionAuthorization: ...
+
     def record(
         self,
         run_id: str,
@@ -410,6 +494,7 @@ class Receipt(Protocol):
 
 
 CONTRACTS: dict[str, type] = {
+    "World": World,
     "Observe": Observe,
     "Plan": Plan,
     "Manipulate": Manipulate,
