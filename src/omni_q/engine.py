@@ -154,7 +154,7 @@ class OmniQ:
         # Queued operator constraints are part of this run's authority.  Apply
         # them before observing or planning so the first graph cannot be
         # compiled under broader authority than the durable run identity.
-        self._apply_constraints()
+        initial_constraints_applied = self._apply_constraints()
         world = self._effective_world()
         self.bus.publish("run.started", goal=goal, envelope=self.envelope.digest(),
                          state_revision=world.revision)
@@ -168,7 +168,13 @@ class OmniQ:
         self._capture_decision()
         self._emit_graph("graph.compiled")
 
-        revisions = 0
+        # Preserve a real graph-revision receipt for authority changes.  This
+        # is deliberately a planner replan, not a fabricated event: callers
+        # can reconstruct both the initial constrained graph and its revision.
+        if initial_constraints_applied:
+            self._recompile(world, "queued constraint change")
+
+        revisions = int(initial_constraints_applied)
         executed: set[str] = set()
 
         while True:

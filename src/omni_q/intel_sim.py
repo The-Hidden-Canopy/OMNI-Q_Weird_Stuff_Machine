@@ -1,22 +1,39 @@
-"""Intel Online dual-SO-101 MuJoCo adapter.
+"""Intel Online dual-SO-101 MuJoCo adapters.
 
 This module uses the pinned SO-ARM100 Menagerie MJCF as the documented
 six-joint mechanical proxy for SO-101.  It creates one real MuJoCo scene with
 two independently actuated arms and tableware.  Tableware state transitions
-are explicitly scripted in the world adapter while contact-rich grasp planning
-is still pending; the adapter exposes that fact as ``simulation-scripted`` and
-never labels it as camera or hardware evidence.
+remain explicitly scripted in the table adapter and are labelled
+``simulation-scripted-manipulation``.  The separate OQ-010/OQ-011 contact
+adapter uses only MuJoCo contact dynamics for a bounded ``cup_1`` handoff. It
+is a SO-ARM100 mechanical-proxy simulation, not evidence of perception, VLA
+control, hardware, complete table setting, or concurrent execution.
 """
 
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
+import os
+import random
 import xml.etree.ElementTree as ET
-from dataclasses import replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from .contracts import Detection, DeviceSpec, TransitionRequest, TransitionResult
+from .contracts import (
+    Detection,
+    DeviceSpec,
+    ManipResult,
+    PlanDecision,
+    PlanGraph,
+    Step,
+    TransitionRejected,
+    TransitionRequest,
+    TransitionResult,
+    VerifyResult,
+)
 from .devices import DeviceRouter
 from .engine import OmniQ
 from .fakes import FakeManipulator, FakeObserver, FakeRecorder, FakeVerifier, RulePlanner

@@ -31,16 +31,22 @@ from .devices import default_devices
 GOAL = "inspect and correct the workspace"
 
 
-def _durable_recorder() -> EvidenceLedger | None:
-    """Opt-in durable receipts (OQ-037). One bundle per demo invocation so
-    deterministic run ids never collide across repeated runs."""
+def _durable_recorder_factory() -> "object | None":
+    """Opt-in durable receipts (OQ-037). Returns a factory producing one fresh
+    ledger per scenario -- deterministic run ids collide when two scenarios
+    share a world+goal config (scenario 3 repeats scenario 1's), and each
+    scenario is its own evidence bundle anyway."""
     root = os.environ.get("OMNIQ_RECEIPTS_DIR")
     if not root:
         return None
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    ledger = EvidenceLedger(Path(root) / f"demo-{stamp}")
-    print(f"  receipts -> {ledger.root}")
-    return ledger
+
+    def make(tag: str) -> EvidenceLedger:
+        ledger = EvidenceLedger(Path(root) / f"demo-{stamp}-{tag}")
+        print(f"  receipts -> {ledger.root}")
+        return ledger
+
+    return make
 
 
 def _printer(event: Event) -> None:
@@ -121,10 +127,10 @@ def scenario_world_change(recorder: EvidenceLedger | None = None) -> None:
 
 
 def main() -> None:
-    recorder = _durable_recorder()
-    scenario_normal(recorder)
-    scenario_constraint_change(recorder)
-    scenario_world_change(recorder)
+    factory = _durable_recorder_factory()
+    scenario_normal(factory("normal") if factory else None)
+    scenario_constraint_change(factory("constraint") if factory else None)
+    scenario_world_change(factory("world") if factory else None)
     print("\nAll scenarios completed.\n")
 
 

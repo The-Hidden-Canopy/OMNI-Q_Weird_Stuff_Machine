@@ -31,7 +31,7 @@ Status legend: ` ` todo · `~` in progress · `x` done.
 |   | OQ-016 | Gerron/GPT | Execute basic table setting | OQ-007, OQ-012 | Two arms successfully place a minimal setting from initial scene |
 |   | OQ-017 | Gerron/GPT | Execute concurrent table setting | OQ-016 | Both arms perform useful independent actions simultaneously rather than alternating |
 |   | OQ-018 | Gerron/Claude | Closed-loop verification/replanning | OQ-008, OQ-009, OQ-016 | After every manipulation, vision compares observed vs expected state and retries/replans when necessary |
-|   | OQ-019 | Gerron/Kimi | Build table-layout evaluator | OQ-007 | Produces positional/orientation errors and PASS/FAIL for final setting |
+| x | OQ-019 | Gerron/Kimi | Build table-layout evaluator | OQ-007 | Produces positional/orientation errors and PASS/FAIL for final setting |
 |   | OQ-020 | Bryan/Codex | Visualize bimanual execution | OQ-012, OQ-005 | UI shows ARM-A/ARM-B actions, parallel intervals, handoffs, barriers and object ownership live |
 |   | OQ-021 | Damion/Claude | Break the Intel demo deliberately | OQ-018 | Test moved objects, failed grasp, unreachable object, collision risk, missing detection, bad instruction; record behavior |
 |   | OQ-022 | Gerron/GPT | Intel hardware/runtime packaging | OQ-016 | Demo can run through required Intel execution path rather than generic local-only code |
@@ -54,7 +54,7 @@ Status legend: ` ` todo · `~` in progress · `x` done.
 |   | OQ-034 | Gerron/Claude | Unified Omni provider abstraction | OQ-022, OQ-031 | Intel and Qualcomm appear as capabilities under the same Omni graph instead of separate demos |
 |   | OQ-035 | Gerron/GPT | Unified demo launcher | OQ-034 | One command selects Intel simulation, Qualcomm hardware, or mock mode |
 |   | OQ-036 | Bryan/Codex | Judge-facing demo mode | OQ-020, OQ-032 | One screen communicates goal → perception → plan → execution → verification without developer explanation |
-| ~ | OQ-037 | Gerron/Kimi | Evidence/receipt collector | OQ-018, OQ-028 | Each run records inputs, model/version, task graph, actions, final metrics and hashes |
+| x | OQ-037 | Gerron/Kimi | Evidence/receipt collector | OQ-018, OQ-028 | Each run records inputs, model/version, task graph, actions, final metrics and hashes |
 |   | OQ-038 | Damion/Claude | End-to-end acceptance suite | OQ-035, OQ-037 | Clean-machine or clean-environment reproduction passes documented demo cases |
 |   | OQ-039 | Bryan/Codex | GitHub judge path | OQ-035 | README gets a short "run this" path, architecture image, demo GIF/video link and sponsor-tech mapping |
 |   | OQ-040 | Gerron + Bryan | Product description | OQ-036 | ~1-paragraph description explains what it does, why it matters and what is original without jargon sludge |
