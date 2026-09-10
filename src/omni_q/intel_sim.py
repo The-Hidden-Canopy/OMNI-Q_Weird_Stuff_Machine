@@ -218,7 +218,8 @@ def _drawer(pos: str) -> ET.Element:
     })
     ET.SubElement(body, "geom", {
         "name": "drawer", "type": "box", "size": ".12 .045 .015",
-        "rgba": ".30 .19 .11 1", "mass": ".2", "friction": "0.4 .004 .0001",
+        "rgba": ".30 .19 .11 1", "mass": ".2", "friction": "1.20 .006 .0002",
+        "contype": "8", "conaffinity": "16",
     })
     return body
 
@@ -248,10 +249,14 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     ET.SubElement(visual, "global", {"azimuth": "125", "elevation": "-28"})
     worldbody = ET.SubElement(root, "worldbody")
     ET.SubElement(worldbody, "light", {"name": "key", "pos": "0 -0.3 1.3", "dir": "0 0 -1", "directional": "true"})
-    ET.SubElement(worldbody, "geom", {"name": "floor", "type": "plane", "size": "0 0 .05", "rgba": ".08 .12 .12 1"})
+    ET.SubElement(worldbody, "geom", {
+        "name": "floor", "type": "plane", "size": "0 0 .05", "rgba": ".08 .12 .12 1",
+        "contype": "2", "conaffinity": "16",
+    })
     ET.SubElement(worldbody, "geom", {
         "name": "table", "type": "box", "pos": "0 -0.10 -0.055", "size": ".42 .36 .05",
         "rgba": ".23 .14 .08 1", "friction": "1 .005 .0001",
+        "contype": "2", "conaffinity": "16",
     })
     ET.SubElement(worldbody, "camera", {"name": "third_person", "pos": "0 -1.15 .85", "euler": "1.05 0 0"})
     ET.SubElement(worldbody, "camera", {"name": "table_overhead", "pos": "0 -.10 1.20", "euler": "0 0 0"})
@@ -275,6 +280,17 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     for arm, pos in (("left", "-.26 .20 .0"), ("right", ".26 .20 .0")):
         arm_body = _prefixed(base, arm)
         arm_body.set("pos", pos)
+        for geom in arm_body.iter("geom"):
+            name = geom.attrib.get("name", "")
+            if "jaw_pad_" in name:
+                geom.set("contype", "4")
+                geom.set("conaffinity", "0")
+                geom.set("friction", "3.00 0.020 0.001")
+                geom.set("solref", ".050 1")
+                geom.set("solimp", ".80 .95 .010")
+            else:
+                geom.set("contype", "0")
+                geom.set("conaffinity", "0")
         worldbody.append(arm_body)
         for exclude in source_excludes:
             ET.SubElement(contact, "exclude", {
@@ -312,25 +328,34 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
         # gripper's 21.3-77mm graspable range.
         _body("plate_1", plate_pos, {
             "type": "cylinder", "size": ".095 .016", "rgba": ".93 .93 .91 1",
-            "mass": ".18", "friction": "0.35 .003 .0001",  # ceramic
+            "mass": ".18", "friction": "1.20 .006 .0002",  # ceramic
+            "contype": "16", "conaffinity": "20",
         }, euler=plate_euler),
         _body("cup_1", cup_pos, {
-            "type": "cylinder", "size": ".032 .055", "rgba": ".22 .58 .78 1",
-            "mass": ".12", "friction": "0.45 .004 .0001",  # ceramic, needs grip for the pour scenario
+            # Calibrated to the measured SO-101 pad envelope: the previous
+            # 64 mm / 120 g fixture exceeded the 27 mm open-pad gap and could
+            # not distinguish a bad grasp from an impossible geometry.
+            "type": "cylinder", "size": ".022 .050", "rgba": ".22 .58 .78 1",
+            "mass": ".08", "friction": "3.00 .020 .001",
+            "solref": ".050 1", "solimp": ".80 .95 .010",
+            "contype": "16", "conaffinity": "20",
         }, euler=cup_euler),
         # fork/spoon start inside the drawer -- retrieval is gated on OPEN, matching
         # the brief's scenario ("open the top drawer, retrieve spoons and forks").
         _body("fork_1", fork_pos, {
             "type": "box", "size": ".012 .075 .004", "rgba": ".72 .73 .75 1",
-            "mass": ".04", "friction": "0.5 .003 .0001",  # metal cutlery, small grasp footprint
+            "mass": ".04", "friction": "1.20 .006 .0002",
+            "contype": "16", "conaffinity": "20",  # metal cutlery, small grasp footprint
         }, euler=fork_euler),
         _body("spoon_1", spoon_pos, {
             "type": "box", "size": ".013 .07 .004", "rgba": ".72 .73 .75 1",
-            "mass": ".04", "friction": "0.5 .003 .0001",
+            "mass": ".04", "friction": "1.20 .006 .0002",
+            "contype": "16", "conaffinity": "20",
         }, euler=spoon_euler),
         _body("napkin_1", napkin_pos, {
             "type": "box", "size": ".07 .05 .003", "rgba": ".90 .40 .38 1",
-            "mass": ".02", "friction": "0.9 .006 .0002",  # cloth
+            "mass": ".02", "friction": "1.20 .006 .0002",
+            "contype": "16", "conaffinity": "20",  # cloth
         }, euler=napkin_euler),
     ])
 
@@ -594,6 +619,7 @@ class IntelTableWorld(MockWorld):
 
     def _ik_reach_pad(
         self, arm_offset: int, target_pos, *, iters: int = 300, max_dq: float = 0.04, tol: float = 0.01,
+        roll: float | None = None,
     ) -> float:
         """4-DOF (Rotation/Pitch/Elbow/Wrist_Pitch) IK tracking the fixed-jaw
         pad geom toward ``target_pos`` with wrist-roll pinned to
@@ -603,7 +629,7 @@ class IntelTableWorld(MockWorld):
 
         mujoco = self._mujoco
         pad_id = self._pad_geom[arm_offset]
-        roll = self._GRASP_WRIST_ROLL[arm_offset]
+        roll = self._GRASP_WRIST_ROLL[arm_offset] if roll is None else float(roll)
         jacp = np.zeros((3, self.model.nv))
         lo = self.model.jnt_range[arm_offset:arm_offset + 4, 0]
         hi = self.model.jnt_range[arm_offset:arm_offset + 4, 1]
@@ -625,6 +651,96 @@ class IntelTableWorld(MockWorld):
             mujoco.mj_step(self.model, self.data, nstep=3)
             self._controller_steps += 3
         return err_norm
+
+    def _object_yaw(self, obj: str) -> float:
+        """Read tableware yaw from its live freejoint pose.
+
+        This is an observation, not a pose command. Randomized scene yaw is
+        therefore respected without mutating the object to make a grasp
+        easier.
+        """
+        qpos_adr, _ = self._object_joints[obj]
+        qw, qx, qy, qz = (float(value) for value in self.data.qpos[qpos_adr + 3:qpos_adr + 7])
+        return math.atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz))
+
+    def _grasp_frame(self, arm_offset: int, obj: str) -> tuple[Any, float]:
+        """Return an object-aware fingertip orientation and roll hint."""
+        import numpy as np
+
+        yaw = self._object_yaw(obj)
+        if obj in {"fork_1", "spoon_1"}:
+            opening_angle = yaw
+        elif obj == "napkin_1":
+            opening_angle = yaw + math.pi / 2.0
+        else:
+            opening_angle = 0.0
+        if arm_offset == 6:
+            opening_angle += math.pi
+        opening = np.array([math.cos(opening_angle), math.sin(opening_angle), 0.0])
+        pad_x = -opening  # fixed-pad normal; moving pad lies in -local-x
+        pad_y = np.array([0.0, 0.0, 1.0])
+        pad_z = np.cross(pad_x, pad_y)
+        target_rotation = np.column_stack((pad_x, pad_y, pad_z))
+        roll_hint = (1.65 if arm_offset == 0 else -1.65) - yaw
+        return target_rotation, float(np.clip(roll_hint, -1.62, 1.62))
+
+    def _ik_reach_pad_pose(
+        self, arm_offset: int, target_pos, target_rotation, *, roll_hint: float,
+        iters: int = 360, max_dq: float = 0.04, position_tol: float = 0.012,
+        orientation_tol: float = 0.18,
+    ) -> dict[str, float]:
+        """Bounded 6D damped-least-squares solve for a pad pose.
+
+        The residual combines metres and radians with an explicit scale. It
+        uses only arm joints, respects a 30 mrad joint-limit margin, and never
+        writes an object's freejoint.
+        """
+        import numpy as np
+
+        mujoco = self._mujoco
+        pad_id = self._pad_geom[arm_offset]
+        target = np.asarray(target_pos, dtype=float)
+        target_rotation = np.asarray(target_rotation, dtype=float).reshape(3, 3)
+        jacp = np.zeros((3, self.model.nv))
+        jacr = np.zeros((3, self.model.nv))
+        lo = self.model.jnt_range[arm_offset:arm_offset + 5, 0] + 0.03
+        hi = self.model.jnt_range[arm_offset:arm_offset + 5, 1] - 0.03
+        w_inv = np.diag([1.0 / 80.0, 1.0 / 25.0, 1.0, 1.0, 0.5])
+        orientation_scale = 0.10  # metres-equivalent per radian
+        self.data.ctrl[arm_offset + 4] = roll_hint
+        position_error = float("inf")
+        orientation_error = float("inf")
+        for _ in range(iters):
+            mujoco.mj_jacGeom(self.model, self.data, jacp, jacr, pad_id)
+            current_rotation = self.data.geom_xmat[pad_id].reshape(3, 3)
+            position_residual = target - self.data.geom_xpos[pad_id]
+            orientation_residual = 0.5 * (
+                np.cross(current_rotation[:, 0], target_rotation[:, 0])
+                + np.cross(current_rotation[:, 1], target_rotation[:, 1])
+                + np.cross(current_rotation[:, 2], target_rotation[:, 2])
+            )
+            position_error = float(np.linalg.norm(position_residual))
+            orientation_error = float(np.linalg.norm(orientation_residual))
+            if position_error <= position_tol and orientation_error <= orientation_tol:
+                break
+            residual = np.concatenate((position_residual, orientation_residual * orientation_scale))
+            jacobian = np.vstack((
+                jacp[:, arm_offset:arm_offset + 5],
+                jacr[:, arm_offset:arm_offset + 5] * orientation_scale,
+            ))
+            damped = jacobian @ w_inv @ jacobian.T + 0.06 * 0.06 * np.eye(6)
+            delta = w_inv @ jacobian.T @ np.linalg.solve(damped, residual)
+            delta = np.clip(delta, -max_dq, max_dq)
+            q_now = self.data.qpos[arm_offset:arm_offset + 5]
+            self.data.ctrl[arm_offset:arm_offset + 5] = np.clip(q_now + delta, lo, hi)
+            mujoco.mj_step(self.model, self.data, nstep=3)
+            self._controller_steps += 3
+        self.data.ctrl[arm_offset + 4] = float(np.clip(self.data.ctrl[arm_offset + 4], lo[4], hi[4]))
+        return {
+            "position_error_m": round(position_error, 6),
+            "orientation_error_rad": round(orientation_error, 6),
+            "orientation_satisfied": float(position_error <= position_tol and orientation_error <= orientation_tol),
+        }
 
     def _set_gripper(self, arm_offset: int, value: float, *, settle_steps: int = 15) -> None:
         self.data.ctrl[arm_offset + 5] = value
@@ -674,6 +790,7 @@ class IntelTableWorld(MockWorld):
         the actual pinch (see ``_ik_reach_pad``) -- close the gripper on the
         real object, lift, and report whether it's actually being carried
         (measured height gain), not just whether the motion finished."""
+        target_rotation, roll_hint = self._grasp_frame(arm_offset, obj)
         qpos_adr, _ = self._object_joints[obj]
         start_z = float(self.data.qpos[qpos_adr + 2])
         xy = self.data.qpos[qpos_adr:qpos_adr + 2].copy()
@@ -683,23 +800,52 @@ class IntelTableWorld(MockWorld):
         self._set_gripper(arm_offset, GRIPPER_OPEN)
         self._move_to(arm_offset, (xy[0], xy[1], clear_z))
 
-        # Precision pinch: pinned wrist-roll + pad-tip tracking, not the
-        # Fixed_Jaw body origin _move_to just used. One re-center pass on the
-        # object's actual current position -- the safe-transit approach can
-        # still nudge it slightly even without the old shoulder-sweep.
-        reach_err = self._ik_reach_pad(arm_offset, (xy[0], xy[1], start_z))
+        # First locate the actual pad with the bounded object-aware roll hint,
+        # then hold that measured, reachable frame while descending. Asking
+        # the small five-joint chain for an arbitrary world orientation would
+        # over-constrain the proxy; the measured frame preserves the physical
+        # wrist convention while still making yaw a live input.
+        self._ik_reach_pad(
+            arm_offset, (xy[0], xy[1], clear_z),
+            iters=220, roll=roll_hint,
+        )
+        target_rotation = self.data.geom_xmat[self._pad_geom[arm_offset]].reshape(3, 3).copy()
+        clear_pose = self._ik_reach_pad_pose(
+            arm_offset, (xy[0], xy[1], clear_z), target_rotation,
+            roll_hint=roll_hint, iters=220,
+        )
         xy_now = self.data.qpos[qpos_adr:qpos_adr + 2].copy()
         z_now = float(self.data.qpos[qpos_adr + 2])
-        reach_err = self._ik_reach_pad(arm_offset, (xy_now[0], xy_now[1], z_now), iters=150)
+        pinch_pose = self._ik_reach_pad_pose(
+            arm_offset, (xy_now[0], xy_now[1], z_now), target_rotation,
+            roll_hint=roll_hint, iters=80,
+        )
+        # The final vertical approach is position-dominant: the reachable
+        # orientation frame is already established above, and this 4-DOF
+        # roll-pinned solve avoids twisting a pad into the object while the
+        # jaws are entering contact.
+        pinch_error = self._ik_reach_pad(
+            arm_offset, (xy_now[0], xy_now[1], z_now),
+            iters=180, roll=roll_hint,
+        )
 
         self._set_gripper(arm_offset, GRIPPER_CLOSED, settle_steps=180)  # let the grip actually settle
-        self._ik_reach_pad(arm_offset, (xy_now[0], xy_now[1], z_now + (clear_z - start_z)), iters=250)  # lift
+        lift_error = self._ik_reach_pad(
+            arm_offset, (xy_now[0], xy_now[1], z_now + (clear_z - start_z)),
+            iters=280, roll=roll_hint,
+        )
 
         lifted_z = float(self.data.qpos[qpos_adr + 2])
         lift = lifted_z - start_z
         return {
-            "grasp": "contact", "reach_error_m": round(reach_err, 4),
+            "grasp": "contact", "reach_error_m": round(pinch_error, 6),
             "lift_height_m": round(lift, 4), "held": lift > 0.02,
+            "orientation": {
+                "clearance": clear_pose,
+                "pinch": pinch_pose,
+                "lift": {"position_error_m": round(lift_error, 6)},
+                "roll_hint_rad": round(roll_hint, 6),
+            },
         }
 
     def _do_place(self, arm_offset: int, obj: str, to_zone: str | None) -> dict[str, Any]:
@@ -724,18 +870,35 @@ class IntelTableWorld(MockWorld):
         qpos_adr, _ = self._object_joints[obj]
         half_h = OBJECT_HALF_HEIGHT.get(obj, 0.01)
         clear = np.array([0.0, 0.0, half_h + GRASP_CLEARANCE])
+        # Preserve the measured grasp frame while carrying; re-solving toward
+        # an arbitrary world orientation here can twist a live contact and
+        # turn a valid hold into a drop.
+        target_rotation = self.data.geom_xmat[self._pad_geom[arm_offset]].reshape(3, 3).copy()
+        roll_hint = float(self.data.qpos[arm_offset + 4])
 
         cur_pad_z = float(self.data.geom_xpos[self._pad_geom[arm_offset]][2])
-        self._ik_reach_pad(arm_offset, (target_arr[0], target_arr[1], cur_pad_z))
-        place_err = self._ik_reach_pad(arm_offset, target_arr, iters=250)
+        self._ik_reach_pad(
+            arm_offset, (target_arr[0], target_arr[1], cur_pad_z),
+            iters=240, roll=roll_hint,
+        )
+        place_error = self._ik_reach_pad(
+            arm_offset, target_arr, iters=300, roll=roll_hint,
+        )
         self._set_gripper(arm_offset, GRIPPER_OPEN, settle_steps=40)  # let it drop/settle
-        self._ik_reach_pad(arm_offset, target_arr + clear, iters=250)  # retract straight up
+        lift_error = self._ik_reach_pad(
+            arm_offset, target_arr + clear, iters=240, roll=roll_hint,
+        )  # retract straight up
 
         final_xy = self.data.qpos[qpos_adr:qpos_adr + 2].copy()
         offset = float(np.linalg.norm(final_xy - target_arr[:2]))
         return {
-            "grasp": "contact", "reach_error_m": round(place_err, 4),
+            "grasp": "contact", "reach_error_m": round(place_error, 6),
             "placement_error_m": round(offset, 4), "placed": offset < 0.06,
+            "orientation": {
+                "place": {"position_error_m": round(place_error, 6)},
+                "retract": {"position_error_m": round(lift_error, 6)},
+                "roll_hint_rad": round(roll_hint, 6),
+            },
         }
 
     def simulation_summary(self) -> dict[str, Any]:

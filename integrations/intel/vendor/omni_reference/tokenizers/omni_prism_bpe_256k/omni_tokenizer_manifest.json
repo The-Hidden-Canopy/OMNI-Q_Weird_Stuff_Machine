@@ -1,0 +1,32 @@
+{
+  "algorithm": "byte_level_bpe",
+  "architecture_family": "omni",
+  "min_frequency": 2,
+  "requested_vocab_size": 256000,
+  "schema": "omni_tokenizer_v1",
+  "special_tokens": {
+    "</s>": 2,
+    "<pad>": 0,
+    "<s>": 1,
+    "<unk>": 3
+  },
+  "supersedes": "artifacts/tokenizers/ida_lattice_bpe_32k",
+  "supersedes_reason": "lattice-family merges applied to Omni's Wikipedia/MultiWOZ/JSON corpus; retrained in-domain",
+  "tokenizer_sha256": "2ccbd698b2dadb80505b5796ebd54c37a105835457de44b6ae152482e163f1af",
+  "train_seconds": 268.9,
+  "trained_on": {
+    "admitted_rows_only": false,
+    "chars": 1369960157,
+    "release": "omni_780ma_source_400m_4096_r3",
+    "release_dataset_sha256": "8f4c0f877d36286a2ce0c9dc47f6c29fd0aaa7a25ebb27f1b9aa0dda44a0f1d2",
+    "row_stride": 1,
+    "rows": 1246895,
+    "skipped_split": 247945,
+    "skipped_stride": 0,
+    "skipped_unadmitted": 0,
+    "split": "train",
+    "stopped_on_max_chars": false,
+    "used": 998950
+  },
+  "vocab_size": 256000
+}

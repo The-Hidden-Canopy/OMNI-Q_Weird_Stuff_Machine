@@ -189,17 +189,17 @@ def ternary_prototype() -> dict:
     wq = torch.from_numpy(np.ascontiguousarray(dequantize_tensor(pt)))
 
     block = 32
-    nblocks = 1024 // block
+    nblocks = 1024 // block  # per-row input blocks
     sign_np = np.sign(wq.numpy()).astype(np.float32)  # +-1/0 ternary payload
     sign = torch.from_numpy(sign_np.reshape(1024, nblocks, block))
-    scales = torch.from_numpy(
-        safe_scale(np.frombuffer(pt.scales, dtype=np.uint8)).astype(np.float32))
+    scales_all = safe_scale(np.frombuffer(pt.scales, dtype=np.uint8)).astype(np.float32)
+    scales = torch.from_numpy(scales_all.reshape(1024, nblocks))  # per (row, block)
 
     x = torch.from_numpy(x_np)
     with torch.no_grad():
         t0 = time.perf_counter()
-        partial = torch.einsum("bk,okn->bok", x.reshape(512, nblocks, block), sign)
-        y_proto = (partial * scales).sum(-1)
+        partial = torch.einsum("bkn,okn->bok", x.reshape(512, nblocks, block), sign)
+        y_proto = (partial * scales[None]).sum(-1)
         t_proto = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()

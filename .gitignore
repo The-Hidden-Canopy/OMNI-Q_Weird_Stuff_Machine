@@ -53,6 +53,7 @@ coverage/
 *.pth
 *.onnx
 *.safetensors
+data/
 data/raw/
 data/interim/
 *.sqlite
