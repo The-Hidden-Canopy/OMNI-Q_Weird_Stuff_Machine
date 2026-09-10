@@ -111,7 +111,8 @@ Spec + fusion authority = Gerron/Claude (`src/omni_q/ontology.py`,
 | ~ | OQ-ONT-005 | Gerron/GPT + Kimi | Real specialist detectors (objects via `perception/`, human/hand, hazard, affordance, robot-state) | OQ-008 | each emits Claims; ontology fuses without vocab fights |
 |   | OQ-ONT-006 | Gerron/GPT | Run the swarm at MXFP2/MXFP4 on Core Ultra; OMNI-Q wakes only on `wakes()` deltas | OQ-ONT-005, OQ-028 | measured compute saving vs per-frame reasoning |
 |   | OQ-ONT-007 | Gerron/Claude | `reachable_by` / `missing_from` relations from the OQ-006/007 table geometry | OQ-007, OQ-ONT-003 | ontology says "left setting incomplete; left_arm can reach the cup" |
-| ~ | OQ-ONT-008 | Bryan/Codex | UI renders the scene graph: entities, relations, conflicts, workspace flag, which model claimed what | OQ-ONT-003, OQ-005 | `ontology.snapshot()` on screen |
+| x | OQ-ONT-005b | Gerron/Claude | Reactive control: ontology `workspace.conflict` -> halt -> re-observe -> resume | OQ-ONT-003, OQ-018 | `reactor.py` `ReactiveObserver` + `ReactivePlanner`; a hand crossing an arm zone mid-task -> HALT / STABILIZE x N / RESUME, then finishes; no engine edits; 8 tests |
+| ~ | OQ-ONT-008 | Bryan/Codex | UI renders the scene graph: entities, relations, conflicts, workspace flag, which model claimed what | OQ-ONT-003, OQ-005 | `ontology.snapshot()` + `reactor` HALT/RESUME events on screen |
 
 ## Critical path (Intel)
 

@@ -91,9 +91,38 @@ engine.observer.ontology.snapshot()      # entities, relations, conflicts, works
 engine.observer.wake                     # did anything meaningful just change?
 ```
 
-`stub_swarm(world)` is two model-free specialists (objects + human/hand, the
-latter driven by `world.hand_xy`) for tests and the demo. Replace each entry
-with a real detector.
+`stub_swarm(world)` is three model-free specialists (objects, robot-state /
+both arms, human/hand driven by `world.hand_xy`) for tests and the demo.
+Replace each entry with a real detector.
+
+## Reacting to the attention signal — `src/omni_q/reactor.py`
+
+The ontology raising `workspace.conflict` is only useful if OMNI-Q acts on it.
+`reactor.py` turns it into **halt → re-observe → resume**, entirely through the
+existing engine seams:
+
+- **`ReactiveObserver`** wraps the `OntologyObserver`. Each `observe`, on a
+  *new* conflict it records a `HALT` event (`"human_1 intersects left_arm_1"`)
+  and, if given the engine, queues a `style=freeze` constraint so the loop
+  recompiles promptly; on clear it records `RESUME` and queues
+  `style=minimum_time`.
+- **`ReactivePlanner`** is a `Plan` decorator (compose it outermost):
+  while `observer.blocked`, every `plan`/`replan` returns a **wait graph**
+  (`STABILIZE` then `VERIFY`) so the arms hold steady; the `VERIFY` keeps
+  failing while the goal is unmet, so the engine recompiles — and the moment
+  the workspace clears, the real task plan resumes and finishes.
+
+```python
+ro = ReactiveObserver(OntologyObserver(stub_swarm(engine.world)), engine=engine)
+engine.observer = ro
+engine.planner  = ReactivePlanner(RulePlanner(), observer=ro)
+# a hand crossing the left-arm zone mid-task ->
+#   PICK MOVE | HALT | STABILIZE VERIFY x3 | RESUME | STABILIZE PICK MOVE VERIFY  (resolved)
+```
+
+The receipt / event stream then shows *which model observed the hand, how the
+ontology changed, why OMNI-Q halted, and what the arms actually did* — not
+"YOLO found a cup".
 
 ## Try it
 

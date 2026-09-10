@@ -268,11 +268,20 @@ class Ontology:
         return best
 
     def _mint(self, c: Claim, ct: str, frame: int) -> Entity:
-        self._counts[ct] = self._counts.get(ct, 0) + 1
-        eid = f"{ct}_{self._counts[ct]}"
+        # A detector that already knows the authoritative id/zone (e.g. a sim
+        # bridge) passes it in attrs; a real camera detector does not, and the
+        # ontology mints its own id + derives the zone from geometry.
+        wid = c.attrs.get("world_id")
+        eid = wid if wid and wid not in self.entities else None
+        if eid is None:
+            self._counts[ct] = self._counts.get(ct, 0) + 1
+            eid = f"{ct}_{self._counts[ct]}"
         e = Entity(id=eid, type=c.entity_type, type_conf=c.confidence,
-                   geometry=c.geometry, zone=self.zone_map(*c.center),
-                   attrs=dict(c.attrs), sources={c.source_model},
+                   geometry=c.geometry,
+                   zone=c.attrs.get("world_zone") or self.zone_map(*c.center),
+                   attrs={k: v for k, v in c.attrs.items()
+                          if k not in {"world_id", "world_zone"}},
+                   sources={c.source_model},
                    votes={c.entity_type: c.confidence},
                    first_seen=frame, last_seen=frame)
         self.entities[eid] = e
@@ -280,7 +289,7 @@ class Ontology:
 
     def _fuse(self, e: Entity, c: Claim, frame: int) -> None:
         e.geometry = c.geometry
-        e.zone = self.zone_map(*c.center)
+        e.zone = c.attrs.get("world_zone") or self.zone_map(*c.center)
         e.last_seen = frame
         e.sources.add(c.source_model)
         e.attrs.update(c.attrs)
@@ -456,10 +465,17 @@ class OntologyObserver:
             if known is not None:
                 tgt.setdefault(e.id, known.target_zone)
 
-        # keep a WorldState the engine can read from the ontology
+        # authoritative WorldState projected from the ontology (target zones
+        # carried through, conflicted entities marked FALLBACK)
         self._world_state = self.ontology.world_state(
             world.frame, goal=world.goal, targets=tgt, org_id=world.org_id)
-        return self.ontology.observation(world.frame)
+        dets = tuple(sorted(self._world_state.objects.values(),
+                            key=lambda d: d.object_id))
+        return Observation(
+            frame=world.frame, detections=dets,
+            workspace_clear=not self.ontology._ws_conflict,
+            raw_ref=f"ontology://frame/{world.frame:06d}",
+        )
 
     @property
     def wake(self) -> bool:
@@ -471,12 +487,14 @@ class OntologyObserver:
 # ---------------------------------------------------------------------------
 
 
-def stub_swarm(world_ref: Any, *, box: float = 0.08) -> dict[str, Detector]:
-    """Two cheap specialists fed from the world: an object detector and a
-    human/hand detector (reads ``world.attrs['hand_zone']`` if present).
-    Swap each entry for real MXFP2 YOLO inference and nothing else changes.
+def stub_swarm(world_ref: Any, *, box: float = 0.08, arms: bool = True) -> dict[str, Detector]:
+    """Cheap model-free specialists fed from the world: an object detector, a
+    robot-state detector (both arms), and a human/hand detector (emits a hand
+    at ``world.hand_xy`` when set). Swap each entry for real MXFP2 YOLO
+    inference and nothing else changes.
     """
     pos: dict[str, tuple[float, float]] = {}
+    _ARMS = {"left_arm": (0.30, 0.50), "right_arm": (0.70, 0.50)}
 
     def _place(oid: str) -> tuple[float, float]:
         if oid not in pos:
@@ -494,8 +512,17 @@ def stub_swarm(world_ref: Any, *, box: float = 0.08) -> dict[str, Detector]:
         for oid, d in st.objects.items():
             cx, cy = _place(oid)
             out.append(Claim("yolo_objects", d.cls, float(d.conf),
-                             (cx - b, cy - b, cx + b, cy + b), device="cam_table"))
+                             (cx - b, cy - b, cx + b, cy + b), device="cam_table",
+                             attrs={"world_id": oid, "world_zone": d.zone}))
         return out
+
+    def robot(_frame: Any) -> list[Claim]:
+        if not arms:
+            return []
+        b = 0.12 / 2
+        return [Claim("yolo_robot", name, 0.99,
+                      (x - b, y - b, x + b, y + b), device="cam_table")
+                for name, (x, y) in _ARMS.items()]
 
     def humans(_frame: Any) -> list[Claim]:
         hand = getattr(world_ref, "hand_xy", None)   # set to (x, y) to simulate a hand
@@ -506,4 +533,7 @@ def stub_swarm(world_ref: Any, *, box: float = 0.08) -> dict[str, Detector]:
         return [Claim("yolo_human", "hand", 0.86,
                       (cx - b, cy - b, cx + b, cy + b), device="cam_overhead")]
 
-    return {"yolo_objects": objects, "yolo_human": humans}
+    swarm: dict[str, Detector] = {"yolo_objects": objects, "yolo_human": humans}
+    if arms:
+        swarm["yolo_robot"] = robot
+    return swarm
