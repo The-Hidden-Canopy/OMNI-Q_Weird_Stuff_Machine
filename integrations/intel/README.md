@@ -52,7 +52,15 @@ alongside the YOLO perception node.
 
 - [x] SO-101 capability map + measurement probe — [`so101_capability_map.md`](so101_capability_map.md),
   [`scripts/probe_so101.py`](scripts/probe_so101.py), vendored MJCF in [`assets/menagerie_so_arm100/`](assets/menagerie_so_arm100/SOURCE.md) (OQ-003)
-- [x] MuJoCo dual SO-101 scene + controller smoke â€” `src/omni_q/intel_sim.py` builds a pinned two-arm proxy (`nu=12`) with tableware and two cameras; controller steps are real MuJoCo, while object placement is explicitly scripted pending OQ-010
+- [x] MuJoCo dual SO-101 scene + controller smoke — `src/omni_q/intel_sim.py` builds a pinned two-arm proxy (`nu=12`) with tableware and two cameras; controller steps are real MuJoCo, while object placement is explicitly scripted pending OQ-010
+- [x] Bimanual scheduler wired into the Intel sim path (zero-touch decorator, no
+  edits to `intel_sim.py`/`scheduler.py`) — `src/omni_q/demo_intel_sim.py`
+  (`PYTHONPATH=src python -m omni_q.demo_intel_sim` or `omni-q-intel-demo` once
+  installed), `tests/test_intel_sim_scheduled.py`. Confirms real MuJoCo physics
+  step under a scheduled graph; surfaced a real gap for OQ-007/OQ-017: every
+  tableware item shares the literal zone `"staging"`, so the scheduler's
+  workspace-conflict check correctly serializes every pickup
+  (`max_parallelism` stays 1) until objects get distinct staging positions.
 - [ ] LeRobot dataset/demonstration capture from the MuJoCo scene
 - [ ] Train/fine-tune a VLA or imitation-learning policy (SmolVLA, Pi0.5, ACT, or other)
 - [ ] Capability-node wrappers for arm primitives

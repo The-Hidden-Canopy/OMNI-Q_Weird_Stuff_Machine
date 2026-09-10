@@ -30,6 +30,7 @@ intel = [
 [project.scripts]
 omni-q-demo = "omni_q.demo:main"
 omni-q-server = "omni_q.server:main"
+omni-q-intel-demo = "omni_q.demo_intel_sim:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
