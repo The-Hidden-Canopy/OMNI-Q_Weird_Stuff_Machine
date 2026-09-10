@@ -1,8 +1,9 @@
 # Intel integration
 
-Two separate challenges — pick per submission.
+Two separate challenges — pick per submission. **Intel online is the main
+hackathon track** (see the top-level [`README.md`](../../README.md)).
 
-## Intel online (priority)
+## Intel online (main track)
 
 Official title: **"Bimanual VLA Manipulation with Multi-Modal Reasoning"**, challenge
 option **"Setting Up a Dinner Table"**. Full brief:

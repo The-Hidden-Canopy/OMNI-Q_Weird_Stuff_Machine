@@ -10,6 +10,14 @@
 > [`docs/challenge-briefs/intel-online-physical-ai-challenge.md`](challenge-briefs/intel-online-physical-ai-challenge.md).
 > Where this document speculates ("after the screenshots" section) and the brief
 > states something different, the brief is authoritative.
+>
+> **Track priority is settled: Intel online is the main track**, confirmed by
+> the official brief above. Earlier sections below ("Ranking," "Priority
+> stack," "Prioritize: Qualcomm first, Intel online second") reflect the
+> pre-brief speculation of Sept 9, when Qualcomm's own brief wasn't public yet
+> and Qualcomm looked like the stronger fit on paper. They're kept as-is for
+> the historical record, not as current guidance — see `README.md` and
+> `BACKLOG.md` for the live priority.
 
 ## Track situation (as of Sept 9)
 

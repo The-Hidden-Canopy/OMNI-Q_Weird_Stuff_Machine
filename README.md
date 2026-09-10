@@ -28,8 +28,8 @@ Built for a LabLab hackathon across sponsor tracks:
 
 | Track | Omni Q manifestation |
 | --- | --- |
-| **Qualcomm** (primary) | Distributed edge brain — model on Snapdragon X Elite, hardware endpoint on Arduino UNO Q, device-to-device capability routing |
-| **Intel online** | Bimanual planner — two simulated SO-101 arms in MuJoCo, camera reasoning, cooperative manipulation |
+| **Intel online** (main track) | Bimanual planner — two simulated SO-101 arms in MuJoCo, camera reasoning, cooperative manipulation, per the official [Intel Physical AI Online Challenge brief](docs/challenge-briefs/intel-online-physical-ai-challenge.md) |
+| **Qualcomm** | Distributed edge brain — model on Snapdragon X Elite, hardware endpoint on Arduino UNO Q, device-to-device capability routing |
 | **Intel onsite** | Inspect-and-remediate — detect defect, reason, physically correct with one arm |
 | **Speechmatics** (bonus) | Voice layer on top of the chosen track — spoken constraints and commands mutate the graph |
 
