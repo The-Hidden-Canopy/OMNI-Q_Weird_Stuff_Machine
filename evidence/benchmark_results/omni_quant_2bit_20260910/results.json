@@ -1,7 +1,7 @@
 {
  "harness": "integrations/intel/scripts/eval_omni_quant_reasoning.py",
  "question": "What do MXFP2_INT2_UE8M0_K32 and NVINT2_INT2_E4M3_K16 weight-only RNE do to the IDA Omni reference reasoner's prompted generation, vs the fp32 baseline, on equal footing?",
- "created_utc": "2026-09-10T19:26:48Z",
+ "created_utc": "2026-09-10T20:44:36Z",
  "attribution": "Portions derived from *The Hidden Canopy LLC* \u2014 [`IDA-TRAIN-V2`](https://github.com/The-Hidden-Canopy/IDA-TRAIN-V2). Used with permission.",
  "labels": {
   "execution": "format simulation, numpy dequantize \u2014 no hardware 2-bit execution exists",
@@ -112,7 +112,7 @@
    "repeats": [
     {
      "session": "omniq-quant-eval-fp32-0",
-     "wall_seconds": 19.73038569999335,
+     "wall_seconds": 18.804226899999776,
      "token_count": 32,
      "token_ids": [
       6144,
@@ -152,7 +152,7 @@
     },
     {
      "session": "omniq-quant-eval-fp32-1",
-     "wall_seconds": 18.7085328999965,
+     "wall_seconds": 21.882656900001166,
      "token_count": 32,
      "token_ids": [
       6144,
@@ -192,7 +192,7 @@
     },
     {
      "session": "omniq-quant-eval-fp32-2",
-     "wall_seconds": 18.79658780000318,
+     "wall_seconds": 17.980916000000434,
      "token_count": 32,
      "token_ids": [
       6144,
@@ -232,9 +232,9 @@
     }
    ],
    "wall_seconds": {
-    "mean": 19.07850213333101,
-    "min": 18.7085328999965,
-    "max": 19.73038569999335
+    "mean": 19.555933266667125,
+    "min": 17.980916000000434,
+    "max": 21.882656900001166
    },
    "error": null
   },
@@ -247,7 +247,7 @@
    "repeats": [
     {
      "session": "omniq-quant-eval-mxfp2_rne-0",
-     "wall_seconds": 20.007224300003145,
+     "wall_seconds": 19.041164099995513,
      "token_count": 32,
      "token_ids": [
       13223,
@@ -287,7 +287,7 @@
     },
     {
      "session": "omniq-quant-eval-mxfp2_rne-1",
-     "wall_seconds": 17.010586399999738,
+     "wall_seconds": 18.377491599996574,
      "token_count": 32,
      "token_ids": [
       13223,
@@ -327,7 +327,7 @@
     },
     {
      "session": "omniq-quant-eval-mxfp2_rne-2",
-     "wall_seconds": 18.01052840000193,
+     "wall_seconds": 19.20567189999565,
      "token_count": 32,
      "token_ids": [
       13223,
@@ -367,9 +367,9 @@
     }
    ],
    "wall_seconds": {
-    "mean": 18.342779700001604,
-    "min": 17.010586399999738,
-    "max": 20.007224300003145
+    "mean": 18.874775866662578,
+    "min": 18.377491599996574,
+    "max": 19.20567189999565
    },
    "error": null
   },
@@ -382,7 +382,7 @@
    "repeats": [
     {
      "session": "omniq-quant-eval-nvint2_rne-0",
-     "wall_seconds": 18.8531862000018,
+     "wall_seconds": 17.98844829999871,
      "token_count": 32,
      "token_ids": [
       6144,
@@ -422,7 +422,7 @@
     },
     {
      "session": "omniq-quant-eval-nvint2_rne-1",
-     "wall_seconds": 18.753900600000634,
+     "wall_seconds": 19.120676600003208,
      "token_count": 32,
      "token_ids": [
       6144,
@@ -462,7 +462,7 @@
     },
     {
      "session": "omniq-quant-eval-nvint2_rne-2",
-     "wall_seconds": 19.135053300000436,
+     "wall_seconds": 19.27360050000425,
      "token_count": 32,
      "token_ids": [
       6144,
@@ -502,9 +502,9 @@
     }
    ],
    "wall_seconds": {
-    "mean": 18.914046700000956,
-    "min": 18.753900600000634,
-    "max": 19.135053300000436
+    "mean": 18.794241800002055,
+    "min": 17.98844829999871,
+    "max": 19.27360050000425
    },
    "error": null
   }

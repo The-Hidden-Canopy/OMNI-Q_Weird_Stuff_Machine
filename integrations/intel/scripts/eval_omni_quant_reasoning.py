@@ -95,7 +95,8 @@ def _resolve_paths() -> dict:
 
 
 def _ensure_syspath(paths: dict) -> None:
-    for entry in (str(OMNIQ_ROOT), str(paths["ask_root"]), str(paths["ida_root"] / "src")):
+    for entry in (str(OMNIQ_ROOT), str(paths["ask_root"]), str(paths["ida_root"] / "src"),
+                  str(OMNIQ_ROOT / "integrations" / "qualcomm" / "lowbit")):
         if entry not in sys.path:
             sys.path.insert(0, entry)
 
@@ -128,7 +129,10 @@ def _quantize_linear_weights(model, fmt: str) -> dict:
     lm_head pass also dequantizes the shared embedding tensor (recorded)."""
     import numpy as np
     import torch
-    from ida_train.native.mxfp2_codec import decode_tensor, encode_tensor
+    # Vendored numerical twin (integrations/qualcomm/lowbit/vendor/) — the
+    # dependency lives in this repo, IDA-TRAIN-V2 is not imported (owner
+    # requirement). See vendor/SOURCE.md.
+    from vendor.mxfp2_codec import decode_tensor, encode_tensor
 
     stats = {"linear_modules": 0, "elements": 0, "tied_lm_head_embedding": False}
     lm_head_weight = getattr(getattr(model, "lm_head", None), "weight", None)
@@ -158,11 +162,11 @@ def _quantize_linear_weights(model, fmt: str) -> dict:
 
 
 def _format_parameters() -> dict:
-    """Format parameters copied verbatim from ida_train.native.mxfp2_codec."""
-    from ida_train.native import mxfp2_codec as c
+    """Format parameters copied verbatim from the vendored codec."""
+    from vendor import mxfp2_codec as c
 
     return {
-        "source_module": "ida_train.native.mxfp2_codec",
+        "source_module": "integrations.qualcomm.lowbit.vendor.mxfp2_codec (vendored twin of ida_train.native.mxfp2_codec)",
         "mxfp2": {
             "weights_dtype": c.MXFP2_WEIGHTS_DTYPE,
             "block_size": c.BLOCK_SIZE_MXFP2,
