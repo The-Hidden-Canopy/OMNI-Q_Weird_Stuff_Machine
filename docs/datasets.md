@@ -18,33 +18,47 @@ the train→export→deploy pipeline is proven. Transfer-learn from it:
 
 1. Load those `.pt` weights, swap the detection head to **7 classes** (the vocab
    above), keep the backbone.
-2. **Data (this is the whole job) — breadth over repetition:** render a *large,
-   varied* synthetic set from the OQ-006/OQ-007 MuJoCo scene, every frame
-   distinct. Ground-truth object poses → exact YOLO-txt boxes, free.
-   - **Keep it similar to deploy:** the challenge's third-person table camera
-     intrinsics/extrinsics, the real object meshes, plausible place-setting
-     layouts. Don't drift the scene.
-   - **Randomise only the nuisances:** lighting, table/wall texture, small
-     camera jitter, object count/pose/occlusion, distractors, initial
-     placement (the brief's perturbation axes).
-   - Target ~15–30k frames, 90/10 split. More unique frames, not more passes.
-3. Fine-tune **~2–5 epochs** (one pass warm-up with the backbone frozen, then
-   1–2 with it unfrozen), `imgsz=640`, `yolov8n`. Watch val mAP50 per epoch and
-   stop when it plateaus — the model should see many images a few times, never
-   the same few images many times. Minutes on one GPU.
+2. **Data = a large REAL-image subset pulled from public detection datasets**
+   (not synthetic). Filter each to the tableware classes, remap to the 7-class
+   vocab, merge, export YOLO format. Fastest via [FiftyOne](https://docs.voxel51.com).
+
+   | Dataset | Real images / boxes | Tableware classes it carries | Get it |
+   |---------|---------------------|------------------------------|--------|
+   | **Open Images V7** | ~1.9M imgs w/ boxes | `Tableware, Plate, Coffee cup, Mug, Wine glass, Fork, Spoon, Kitchen knife, Napkin, Bowl,` **`Drawer`** (only real source for drawer), `Kitchen & dining room table` | `foz.load_zoo_dataset("open-images-v7", classes=[...], label_types=["detections"])` |
+   | **Objects365 v2** | 2M imgs, 30M boxes | `Plate (15), Cup, Fork, Knife, Spoon (93), Bowl, Wine Glass, Napkin (102), Dinning Table` | [OpenDataLab](https://opendatalab.com/OpenDataLab/Objects365/download) or Ultralytics `Objects365.yaml` auto-download |
+   | **COCO 2017** | 123k train, dense | `cup, fork, knife, spoon, bowl, wine glass, dining table` | `foz.load_zoo_dataset("coco-2017", classes=[...])` |
+   | **LVIS v1** | COCO imgs, 1203 cls | `plate, saucer, platter, mug, coffee_cup, wineglass, napkin, place_mat, tablecloth, fork, spoon, butter_knife, soupspoon` | FiftyOne / lvis-api — best real density for **plate + napkin** |
+   | **Roboflow Universe** | small, YOLO-ready | cutlery / plate / kitchen-utensil sets — merge for extra | direct download, already YOLOv8 txt |
+
+   **Class map:** plate ← {OI:Plate, O365:Plate, LVIS:plate/saucer/platter};
+   cup ← {COCO/O365 cup+wine glass, OI:Coffee cup/Mug/Wine glass, LVIS:mug/coffee_cup/cup/wineglass};
+   fork/spoon/knife ← same-named in all four (drop OI weapon "Knife", keep "Kitchen knife");
+   napkin ← {O365:Napkin, OI:Napkin, LVIS:napkin/place_mat};
+   drawer ← {OI:Drawer} + a Roboflow furniture/drawer set to thicken it.
+
+   Realistic haul: **~150–300k real labelled images** across the 7 classes
+   (drawer is the thin one — a few k, supplement from Roboflow). No rendering.
+
+3. Fine-tune **~2–5 epochs** from the thermal weights (1 frozen warm-up, 1–2
+   unfrozen), `imgsz=640`, `yolov8n`, early-stop on val mAP50 — breadth comes
+   from the real data, so keep passes few.
 4. Export `best.pt → ONNX`, then ONNX → **OpenVINO IR** (Intel track) and
    ONNX → **QAIRT/QNN** (Qualcomm track). Detector emits `class, bbox,
    center, conf` + a stable per-object id (track by IoU + class).
 
-That's the entire OQ-008 path inside the time budget. No external download,
-no licence check, no scraping.
+That's the OQ-008 path: real public boxes, one FiftyOne merge, a short
+fine-tune from our own weights.
 
-**Only if the sim renderer isn't ready:** grab the 3 Roboflow Universe sets
-([Cutlery Detection](https://universe.roboflow.com/home-detection/cutlery-detection-1ofa0),
+**Fastest possible start** (if the big pulls are slow): the 3 Roboflow Universe
+sets — [Cutlery Detection](https://universe.roboflow.com/home-detection/cutlery-detection-1ofa0),
 [Kitchen Utensils](https://universe.roboflow.com/table-utensils-detector/kitchen-utensils-recognition),
-[Dinner Plate](https://universe.roboflow.com/platedetection-project/dinner-plate-detection)) —
-already YOLOv8 YAML/txt, ~10 min to merge — and fine-tune on those instead.
-Weaker (real photos ≠ sim), but it moves.
+[Dinner Plate](https://universe.roboflow.com/platedetection-project/dinner-plate-detection) —
+already YOLOv8 txt, ~10 min to merge. Train on those first, then swap in the
+Open Images + Objects365 + LVIS haul when it lands.
+
+**Sim frames are a top-up, not the base:** once the real-trained detector runs,
+add a few thousand rendered MuJoCo frames to close the last domain gap to the
+challenge camera. Mix ratio ~80% real / 20% sim.
 
 ---
 
@@ -67,9 +81,13 @@ The demo runs on what already works: `RulePlanner` + `ScheduledPlanner` +
 
 ## Appendix — fuller catalog (post-deadline / if the demo is locked)
 
-Perception real-image seasoning: **LVIS v1** (best full-vocab match, CC-BY-4.0),
-**COCO 2017** (cup/fork/knife/spoon/bowl), **Open Images V7** (only real set
-with `Drawer`).
+More real detection data if the 4-source haul isn't enough (all real images):
+**EPIC-KITCHENS-100 + VISOR** (egocentric kitchen, plate/cup/cutlery/napkin
+masks, cluttered, CC-BY-NC → eval only), **GraspNet-1Billion** (~97k real RGBD
+tabletop frames, 88 objects incl. cutlery/cups/bowls, box+mask, CC-BY-NC-SA →
+eval only), **ADE20K** (segmentation → boxes: plate/glass/fork/knife/spoon/
+napkin/drawer), **V3Det** (13k classes, fine tableware), **SUN RGB-D** (indoor
+scenes, furniture 3D boxes incl. drawers).
 
 SO-101 policy pretraining: [`dongyoonkim/so101-pi05-base-dataset`](https://hf.co/datasets/dongyoonkim/so101-pi05-base-dataset)
 (150 unified SO-101/SO-100 teleop sets), [`lerobot/svla_so101_pickplace`](https://hf.co/datasets/lerobot/svla_so101_pickplace),
@@ -90,6 +108,9 @@ language — closest engine match), **CALVIN**, **RLBench `set_the_table`**
 (CoppeliaSim — reference for success predicates + phrasing), **LoHoRavens**,
 **ALFRED**.
 
-Licensing: COCO/LVIS/Open Images anns CC-BY-4.0; LeRobot Hub sets Apache-2.0
-unless 🔒 gated (`RoboCOIN/*`); Roboflow per-dataset (watch for CC-BY-NC → eval
-only); sim-synthetic + our teleop = ours, safest for the submitted model.
+Licensing: COCO / LVIS / Open Images V7 annotations **CC-BY-4.0** (attribution,
+fine to train the submitted model); Objects365 free for academic + commercial
+(confirm on objects365.org before shipping); EPIC-KITCHENS / GraspNet
+**CC-BY-NC** → eval / ablation only, never the submitted model; LeRobot Hub sets
+Apache-2.0 unless 🔒 gated (`RoboCOIN/*`); Roboflow per-dataset (watch for
+CC-BY-NC); our own MuJoCo top-up frames = ours.

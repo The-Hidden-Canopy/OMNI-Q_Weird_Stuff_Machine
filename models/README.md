@@ -37,11 +37,12 @@ planner — scoped to the one use case (bimanual dual-SO-101 table setting):
 [`../docs/datasets.md`](../docs/datasets.md).
 
 TL;DR (2 h to deadline): the detector is a **head-swap + fine-tune of our own
-`KissTheHabit/yolov8n-hituav-thermal-finetune`** on labelled frames rendered
-straight from the OQ-006/007 MuJoCo scene, exported to OpenVINO IR + QAIRT.
-Omni trains nothing now — it runs on `RulePlanner` + `ScheduledPlanner` +
-`RuntimeMutator` + the real MuJoCo path. Everything else is a post-deadline
-appendix.
+`KissTheHabit/yolov8n-hituav-thermal-finetune`** on a **large real-image subset**
+(Open Images V7 + Objects365 + COCO + LVIS, filtered to the 7 tableware classes
+via FiftyOne), exported to OpenVINO IR + QAIRT; a few thousand MuJoCo frames are
+a 20% top-up, not the base. Omni trains nothing now — `RulePlanner` +
+`ScheduledPlanner` + `RuntimeMutator` + the real MuJoCo path. Rest is a
+post-deadline appendix.
 
 ## Related owned assets
 
