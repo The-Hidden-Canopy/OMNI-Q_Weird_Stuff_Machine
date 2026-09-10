@@ -21,6 +21,28 @@ and each step additionally depending on the whole previous wave, so the current
 dep-gated `OmniQ` loop executes the waves in order with no engine change. A real
 dual-arm executor reads `Schedule.waves` directly.
 
+### Live: `ScheduledPlanner`
+
+Wrap any `Plan` provider so it emits scheduled graphs automatically:
+
+```python
+from omni_q import build_mock_engine
+from omni_q.fakes import RulePlanner
+from omni_q.scheduler import ScheduledPlanner
+
+engine = build_mock_engine()
+engine.planner = ScheduledPlanner(RulePlanner())   # plug-compatible with OmniQ
+engine.run("inspect and correct the workspace")
+engine.planner.last_schedule.waves                 # for the UI (OQ-020)
+```
+
+`ScheduledPlanner` forwards `plan` / `replan` / `last_decision` to the inner
+planner and applies `schedule(...).annotate(...)` to the result. It keeps the
+last `Schedule` on `.last_schedule`; if scheduling raises it degrades to the
+inner graph and records `.last_error` — a scheduler bug can't break a run. This
+is the zero-touch way to make scheduling live without editing `RulePlanner` or
+the engine.
+
 ## Model
 
 | Concept | Rule |

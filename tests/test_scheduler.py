@@ -6,7 +6,7 @@ import pytest
 
 from omni_q.contracts import Constraint, Detection, PlanGraph, Step, WorldState
 from omni_q.fakes import RulePlanner
-from omni_q.scheduler import DEFAULT_LAYOUT, Region, schedule
+from omni_q.scheduler import DEFAULT_LAYOUT, Region, ScheduledPlanner, schedule
 from omni_q.world import MockWorld
 
 
@@ -319,6 +319,70 @@ def test_flourish_slots_into_an_existing_slack_wave():
     assert sch.metrics["flourish_waves_added"] == 0
     assert sch.metrics["flourishes_scheduled"] == 1
     assert _wave_of(sch, "present_x") == _wave_of(sch, "pick_y")
+
+
+# ---------------------------------------------------------------------------
+# ScheduledPlanner — live integration
+# ---------------------------------------------------------------------------
+
+
+def test_scheduled_planner_drives_the_engine_with_arm_assignments():
+    from omni_q import build_mock_engine
+
+    engine = build_mock_engine()
+    engine.planner = ScheduledPlanner(RulePlanner())
+    receipt = engine.run("inspect and correct the workspace")
+
+    assert receipt.metrics["resolved"] is True
+    arms = {a["arm"] for a in engine._actions if a["op"] in {"PICK", "MOVE"}}
+    assert arms and arms <= {"left", "right"}
+    assert engine.planner.last_schedule is not None
+    assert engine.planner.last_schedule.waves
+
+
+def test_scheduled_planner_reschedules_on_a_mid_run_constraint():
+    from omni_q import build_mock_engine
+    from omni_q.mutation import RuntimeMutator
+
+    engine = build_mock_engine()
+    engine.planner = ScheduledPlanner(RulePlanner())
+    mut = RuntimeMutator(engine)
+    original = engine.manipulator.execute
+    fired = {"n": 0}
+
+    def hook(step, world):
+        if fired["n"] == 0 and step.op == "PICK":
+            fired["n"] = 1
+            mut.apply("don't touch the plate")
+        return original(step, world)
+
+    engine.manipulator.execute = hook  # type: ignore[method-assign]
+    engine.run("inspect and correct the workspace")
+
+    assert "graph.recompiled" in [e.kind for e in engine.bus.log]
+    assert engine.planner.last_schedule is not None
+    moved = [a["result"].get("moved") for a in engine._actions if a["op"] == "MOVE"]
+    assert "plate_1" not in moved
+
+
+def test_scheduled_planner_degrades_when_scheduling_raises(monkeypatch):
+    import omni_q.scheduler as sched_mod
+
+    world = MockWorld.sample().state()
+    inner = RulePlanner()
+    sp = ScheduledPlanner(inner)
+
+    def boom(*a, **k):
+        raise RuntimeError("scheduler exploded")
+
+    monkeypatch.setattr(sched_mod, "schedule", boom)
+    out = sp.plan("inspect and correct the workspace", world)
+
+    assert sp.last_schedule is None
+    assert "scheduler exploded" in sp.last_error
+    # falls back to the inner planner's graph, unmodified
+    assert [s.id for s in out.steps] == [s.id for s in inner.plan(
+        "inspect and correct the workspace", world).steps]
 
 
 # ---------------------------------------------------------------------------

@@ -500,6 +500,49 @@ def _place_flourishes(
 
 
 # ---------------------------------------------------------------------------
+# live integration — wrap any Plan provider
+# ---------------------------------------------------------------------------
+
+
+class ScheduledPlanner:
+    """Decorator that makes any ``Plan`` provider emit *scheduled* graphs.
+
+    ``ScheduledPlanner(RulePlanner())`` plugs straight into ``OmniQ`` — it runs
+    the inner planner, then ``schedule(...).annotate(...)`` so the graph the
+    engine executes already carries arm assignments and wave ordering. The last
+    ``Schedule`` is kept on ``.last_schedule`` for the UI (OQ-020). If
+    scheduling raises, the inner graph is used unchanged and the error is kept
+    on ``.last_error`` — a scheduler bug can never break a run.
+    """
+
+    def __init__(self, inner: Any, **schedule_kwargs: Any) -> None:
+        self.inner = inner
+        self._kwargs = schedule_kwargs
+        self.last_schedule: Schedule | None = None
+        self.last_error: str | None = None
+
+    @property
+    def last_decision(self) -> Any:  # the engine reads this off the planner
+        return getattr(self.inner, "last_decision", None)
+
+    def _apply(self, graph: PlanGraph, world: WorldState) -> PlanGraph:
+        try:
+            self.last_schedule = schedule(graph, world, **self._kwargs)
+            self.last_error = None
+            return self.last_schedule.annotate(graph)
+        except Exception as exc:  # noqa: BLE001 - degrade, never crash the run
+            self.last_schedule = None
+            self.last_error = f"{type(exc).__name__}: {exc}"
+            return graph
+
+    def plan(self, goal: str, world: WorldState) -> PlanGraph:
+        return self._apply(self.inner.plan(goal, world), world)
+
+    def replan(self, current: PlanGraph, world: WorldState, reason: str) -> PlanGraph:
+        return self._apply(self.inner.replan(current, world, reason), world)
+
+
+# ---------------------------------------------------------------------------
 # smoke
 # ---------------------------------------------------------------------------
 
