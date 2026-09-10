@@ -87,3 +87,18 @@ camera → YOLO on Qualcomm → scene state → GenieX local model → OMNI Q de
 - Node interface schema and registration format.
 - Verification signals per capability type.
 - Export path specifics for the thermal YOLO on X Elite (ONNX / QNN / QAIRT).
+
+## Intel online stack (confirmed)
+
+Per Intel's published brief, the dual-arm MuJoCo track is pinned to a specific
+toolchain rather than left open:
+
+```
+Simulation Engine   MuJoCo
+Data Collection      LeRobot + OMPL (motion planning)
+Model Training        local or cloud, unconstrained
+Model Inference        Intel OpenVINO + OpenVINO Physical AI (Core Ultra Series 2/3)
+```
+
+See [`integrations/intel/README.md`](integrations/intel/README.md) for how this
+maps onto the `LEFT_ARM`/`RIGHT_ARM`/`GRASP`/`MOVE`/`VERIFY` capability nodes.
