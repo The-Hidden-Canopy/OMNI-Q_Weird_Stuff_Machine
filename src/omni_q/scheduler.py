@@ -125,6 +125,7 @@ class ScheduledStep:
     arm: str | None          # None for observe/verify barrier steps
     region_id: str | None
     flourish: bool = False
+    op: str = ""             # set for scheduler-invented idle-slack flourishes
 
 
 @dataclass
@@ -155,11 +156,18 @@ class Schedule:
     style_mode: str = "unset"              # last STYLE constraint, normalised
 
     # -- integration seam ------------------------------------------------
-    def annotate(self, graph: PlanGraph) -> PlanGraph:
+    def annotate(self, graph: PlanGraph, *, execute_flourishes: bool = False) -> PlanGraph:
         """Return a copy of ``graph`` with each manipulate ``Step.arm`` filled
         and every step also depending on the whole previous wave, so the
         current dep-gated engine executes the waves in order. Dropped
-        flourishes are omitted."""
+        flourishes are omitted.
+
+        ``execute_flourishes=True`` (OQ-HAND-011) additionally emits the
+        scheduler-invented idle-slack flourishes as real non-blocking leaf
+        ``Step``s — arm set, deps on the prior wave so they run *alongside*
+        that wave's work, and nothing depends on them, so the table-setting
+        dependency graph and wave count are untouched. Default off keeps the
+        seam display-only (`to_dict()` for the UI)."""
         wave_of = {ss.step_id: w.index for w in self.waves for ss in w.steps}
         # Flourishes never *block* another step: they are excluded from the
         # previous-wave dependency injection (OQ-015 — goal path unchanged).
@@ -183,6 +191,19 @@ class Schedule:
                 arm=self.assignment.get(s.id, s.arm) if s.contract == "manipulate" else s.arm,
                 deps=tuple(sorted(deps)),
             ))
+
+        if execute_flourishes:
+            graph_ids = {s.id for s in graph.steps}
+            for w in self.waves:
+                prev = tuple(sorted(wave_members.get(w.index - 1, ()))) if w.index > 0 else ()
+                for ss in w.steps:
+                    if not ss.flourish or ss.step_id in graph_ids or not ss.op:
+                        continue
+                    out.steps.append(Step(
+                        id=ss.step_id, contract="manipulate", op=ss.op,
+                        arm=ss.arm, deps=prev,
+                        rationale=f"idle-slack flourish (style={self.style_mode})",
+                    ))
         return out
 
     def to_dict(self) -> dict[str, Any]:
@@ -515,7 +536,7 @@ def _fill_idle_slack(waves: list[Wave], arms: tuple[str, str], mode: str) -> int
             picks = {a: ops[(w.index + i) % len(ops)] for i, a in enumerate(idle)}
         for a, op in picks.items():
             w.steps.append(ScheduledStep(f"idle_{op.lower()}_w{w.index}_{a}", a, None,
-                                         flourish=True))
+                                         flourish=True, op=op))
             injected += 1
     return injected
 

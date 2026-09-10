@@ -54,16 +54,17 @@ the engine.
 | **Waves** | Greedy layering: each wave takes ready steps (deps met, arm free, region clear), ≤1 per arm. `observe` / `verify` steps quiesce both arms → solo wave. |
 | **Barriers** (OQ-013) | Two steps conflict if their regions are equal or within `overlap` **and** they would share a wave; the later one is pushed to a new wave and a `Barrier(kind="workspace")` is recorded. Also `kind ∈ {gripper, verify, reach, flourish}`. Invariant: no wave holds two manipulate steps in conflicting regions. |
 | **Flourishes** (OQ-015) | Steps with `op ∈ {PRESENT, FLOURISH, SHOWCASE, SPIN_SHOW}` are showmanship. They're scheduled *after* the mandatory plan: slotted into an existing slack wave if one fits, else one single flourish wave is inserted before `verify` (`allow_flourish_wave=True`), else dropped with a `Barrier(kind="flourish")`. A flourish never blocks another step (`annotate()` excludes it from previous-wave deps) and is never a dependency of `verify` — the goal path is unchanged. Metrics: `flourishes_scheduled`, `flourishes_dropped`, `flourish_waves_added`. Without a `style=show_off` constraint the planner emits none. |
+| **Dance-in-slack** (OQ-HAND-011) | With a dance style mode (`dance` / `synchronized` / `mirrored` / `take_turns` — from spoken vocab via `nlu`), `_fill_idle_slack` appends non-blocking `IDLE_FLOURISH` steps to *already-idle* arms in *already-existing* non-final waves — never adding a wave, never reordering real work. `synchronized` uses one primitive (`SWAY`) on every idle arm; `mirrored` uses `MIRROR`; the rest cycle `actions.IDLE_FLOURISH_OPS`. `minimum_time` / `freeze` strip every flourish. Metric: `idle_flourishes`. These are scheduler-invented (not in the plan graph): `annotate()` leaves them out by default, or emits them as runnable leaf `Step`s with `execute_flourishes=True` (below). Ops execute as free-space gestures — no object, no grasp — no-op in `FakeManipulator`, real joint motion in `intel_sim`'s coarse-pose path (`_FLOURISH_GESTURES`). |
 
 ## `Schedule`
 
-- `waves: list[Wave]` — `Wave.index`, `Wave.steps: list[ScheduledStep]` (`step_id`, `arm`, `region_id`, `flourish`).
+- `waves: list[Wave]` — `Wave.index`, `Wave.steps: list[ScheduledStep]` (`step_id`, `arm`, `region_id`, `flourish`, `op` — `op` set only on idle-slack flourishes).
 - `barriers: list[Barrier]` — `between`, `kind`, `reason`.
 - `arm_timeline: dict[str, list[str]]` — ordered step ids per arm (feeds OQ-020 viz).
 - `dropped: list[str]` — flourishes omitted for lack of slack.
 - `metrics` — `waves`, `max_parallelism`, `handoffs`, `serialized_conflicts`, `flourishes_scheduled`, `flourishes_dropped`, `flourish_waves_added`.
 - `assignment` / `regions` — per-step arm and region id.
-- `annotate(graph)` / `to_dict()`.
+- `annotate(graph, *, execute_flourishes=False)` / `to_dict()`. `execute_flourishes=True` also emits the idle-slack flourishes as non-blocking leaf `Step`s (arm set, deps on the prior wave, nothing depends on them) so the engine runs the dance alongside the work.
 
 ## Try it
 
@@ -75,6 +76,7 @@ PYTHONPATH=src python -m pytest -q tests/test_scheduler.py
 ## Not yet
 
 - Wiring `schedule()` into `RulePlanner` (kept out while the core is churning).
-- Real object poses instead of zone→region (needs OQ-006/OQ-008 data).
+- Real object poses instead of zone→region — `Detection.pose` now exists (OQ-009,
+  filled by `intel_sim`); the region model still keys on zone strings by design.
 - Auto-inserting `HANDOFF` when a chain spans both arms (today it flags a
   `reach` barrier).

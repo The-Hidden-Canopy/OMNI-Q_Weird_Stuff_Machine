@@ -396,6 +396,32 @@ def test_last_style_constraint_wins_and_minimum_time_strips_flourishes():
     assert "present_x" in sch.dropped
 
 
+def test_execute_flourishes_emits_runnable_non_blocking_leaf_steps():
+    # OQ-HAND-011: annotate(..., execute_flourishes=True) turns the
+    # scheduler-invented idle-slack flourishes into real Steps the engine runs.
+    from omni_q.fakes import FakeManipulator
+
+    g = _sequential_graph()
+    sch = schedule(g, _seq_world("dance"))
+    assert sch.metrics["idle_flourishes"] > 0
+
+    display = sch.annotate(g)                       # default: display-only
+    execute = sch.annotate(g, execute_flourishes=True)
+    assert len(execute.steps) == len(display.steps) + sch.metrics["idle_flourishes"]
+
+    extra = [s for s in execute.steps if s.id.startswith("idle_")]
+    assert extra and all(s.contract == "manipulate" and s.op and s.arm for s in extra)
+    # every emitted op is one the manipulator can actually run
+    fm = FakeManipulator(None)
+    assert all(fm.supports(s.op) for s in extra)
+    # nothing depends on a flourish -> the goal path / wave count is untouched
+    all_deps = {d for s in execute.steps for d in s.deps}
+    assert not any(s.id in all_deps for s in extra)
+    # the graph is still acyclic
+    ordered = execute.topo_order()
+    assert {getattr(s, "id", s) for s in ordered} == {s.id for s in execute.steps}
+
+
 def test_bimanual_op_takes_both_arms_in_its_wave():
     g = PlanGraph(goal="co-rotate demo")
     g.steps = [

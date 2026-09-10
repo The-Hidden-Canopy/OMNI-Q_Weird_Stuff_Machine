@@ -43,6 +43,33 @@ class DataStatus(str, Enum):
 
 
 @dataclass(frozen=True)
+class Pose:
+    """World-frame pose of an object, when a source can supply real geometry
+    (a MuJoCo sim, a depth camera). ``zone`` on :class:`Detection` stays the
+    coarse symbolic slot; this is the metric truth underneath it. Absent
+    (``pose is None``) whenever only a symbolic detector is running."""
+
+    x: float
+    y: float
+    z: float
+    yaw: float = 0.0            # rotation about +z, radians
+
+    @property
+    def xy(self) -> tuple[float, float]:
+        return (self.x, self.y)
+
+    def distance_to(self, other: "Pose") -> float:
+        return (
+            (self.x - other.x) ** 2
+            + (self.y - other.y) ** 2
+            + (self.z - other.z) ** 2
+        ) ** 0.5
+
+    def planar_distance_to(self, other: "Pose") -> float:
+        return ((self.x - other.x) ** 2 + (self.y - other.y) ** 2) ** 0.5
+
+
+@dataclass(frozen=True)
 class Detection:
     object_id: str
     cls: str
@@ -51,6 +78,7 @@ class Detection:
     conf: float = 0.95
     status: DataStatus = DataStatus.LIVE
     verified_frame: int = 0
+    pose: Pose | None = None        # metric pose when a sim / depth source provides it
 
     @property
     def misplaced(self) -> bool:
@@ -59,6 +87,11 @@ class Detection:
     @property
     def authoritative(self) -> bool:
         return self.status is DataStatus.LIVE
+
+    @property
+    def located(self) -> bool:
+        """True when a metric pose is available (not just a symbolic zone)."""
+        return self.pose is not None
 
 
 @dataclass(frozen=True)

@@ -93,11 +93,13 @@ from .contracts import (
     MissionEnvelope,
     PlanDecision,
     PlanGraph,
+    Pose,
     Step,
     TransitionRejected,
     TransitionRequest,
     TransitionResult,
     VerifyResult,
+    WorldState,
     content_hash_of,
 )
 from .devices import DeviceRouter
@@ -120,6 +122,15 @@ GRIPPER_CLOSED = 0.0
 DRAWER_OPEN = 0.12     # drawer_slide qpos, m -- matches its MJCF range max
 DRAWER_CLOSED = 0.0
 TRANSIT_HEIGHT = 0.28  # m -- above the table/drawer/tableware envelope, within reach (see _move_to)
+
+# OQ-HAND-011 idle-slack flourishes -> a single joint swung off HOME and back
+# (radians). MIRROR / FREEZE are handled separately in apply_transition. Joint
+# order per arm: 0 base-yaw, 1 shoulder, 2 elbow, 3 wrist-pitch, 4 wrist-roll.
+_FLOURISH_GESTURES: dict[str, tuple[int, float]] = {
+    "SWAY": (0, 0.35), "WAVE": (4, 0.9), "SPIN_WRISTS": (4, 1.5),
+    "BOUNCE": (2, -0.30), "BOW": (1, 0.40), "CROSS": (0, 0.5),
+    "HIGH_FIVE": (3, -0.6), "CALL_AND_RESPONSE": (0, -0.4),
+}
 
 
 @dataclass(frozen=True)
@@ -161,9 +172,25 @@ OBJECT_HALF_HEIGHT: dict[str, float] = {
 # flat fixtures are grasped at their rim/edge; targeting their centre puts the
 # pad inside the collision volume and drags them during the lift.
 OBJECT_GRASP_OFFSET: dict[str, float] = {
-    "plate_1": 0.078, "cup_1": 0.0, "fork_1": 0.006, "spoon_1": 0.0, "napkin_1": 0.050,
+    "plate_1": 0.078, "cup_1": 0.0, "fork_1": 0.006, "spoon_1": 0.0,
+    # The cloth's broad, thin footprint is more stable under a centred pinch;
+    # the earlier rim offset let the moving jaw skim past it during lift.
+    "napkin_1": 0.0,
+}
+# Small vertical calibration for thin proxies whose pad centre is not exactly
+# coincident with the object's geometric centre.  This remains a target
+# offset; the object freejoint is never written.
+OBJECT_GRASP_VERTICAL_OFFSET: dict[str, float] = {
+    "spoon_1": 0.0,
 }
 GRASP_CLEARANCE = 0.015  # m -- gap kept above an object's top surface before closing on it
+# Legacy-path safety bounds.  These are controller stop bounds, not hardware
+# force limits: the contact-handoff path owns the promotion-grade force gate.
+LEGACY_MAX_CARRY_OFFSET_M = 0.100
+LEGACY_MIN_JOINT_MARGIN_RAD = 0.020
+LEGACY_MAX_CONTACT_FORCE_N = 250.0
+LEGACY_MIN_SETTLE_SPEED_MPS = 0.080
+LEGACY_MAX_SETTLE_DRIFT_M = 0.012
 
 # Real MuJoCo (x, y, z) table-setting target per zone name, keyed by the same
 # strings IntelTableWorld/IntelTablePlanner use as Detection target_zones.
@@ -472,6 +499,25 @@ class IntelTableWorld(MockWorld):
         mujoco.mj_step(self.model, self.data, nstep=400)
         self._controller_steps += 400
 
+    def state(self) -> WorldState:
+        """The base symbolic ``WorldState`` with a real metric ``pose`` stamped
+        onto every tracked tableware Detection, read live from the MuJoCo
+        free-joint qpos (OQ-009). The zone strings stay the authority for
+        planning; the pose is the metric truth underneath, for the evaluator,
+        the ontology, and receipts. Untracked fixtures (the drawer) keep
+        ``pose=None``.
+        """
+        st = super().state()
+        located = {}
+        for oid, det in st.objects.items():
+            if oid in self._object_joints:
+                adr, _ = self._object_joints[oid]
+                x, y, z = (float(v) for v in self.data.qpos[adr:adr + 3])
+                located[oid] = replace(det, pose=Pose(x, y, z, self._object_yaw(oid)))
+            else:
+                located[oid] = det
+        return replace(st, objects=located)
+
     def apply_transition(self, request: TransitionRequest) -> TransitionResult:
         op = request.op
         obj = request.args.get("object")
@@ -540,6 +586,31 @@ class IntelTableWorld(MockWorld):
                 target[1], target[3], target[5] = -0.8, 0.3, GRIPPER_CLOSED
             elif op == "HANDOFF":
                 target[4] = 1.20 if arm_offset else -1.20
+            elif op in _FLOURISH_GESTURES or op == "FREEZE":
+                # OQ-HAND-011: non-contact idle-slack flourishes -- a free-space
+                # arm gesture, no object, no grasp. Drive an offset-from-HOME
+                # pose, then return to HOME, so the arm ends where it started.
+                arm_command = False
+                if op == "MIRROR":
+                    other = 0 if arm_offset else 6
+                    mirrored = [float(v) for v in self.data.qpos[other:other + 6]]
+                    mirrored[0] = -mirrored[0]          # base yaw
+                    mirrored[4] = -mirrored[4]          # wrist roll
+                    swings = [mirrored, list(HOME)]
+                elif op == "FREEZE":
+                    swings = [list(HOME)]               # hold the home pose
+                else:
+                    joint, delta = _FLOURISH_GESTURES[op]
+                    swings = []
+                    for off in (delta, -delta, 0.0):
+                        pose = list(HOME)
+                        pose[joint] = HOME[joint] + off
+                        swings.append(pose)
+                for pose in swings:
+                    for i, v in enumerate(pose):
+                        self.data.ctrl[arm_offset + i] = v
+                    self._mujoco.mj_step(self.model, self.data, nstep=18)
+                    self._controller_steps += 18
             if arm_command:
                 for index, value in enumerate(target, start=arm_offset):
                     self.data.ctrl[index] = value
@@ -778,6 +849,118 @@ class IntelTableWorld(MockWorld):
         self._mujoco.mj_step(self.model, self.data, nstep=settle_steps)
         self._controller_steps += settle_steps
 
+    def _workspace_safety(self, arm_offset: int, obj: str | None = None, target_xy=None) -> dict[str, Any]:
+        """Return bounded safety observables for a legacy physical primitive.
+
+        The legacy arm meshes are intentionally non-colliding because this
+        position controller has no collision-aware whole-arm planner.  The
+        guard therefore fails closed on the measurable hazards it can prove:
+        joint-limit approach, excessive object-to-pad separation, excessive
+        contact force, and an arm entering a target occupied by the other pad.
+        """
+        import numpy as np
+
+        lo = self.model.jnt_range[arm_offset:arm_offset + 5, 0]
+        hi = self.model.jnt_range[arm_offset:arm_offset + 5, 1]
+        q = self.data.qpos[arm_offset:arm_offset + 5]
+        joint_margin = float(np.min(np.minimum(q - lo, hi - q)))
+        if joint_margin < LEGACY_MIN_JOINT_MARGIN_RAD:
+            return {
+                "safe": False,
+                "reason": "joint-limit proximity",
+                "min_joint_margin_rad": round(joint_margin, 6),
+            }
+
+        relative_distance = 0.0
+        if obj is not None and obj in self._object_joints:
+            qpos_adr, _ = self._object_joints[obj]
+            relative_distance = float(np.linalg.norm(
+                self.data.qpos[qpos_adr:qpos_adr + 3]
+                - self.data.geom_xpos[self._pad_geom[arm_offset]]
+            ))
+            if relative_distance > LEGACY_MAX_CARRY_OFFSET_M:
+                return {
+                    "safe": False,
+                    "reason": "unsafe carry separation",
+                    "relative_object_pad_distance_m": round(relative_distance, 6),
+                    "min_joint_margin_rad": round(joint_margin, 6),
+                }
+
+        max_contact_force = 0.0
+        force = np.zeros(6)
+        for contact_id in range(self.data.ncon):
+            self._mujoco.mj_contactForce(self.model, self.data, contact_id, force)
+            max_contact_force = max(max_contact_force, float(np.linalg.norm(force[:3])))
+        if max_contact_force > LEGACY_MAX_CONTACT_FORCE_N:
+            return {
+                "safe": False,
+                "reason": "collision force bound exceeded",
+                "max_contact_force_n": round(max_contact_force, 6),
+                "min_joint_margin_rad": round(joint_margin, 6),
+            }
+
+        other_offset = 6 if arm_offset == 0 else 0
+        other_pad = self.data.geom_xpos[self._pad_geom[other_offset]]
+        target_clearance = None
+        if target_xy is not None:
+            target_xy = np.asarray(target_xy, dtype=float)
+            target_clearance = float(np.linalg.norm(other_pad[:2] - target_xy[:2]))
+            if target_clearance < 0.060 and float(other_pad[2]) < 0.14:
+                return {
+                    "safe": False,
+                    "reason": "unsafe shared-workspace entry",
+                    "other_pad_clearance_m": round(target_clearance, 6),
+                    "min_joint_margin_rad": round(joint_margin, 6),
+                }
+
+        return {
+            "safe": True,
+            "reason": None,
+            "min_joint_margin_rad": round(joint_margin, 6),
+            "relative_object_pad_distance_m": round(relative_distance, 6),
+            "max_contact_force_n": round(max_contact_force, 6),
+            "other_pad_clearance_m": None if target_clearance is None else round(target_clearance, 6),
+        }
+
+    def _settle_released_object(self, obj: str) -> dict[str, Any]:
+        """Advance a bounded settle interval and observe table support/speed."""
+        import numpy as np
+
+        qpos_adr, dof_adr = self._object_joints[obj]
+        position_before = self.data.qpos[qpos_adr:qpos_adr + 3].copy()
+        self._mujoco.mj_step(self.model, self.data, nstep=80)
+        self._controller_steps += 80
+        velocity = float(np.linalg.norm(self.data.qvel[dof_adr:dof_adr + 3]))
+        position_after = self.data.qpos[qpos_adr:qpos_adr + 3].copy()
+        drift = float(np.linalg.norm(position_after - position_before))
+        support = False
+        object_geom = self._mujoco.mj_name2id(
+            self.model, self._mujoco.mjtObj.mjOBJ_GEOM, obj,
+        )
+        for contact_id in range(self.data.ncon):
+            contact = self.data.contact[contact_id]
+            if object_geom not in (int(contact.geom1), int(contact.geom2)):
+                continue
+            other_geom = int(contact.geom2 if int(contact.geom1) == object_geom else contact.geom1)
+            other_name = self._mujoco.mj_id2name(
+                self.model, self._mujoco.mjtObj.mjOBJ_GEOM, other_geom,
+            ) or ""
+            if other_name in {"table", "floor"}:
+                support = True
+                break
+        return {
+            "settle_steps": 80,
+            "settle_speed_mps": round(velocity, 6),
+            "settle_drift_m": round(drift, 6),
+            "table_supported": support,
+            "settled": bool(
+                support
+                and velocity <= LEGACY_MIN_SETTLE_SPEED_MPS
+                and drift <= LEGACY_MAX_SETTLE_DRIFT_M
+            ),
+            "position": [round(float(value), 6) for value in position_after],
+        }
+
     def _ik_track_line(
         self, arm_offset: int, start_xyz, end_xyz, *,
         step: float = 0.03, iters_per_waypoint: int = 180, weighted: bool = True,
@@ -856,9 +1039,10 @@ class IntelTableWorld(MockWorld):
         )
         xy_now = self.data.qpos[qpos_adr:qpos_adr + 2].copy()
         z_now = float(self.data.qpos[qpos_adr + 2])
+        grasp_z = z_now + OBJECT_GRASP_VERTICAL_OFFSET.get(obj, 0.0)
         grasp_xy = xy_now - opening_xy * grasp_offset
         pinch_pose = self._ik_reach_pad_pose(
-            arm_offset, (grasp_xy[0], grasp_xy[1], z_now), target_rotation,
+            arm_offset, (grasp_xy[0], grasp_xy[1], grasp_z), target_rotation,
             roll_hint=roll_hint, iters=80,
         )
         # The final vertical approach is position-dominant: the reachable
@@ -866,13 +1050,13 @@ class IntelTableWorld(MockWorld):
         # roll-pinned solve avoids twisting a pad into the object while the
         # jaws are entering contact.
         pinch_error = self._ik_reach_pad(
-            arm_offset, (grasp_xy[0], grasp_xy[1], z_now),
+            arm_offset, (grasp_xy[0], grasp_xy[1], grasp_z),
             iters=180, roll=roll_hint,
         )
 
         self._set_gripper(arm_offset, GRIPPER_CLOSED, settle_steps=180)  # let the grip actually settle
         lift_error = self._ik_reach_pad(
-            arm_offset, (xy_now[0], xy_now[1], z_now + (clear_z - start_z)),
+            arm_offset, (xy_now[0], xy_now[1], grasp_z + (clear_z - start_z)),
             iters=280, roll=roll_hint,
         )
 
@@ -909,15 +1093,16 @@ class IntelTableWorld(MockWorld):
                 )
                 xy_retry = self.data.qpos[qpos_adr:qpos_adr + 2].copy()
                 z_retry = float(self.data.qpos[qpos_adr + 2])
+                grasp_z_retry = z_retry + OBJECT_GRASP_VERTICAL_OFFSET.get(obj, 0.0)
                 grasp_xy_retry = xy_retry - opening_xy * grasp_offset
                 self._ik_reach_pad(
-                    arm_offset, (grasp_xy_retry[0], grasp_xy_retry[1], z_retry),
+                    arm_offset, (grasp_xy_retry[0], grasp_xy_retry[1], grasp_z_retry),
                     iters=180, roll=candidate,
                 )
                 self._set_gripper(arm_offset, GRIPPER_CLOSED, settle_steps=180)
                 self._ik_reach_pad(
                     arm_offset,
-                    (grasp_xy_retry[0], grasp_xy_retry[1], z_retry + (clear_z - start_z)),
+                    (grasp_xy_retry[0], grasp_xy_retry[1], grasp_z_retry + (clear_z - start_z)),
                     iters=280, roll=candidate,
                 )
                 retry_lift = float(self.data.qpos[qpos_adr + 2]) - start_z
@@ -966,6 +1151,19 @@ class IntelTableWorld(MockWorld):
         target_rotation = self.data.geom_xmat[self._pad_geom[arm_offset]].reshape(3, 3).copy()
         roll_hint = float(self.data.qpos[arm_offset + 4])
 
+        pad_position = self.data.geom_xpos[self._pad_geom[arm_offset]].copy()
+        object_position = self.data.qpos[qpos_adr:qpos_adr + 3].copy()
+        carry_offset = object_position - pad_position
+        safety_before = self._workspace_safety(
+            arm_offset, obj=obj, target_xy=target_arr,
+        )
+        if not safety_before["safe"]:
+            return {
+                "grasp": "contact", "placed": False,
+                "reason": safety_before["reason"],
+                "safety": {"before": safety_before},
+            }
+
         cur_pad_z = float(self.data.geom_xpos[self._pad_geom[arm_offset]][2])
         # A broad, thin plate must be released above its rim. Driving a pad
         # target through the plate centre makes contact solver impulses push
@@ -974,25 +1172,44 @@ class IntelTableWorld(MockWorld):
         release_target = target_arr.copy()
         if obj == "plate_1":
             release_target[2] += half_h + GRASP_CLEARANCE
-        self._ik_reach_pad(
-            arm_offset, (release_target[0], release_target[1], cur_pad_z),
-            iters=240, roll=roll_hint,
+        # Carry contact is not a weld: the object can settle a few centimetres
+        # away from the pad while the arm moves.  Command the pad to the
+        # measured object-relative offset, so the object—not the pad—arrives
+        # at the requested zone.  This is an observed correction, not a write
+        # to the object's freejoint pose.
+        pad_release_target = release_target - carry_offset
+        self._ik_reach_pad_pose(
+            arm_offset, (pad_release_target[0], pad_release_target[1], cur_pad_z),
+            target_rotation, roll_hint=roll_hint, iters=240,
         )
-        place_error = self._ik_reach_pad(
-            arm_offset, release_target, iters=300, roll=roll_hint,
+        place_pose = self._ik_reach_pad_pose(
+            arm_offset, pad_release_target, target_rotation,
+            roll_hint=roll_hint, iters=300,
         )
+        place_error = float(place_pose["position_error_m"])
         self._set_gripper(arm_offset, GRIPPER_OPEN, settle_steps=40)  # let it drop/settle
-        lift_error = self._ik_reach_pad(
-            arm_offset, release_target + clear, iters=240, roll=roll_hint,
+        retract_pose = self._ik_reach_pad_pose(
+            arm_offset, pad_release_target + clear, target_rotation,
+            roll_hint=roll_hint, iters=240,
         )  # retract straight up
+        lift_error = float(retract_pose["position_error_m"])
+
+        settle = self._settle_released_object(obj)
 
         final_xy = self.data.qpos[qpos_adr:qpos_adr + 2].copy()
         offset = float(np.linalg.norm(final_xy - target_arr[:2]))
+        safety_after = self._workspace_safety(arm_offset, obj=None)
+        placed = bool(offset < 0.06 and settle["settled"] and safety_after["safe"])
         return {
             "grasp": "contact", "reach_error_m": round(place_error, 6),
-            "placement_error_m": round(offset, 4), "placed": offset < 0.06,
+            "placement_error_m": round(offset, 4), "placed": placed,
+            "settle": settle,
+            "safety": {"before": safety_before, "after": safety_after},
+            "reason": None if placed else (
+                safety_after["reason"] or "unstable placement"
+            ),
             "orientation": {
-                "place": {"position_error_m": round(place_error, 6)},
+                "place": {**place_pose},
                 "retract": {"position_error_m": round(lift_error, 6)},
                 "roll_hint_rad": round(roll_hint, 6),
             },
@@ -1015,6 +1232,10 @@ class IntelTablePlanner(RulePlanner):
     """Deterministic role assignment for the first dual-arm table-setting slice."""
 
     _RIGHT_OBJECTS = {"cup_1", "spoon_1"}
+    # The left-arm napkin approach otherwise sweeps through the napkin while
+    # retrieving the fork from the drawer.  Keep the same governed plan shape,
+    # but reserve the shared left workspace in a measured, deterministic order.
+    _OBJECT_ORDER = ("cup_1", "napkin_1", "plate_1", "fork_1", "spoon_1")
     # objects that physically start inside the drawer (dual_so101_xml) -- their
     # PICK depends on an OPEN step first, matching the brief's literal
     # scenario ("open the top drawer, retrieve spoons and forks").
@@ -1043,6 +1264,29 @@ class IntelTablePlanner(RulePlanner):
                 step.arm = "right"
             elif object_id:
                 step.arm = "left"
+
+        # RulePlanner sorts object ids lexically.  Reorder only tracked
+        # tableware pairs; fixture and terminal steps keep their existing
+        # positions and dependencies.  This is scheduling, not ownership or
+        # object-state mutation.
+        tracked = set(self._OBJECT_ORDER)
+        tableware_steps = [
+            step for step in graph.steps
+            if step.args.get("object") in tracked
+        ]
+        other_steps = [
+            step for step in graph.steps
+            if step.args.get("object") not in tracked
+        ]
+        ordered_tableware = []
+        for object_id in self._OBJECT_ORDER:
+            ordered_tableware.extend(
+                step for step in tableware_steps
+                if step.args.get("object") == object_id
+            )
+        leading = [step for step in other_steps if step.op != "VERIFY"]
+        terminal = [step for step in other_steps if step.op == "VERIFY"]
+        graph.steps = leading + ordered_tableware + terminal
         return graph
 
 

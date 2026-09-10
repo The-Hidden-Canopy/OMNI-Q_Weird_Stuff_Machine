@@ -49,3 +49,25 @@ def test_fork_and_spoon_start_inside_the_drawer():
     other_zones = {objects[o].zone for o in ("plate_1", "cup_1", "napkin_1")}
     assert len(other_zones) == 3
     assert "drawer" not in other_zones
+
+def test_worldstate_carries_real_metric_poses_from_mujoco():
+    """OQ-009: IntelTableWorld.state() stamps each tracked object's live
+    free-joint pose onto its Detection; the drawer fixture stays pose-less."""
+    engine = build_intel_sim_engine()
+    objects = engine.world.state().objects
+
+    for oid in ("plate_1", "cup_1", "fork_1", "spoon_1", "napkin_1"):
+        det = objects[oid]
+        assert det.located and det.pose is not None
+        # settled on the table surface (top face at world z = 0), not the floor
+        assert 0.0 < det.pose.z < 0.10
+        assert -0.45 < det.pose.x < 0.45 and -0.5 < det.pose.y < 0.3
+
+    # two different objects are at different places
+    assert objects["fork_1"].pose.planar_distance_to(objects["spoon_1"].pose) > 0.1
+    # untracked fixture -> no metric pose
+    assert objects["drawer"].pose is None
+    # pose is read live: stepping the sim updates it
+    engine.world.data.qpos[engine.world._object_joints["cup_1"][0]] += 0.05
+    engine.world._mujoco.mj_forward(engine.world.model, engine.world.data)
+    assert engine.world.state().objects["cup_1"].pose.x != objects["cup_1"].pose.x

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from . import actions as _actions
 from .contracts import (
     ActionAuthorization,
     AutonomyMode,
@@ -160,6 +161,10 @@ class FakeManipulator:
     _OPS = {
         "PICK", "PLACE", "MOVE", "OPEN", "CLOSE", "ROTATE", "PRESENT",
         "STABILIZE", "REGRASP", "HANDOFF", "COOPERATIVE_ROTATE", "LOCATE",
+        # non-contact idle-slack flourishes (OQ-HAND-011): free-space arm
+        # gestures, no object, no grasp -- executed as no-op successes here,
+        # as real joint motion by intel_sim's coarse-pose path.
+        *_actions.IDLE_FLOURISH_OPS, "FREEZE",
     }
 
     def __init__(self, world_ref: Any) -> None:

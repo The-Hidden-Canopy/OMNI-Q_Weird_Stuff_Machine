@@ -91,3 +91,32 @@ def test_forbidden_object_is_left_alone():
 
     moved = [a["result"].get("moved") for a in engine._actions if a["op"] == "MOVE"]
     assert "connector_2" not in moved
+
+
+# -- OQ-009: metric pose on Detection -------------------------------
+
+
+def test_detection_pose_is_optional_and_backward_compatible():
+    from omni_q.contracts import Detection, Pose
+    import dataclasses
+
+    bare = Detection("cup_1", "cup", "tray", "setting_1")
+    assert bare.pose is None and bare.located is False
+
+    placed = dataclasses.replace(bare, pose=Pose(0.16, -0.06, 0.05, 0.1))
+    assert placed.located is True
+    assert placed.pose.xy == (0.16, -0.06)
+    assert round(placed.pose.planar_distance_to(Pose(0.16, -0.06, 0.0)), 6) == 0.0
+    # serialises through dataclasses.asdict (used by WorldState/Observation.as_dict)
+    d = dataclasses.asdict(placed)
+    assert d["pose"] == {"x": 0.16, "y": -0.06, "z": 0.05, "yaw": 0.1}
+    assert dataclasses.asdict(bare)["pose"] is None
+
+
+def test_pose_distance_helpers():
+    from omni_q.contracts import Pose
+
+    a, b = Pose(0.0, 0.0, 0.0), Pose(3.0, 4.0, 0.0)
+    assert a.distance_to(b) == 5.0
+    assert b.planar_distance_to(a) == 5.0
+    assert Pose(0, 0, 0).distance_to(Pose(0, 0, 2)) == 2.0
