@@ -60,7 +60,7 @@ alongside the YOLO perception node.
 
 - [x] SO-101 capability map + measurement probe — [`so101_capability_map.md`](so101_capability_map.md),
   [`scripts/probe_so101.py`](scripts/probe_so101.py), vendored MJCF in [`assets/menagerie_so_arm100/`](assets/menagerie_so_arm100/SOURCE.md) (OQ-003)
-- [x] MuJoCo dual SO-101 scene + controller smoke — `src/omni_q/intel_sim.py` builds a pinned two-arm proxy (`nu=12`) with tableware and two cameras; controller steps are real MuJoCo, while object placement is explicitly scripted pending OQ-010
+- [x] MuJoCo dual SO-101 scene + controller smoke — `src/omni_q/intel_sim.py` builds a pinned two-arm proxy (`nu=12`) with tableware and two cameras; the legacy table-setting route remains explicitly scripted
 - [x] Bimanual scheduler wired into the Intel sim path (zero-touch decorator, no
   edits to `intel_sim.py`/`scheduler.py`) — `src/omni_q/demo_intel_sim.py`
   (`PYTHONPATH=src python -m omni_q.demo_intel_sim` or `omni-q-intel-demo` once
@@ -122,3 +122,17 @@ alongside the YOLO perception node.
 - [ ] Intel inference benchmark script (latency, throughput, device, precision)
 - [ ] Anomalib + OpenVINO defect path (onsite)
 - [ ] Natural-language instruction → capability graph binding
+### Contact-handoff evidence boundary
+
+The OQ-010/OQ-011 contact tranche is available through
+`src/omni_q/intel_sim.py` as the separate `simulation-contact-handoff` mode.
+It uses the pinned SO-ARM100 proxy, real joint interpolation and named MuJoCo
+pad contacts for one `cup_1` transfer. The deterministic acceptance gate is
+the pinned controller seed `19` (10/10 in the test suite). The
+`run_randomized_contact_handoff_report(root, trials=20)` helper retains every
+seeded receipt and labels the summary exploratory, not a promotion claim.
+
+This path never writes the cup free-joint pose, uses weld/equality attachment,
+or changes the existing `simulation-scripted-manipulation` table-setting
+route. It is MuJoCo-only evidence and does not claim camera perception, VLA
+control, hardware, complete table setting, or concurrent execution.

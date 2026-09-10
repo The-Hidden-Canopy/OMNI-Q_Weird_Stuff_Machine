@@ -1,0 +1,7 @@
+# OQ-008 table-setting detector pipeline
+fiftyone>=1.0            # build_dataset.py — real-image pulls + remap + YOLO export
+ultralytics>=8.3         # finetune.py / export.py — YOLOv8n
+huggingface-hub>=0.24    # pull the thermal base weights
+onnx>=1.16
+onnxslim>=0.1            # ultralytics uses this for --simplify
+# openvino>=2026.3       # Intel track export (optional here; on the deploy box)
