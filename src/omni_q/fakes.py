@@ -93,7 +93,12 @@ class RulePlanner:
                 rejected[det.object_id] = f"non-authoritative detection ({det.status.value})"
                 continue
             oid = det.object_id
-            pick = Step(
+            # If an arm already holds this object (a replan after a PICK
+            # succeeded but the following MOVE/verify failed), re-issuing the
+            # PICK is a hard reject ("already held") -- carry straight from
+            # the gripper instead.
+            held_by = world.ownership.get(oid)
+            pick = None if held_by else Step(
                 f"pick_{oid}", "manipulate", "PICK",
                 args={"object": oid}, arm=prefer_arm,
                 rationale=f"{oid} is in {det.zone}, belongs in {det.target_zone}",
@@ -101,10 +106,14 @@ class RulePlanner:
             move = Step(
                 f"move_{oid}", "manipulate", "MOVE",
                 args={"object": oid, "to": det.target_zone},
-                deps=(pick.id,), arm=prefer_arm,
-                rationale=f"carry {oid} -> {det.target_zone}",
+                deps=(pick.id,) if pick else (),
+                arm=prefer_arm,
+                rationale=(
+                    f"carry {oid} -> {det.target_zone}" if pick
+                    else f"{oid} already held; place it at {det.target_zone}"
+                ),
             )
-            graph.steps += [pick, move]
+            graph.steps += [pick, move] if pick else [move]
             move_ids.append(move.id)
             if show_off:
                 graph.steps.append(Step(
