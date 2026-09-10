@@ -1,8 +1,10 @@
 # Omni Q — Hackathon Backlog
 
-One backlog, three surfaces: **Intel** is the first executable demo, **Qualcomm**
-the second hardware surface, **Speechmatics** layers over both. Every task is
-atomic enough to become an owner's `TASK.md`.
+One backlog. **Intel online is the entry track — the only one we qualify
+for** and the required deliverable. **Qualcomm** and **Intel onsite** are
+exploratory/bonus work, not part of the entry; **Speechmatics** is a bonus
+voice layer that stacks on the Intel online entry. Every task is atomic
+enough to become an owner's `TASK.md`.
 
 Owners: `Gerron/Claude`, `Gerron/GPT`, `Gerron/Kimi`, `Bryan/Codex`,
 `Damion/Claude`. Per-owner filtered lists live in [`agents/`](agents/).

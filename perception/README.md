@@ -2,8 +2,9 @@
 
 Fine-tunes a 7-class YOLO (`plate, cup, fork, spoon, knife, napkin, drawer`)
 from **our own** `KissTheHabit/yolov8n-hituav-thermal-finetune`, on a large
-real-image set with a synthetic depth top-up. Serves both sponsor tracks as the
-perception node in `omni_q.providers` / `omni_q.scheduler`. Plan:
+real-image set with a synthetic depth top-up. Serves as the perception node
+in `omni_q.providers` / `omni_q.scheduler` for the Intel online entry track;
+the QAIRT/Qualcomm export path is bonus, not required. Plan:
 [`../docs/datasets.md`](../docs/datasets.md).
 
 ## Pipeline
