@@ -33,7 +33,8 @@ which camera said what, when, how sure*.
 
 `claims_from_detections("yolo_objects", dets)` lifts any plain YOLO-style
 detector (`frame → [Detection2D]`, from `frame_observer`) into provenance-carrying
-claims — swap the stub for real MXFP2 inference and nothing downstream changes.
+claims — swap the stub for real **MXFP2** YOLO inference (the Intel-track
+format) and nothing downstream changes.
 
 ## Reconciliation
 
@@ -69,11 +70,16 @@ camera @ 30 fps → tiny perception workers → ontology
   … nothing interesting … nothing interesting … HAND ENTERED WORKSPACE → wake OMNI-Q
 ```
 
-So the perception swarm can run at **MXFP2/MXFP4** continuously on the Intel
-box; OMNI-Q's higher-precision reasoning path only fires on a real state
-change. `OntologyObserver.wake` is the boolean an event loop checks.
-(See `evidence/benchmark_results/omni_quant_2bit_*` for the low-bit codec work
-this rides on.)
+So the perception swarm runs at **MXFP2** continuously on the Intel box —
+that's the pinned format for the entry track: the UE8M0 power-of-two scale
+dequantises with a shift (not a multiply) and enables the multiply-free Linear
+path, which is what makes it *cheap on Core Ultra*, not just small on disk.
+NVINT2 (4-level signed grid) is the Qualcomm-side / per-specialist fallback for
+any detector that fails the cosine / detection-parity gate at MXFP2. OMNI-Q's
+own reasoning path stays FP16/INT8 and only fires on a real state change.
+`OntologyObserver.wake` is the boolean an event loop checks. (Codec:
+`integrations/qualcomm/lowbit/`; evidence: `evidence/benchmark_results/yolo_2bit_cpu_*`,
+`omni_quant_2bit_*`.)
 
 ## `OntologyObserver` — the drop-in
 
@@ -136,4 +142,6 @@ PYTHONPATH=src python -m pytest -q tests/test_ontology.py
   affordance / robot-state detectors are new heads).
 - `reachable_by` / `missing_from` relations need the OQ-006/007 table geometry.
 - Per-camera / per-modality models and cross-camera entity linking.
-- Running the swarm at MXFP2 on real Core Ultra silicon.
+- Running the swarm at MXFP2 on real Core Ultra silicon (Series 2/3) — the CPU
+  round-trip is measured (`yolo_2bit_cpu_*`); NPU/iGPU MXFP2→INT8 fused
+  dequant kernel is the remaining piece.
