@@ -20,12 +20,12 @@ each manipulate step still steps real MuJoCo physics via
     PYTHONPATH=src python -m omni_q.demo_intel_sim --viewer --step-delay 2  # slower, easier to follow
     PYTHONPATH=src python -m omni_q.demo_intel_sim --render-dir out/      # + PNG per step + assembled trace.gif
 
-Object placement is still an explicit scripted WorldState transition (see
-``intel_sim.py``): PICK/MOVE/PLACE kinematically teleport the object to
-follow the plan (lift in place, then snap to the target zone), so a rendered
-frame or the live viewer shows a real table setting forming -- but nothing
-here grips or carries anything via IK or contact, so don't mistake the motion
-for evidence of real grasping.
+PICK/MOVE/PLACE drive a real IK + contact grasp attempt (see intel_sim.py's
+module docstring for what that does and doesn't cover today -- notably,
+grasp success currently has a low pass rate; this adapter only solves 3-DOF
+position, not the jaw orientation a reliable pinch needs). A failed grasp
+is real physics, not a bug in the demo: the receipt reports it honestly and
+the engine replans, same as any other failure.
 """
 
 from __future__ import annotations
