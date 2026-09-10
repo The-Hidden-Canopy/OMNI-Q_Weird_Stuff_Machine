@@ -60,6 +60,31 @@ raises a `workspace.conflict` delta (and `workspace.clear` when the hand
 leaves). `Observation.workspace_clear` reflects it, so the existing
 verify/replan loop reacts with no engine change.
 
+### Reach + place-setting (OQ-ONT-007)
+
+Two more default rules turn the OQ-007 table geometry into scene-graph facts:
+
+- **`reachable_by_rule`** — `<obj> reachable_by left_arm|right_arm` for each
+  arm whose mirrored-pair envelope covers the object's zone. It uses
+  `omni_q.scheduler`'s `DEFAULT_LAYOUT` + `arm_reaches` — the *same* reach
+  model the scheduler plans with — so a reach relation in the ontology means
+  the scheduler agrees. Pure geometry: emitted whether or not an arm was
+  detected this frame (availability is the provider's concern), and the
+  object is a stable `<side>_arm` label, not a per-run entity id.
+- **`missing_from_rule`** — reads `Ontology(place_setting=...)`
+  (`{zone: {canonical classes}}`, default `DEFAULT_PLACE_SETTING` for the
+  mock `setting_1/2`; pass the real spec per scene). Per setting zone it
+  emits `<obj|class> missing_from <zone>` for every unfilled slot — naming
+  the actual entity when one sits in the wrong zone, else the bare class —
+  plus one `<zone> incomplete setting` marker whose `conf` is the fraction
+  of the setting still missing. Both clear automatically once the slot fills.
+
+Together they compose the headline read the planner/UI wants:
+`setting_1 incomplete setting` + `cup_1 missing_from setting_1` +
+`cup_1 reachable_by left_arm` → "left setting incomplete; left_arm can reach
+the cup." Relations are projected in `snapshot()["relations"]`; no new deltas
+(an incomplete setting is the normal start state, not a wake event).
+
 ## The ontology as an attention mechanism
 
 `ingest()` returns `list[Delta]`. `wakes(delta)` says which are worth waking the
@@ -140,7 +165,6 @@ PYTHONPATH=src python -m pytest -q tests/test_ontology.py
 
 - Real specialist YOLOs (`perception/` fine-tunes the object one; hazard /
   affordance / robot-state detectors are new heads).
-- `reachable_by` / `missing_from` relations need the OQ-006/007 table geometry.
 - Per-camera / per-modality models and cross-camera entity linking.
 - Running the swarm at MXFP2 on real Core Ultra silicon (Series 2/3) — the CPU
   round-trip is measured (`yolo_2bit_cpu_*`); NPU/iGPU MXFP2→INT8 fused

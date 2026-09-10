@@ -109,6 +109,73 @@ def test_near_relation_between_hand_and_object():
     assert "near" in preds or "intersects" in preds
 
 
+# -- reach + place-setting relations (OQ-ONT-007) ------------------
+
+
+def _at(zone):
+    return {"world_zone": zone}
+
+
+def test_reachable_by_follows_the_scheduler_reach_model():
+    o = Ontology()
+    o.ingest([
+        Claim("yolo_robot", "left_arm", 0.99, _box(0.30, 0.50, s=0.12)),
+        Claim("yolo_robot", "right_arm", 0.99, _box(0.70, 0.50, s=0.12)),
+        # tray sits on the far left (x_center 0.30) -> right arm can't reach
+        Claim("yolo_objects", "cup", 0.9, _box(0.2, 0.2), attrs=_at("tray")),
+        # setting_2 straddles the centre (x_center -0.10) -> both arms reach
+        Claim("yolo_objects", "plate", 0.9, _box(0.5, 0.5), attrs=_at("setting_2")),
+    ], 1)
+    reach = {(r.subject, r.obj) for r in o.relations if r.predicate == "reachable_by"}
+    assert ("cup_1", "left_arm") in reach
+    assert ("cup_1", "right_arm") not in reach          # unreachable, honestly
+    assert ("plate_1", "left_arm") in reach and ("plate_1", "right_arm") in reach
+
+
+def test_missing_from_reports_unfilled_slots_and_an_incomplete_marker():
+    o = Ontology(place_setting={"setting_1": {"plate", "cup", "fork", "napkin"}})
+    o.ingest([
+        Claim("yolo_objects", "plate", 0.95, _box(0.5, 0.5), attrs=_at("setting_1")),
+        Claim("yolo_objects", "fork", 0.9, _box(0.4, 0.5), attrs=_at("setting_1")),
+        Claim("yolo_objects", "cup", 0.92, _box(0.2, 0.2), attrs=_at("tray")),
+    ], 1)
+    miss = {(r.subject, r.obj) for r in o.relations if r.predicate == "missing_from"}
+    # the cup exists but in the wrong zone -> named by its entity id
+    assert ("cup_1", "setting_1") in miss
+    # the napkin was never seen -> named by bare class
+    assert ("napkin", "setting_1") in miss
+    assert ("plate", "setting_1") not in miss and ("fork", "setting_1") not in miss
+    inc = [r for r in o.relations if r.predicate == "incomplete"]
+    assert len(inc) == 1 and inc[0].subject == "setting_1"
+    assert inc[0].conf == 0.5                            # 2 of 4 slots empty
+
+
+def test_setting_completes_and_the_incomplete_marker_clears():
+    spec = {"setting_1": {"plate", "cup"}}
+    o = Ontology(place_setting=spec)
+    o.ingest([Claim("yolo_objects", "plate", 0.95, _box(0.5, 0.5), attrs=_at("setting_1"))], 1)
+    assert any(r.predicate == "incomplete" for r in o.relations)
+    o.ingest([
+        Claim("yolo_objects", "plate", 0.95, _box(0.5, 0.5), attrs=_at("setting_1")),
+        Claim("yolo_objects", "cup", 0.92, _box(0.55, 0.5), attrs=_at("setting_1")),
+    ], 2)
+    assert not any(r.predicate in {"incomplete", "missing_from"} for r in o.relations)
+
+
+def test_reach_and_missing_compose_into_the_headline_fact():
+    """'left setting incomplete; left_arm can reach the cup'."""
+    o = Ontology(place_setting={"setting_1": {"plate", "cup"}})
+    o.ingest([
+        Claim("yolo_robot", "left_arm", 0.99, _box(0.30, 0.50, s=0.12)),
+        Claim("yolo_objects", "plate", 0.95, _box(0.5, 0.5), attrs=_at("setting_1")),
+        Claim("yolo_objects", "cup", 0.92, _box(0.2, 0.2), attrs=_at("tray")),
+    ], 1)
+    rels = {(r.subject, r.predicate, r.obj) for r in o.relations}
+    assert ("setting_1", "incomplete", "setting") in rels
+    assert ("cup_1", "missing_from", "setting_1") in rels
+    assert ("cup_1", "reachable_by", "left_arm") in rels
+
+
 # -- attention filter ----------------------------------------------
 
 
