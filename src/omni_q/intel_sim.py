@@ -45,6 +45,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import math
 import os
 import random
 import xml.etree.ElementTree as ET
@@ -56,6 +57,7 @@ from .contracts import (
     Detection,
     DeviceSpec,
     ManipResult,
+    MissionEnvelope,
     PlanDecision,
     PlanGraph,
     Step,
@@ -63,6 +65,7 @@ from .contracts import (
     TransitionRequest,
     TransitionResult,
     VerifyResult,
+    content_hash_of,
 )
 from .devices import DeviceRouter
 from .engine import OmniQ
@@ -84,6 +87,31 @@ GRIPPER_CLOSED = 0.0
 DRAWER_OPEN = 0.12     # drawer_slide qpos, m -- matches its MJCF range max
 DRAWER_CLOSED = 0.0
 TRANSIT_HEIGHT = 0.28  # m -- above the table/drawer/tableware envelope, within reach (see _move_to)
+
+
+@dataclass(frozen=True)
+class IntelSceneConfig:
+    """Build-time scene perturbations for the legacy table-setting route.
+
+    The randomized evaluation deliberately changes only initial tableware
+    pose in the generated MJCF.  It never writes a free-joint pose during a
+    transition, so a report still distinguishes scene initialization from
+    scripted object ownership or placement.
+    """
+
+    seed: int = 0
+    randomized: bool = False
+    position_jitter_m: float = 0.003
+    yaw_jitter_rad: float = 0.08
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.position_jitter_m) or not 0.0 <= self.position_jitter_m <= 0.010:
+            raise ValueError("position_jitter_m must be between 0 and 0.010 m")
+        if not math.isfinite(self.yaw_jitter_rad) or not 0.0 <= self.yaw_jitter_rad <= 0.25:
+            raise ValueError("yaw_jitter_rad must be between 0 and 0.25 rad")
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 # Half-height (m) of each tableware geom in dual_so101_xml() -- used to place
 # the IK grasp/place target just above the object's actual TOP surface, not
@@ -135,8 +163,11 @@ def _prefixed(element: ET.Element, prefix: str) -> ET.Element:
     return clone
 
 
-def _body(name: str, pos: str, geom: dict[str, str]) -> ET.Element:
-    body = ET.Element("body", {"name": name, "pos": pos})
+def _body(name: str, pos: str, geom: dict[str, str], *, euler: str | None = None) -> ET.Element:
+    attrs = {"name": name, "pos": pos}
+    if euler is not None:
+        attrs["euler"] = euler
+    body = ET.Element("body", attrs)
     ET.SubElement(body, "freejoint", {"name": f"{name}_free"})
     ET.SubElement(body, "geom", {"name": name, **geom})
     return body
@@ -159,8 +190,20 @@ def _drawer(pos: str) -> ET.Element:
     return body
 
 
-def dual_so101_xml() -> str:
+def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     """Return a dual-arm, table-setting MJCF built from the pinned asset."""
+    config = config or IntelSceneConfig()
+    rng = random.Random(config.seed)
+
+    def tableware_pose(base: tuple[float, float, float]) -> tuple[str, str | None]:
+        if not config.randomized:
+            return "%.6f %.6f %.6f" % base, None
+        x, y, z = base
+        x += rng.uniform(-config.position_jitter_m, config.position_jitter_m)
+        y += rng.uniform(-config.position_jitter_m, config.position_jitter_m)
+        yaw = rng.uniform(-config.yaw_jitter_rad, config.yaw_jitter_rad)
+        return "%.6f %.6f %.6f" % (x, y, z), "0 0 %.6f" % yaw
+
     source = ET.parse(ARM_XML).getroot()
     root = ET.Element("mujoco", {"model": "omni_q_dual_so101_table"})
     for tag in ("compiler", "option", "asset", "default"):
@@ -207,6 +250,11 @@ def dual_so101_xml() -> str:
             })
 
     worldbody.append(_drawer("0 -.40 .01"))
+    plate_pos, plate_euler = tableware_pose((-.13, -.08, .026))
+    cup_pos, cup_euler = tableware_pose((.16, -.06, .055))
+    fork_pos, fork_euler = tableware_pose((-.04, -.40, .035))
+    spoon_pos, spoon_euler = tableware_pose((.04, -.40, .035))
+    napkin_pos, napkin_euler = tableware_pose((-.22, .02, .006))
     worldbody.extend([
         # Rim half-height .016 (32mm full thickness), not the original .007
         # (14mm): the SO-101 gripper's own fully-closed pad gap is 21.3mm
@@ -214,28 +262,28 @@ def dual_so101_xml() -> str:
         # geometrically thinner than the gripper can ever close to, so the
         # jaws would sweep past it without contact. 32mm sits inside the
         # gripper's 21.3-77mm graspable range.
-        _body("plate_1", "-.13 -.08 .026", {
+        _body("plate_1", plate_pos, {
             "type": "cylinder", "size": ".095 .016", "rgba": ".93 .93 .91 1",
             "mass": ".18", "friction": "0.35 .003 .0001",  # ceramic
-        }),
-        _body("cup_1", ".16 -.06 .055", {
+        }, euler=plate_euler),
+        _body("cup_1", cup_pos, {
             "type": "cylinder", "size": ".032 .055", "rgba": ".22 .58 .78 1",
             "mass": ".12", "friction": "0.45 .004 .0001",  # ceramic, needs grip for the pour scenario
-        }),
+        }, euler=cup_euler),
         # fork/spoon start inside the drawer -- retrieval is gated on OPEN, matching
         # the brief's scenario ("open the top drawer, retrieve spoons and forks").
-        _body("fork_1", "-.04 -.40 .035", {
+        _body("fork_1", fork_pos, {
             "type": "box", "size": ".012 .075 .004", "rgba": ".72 .73 .75 1",
             "mass": ".04", "friction": "0.5 .003 .0001",  # metal cutlery, small grasp footprint
-        }),
-        _body("spoon_1", ".04 -.40 .035", {
+        }, euler=fork_euler),
+        _body("spoon_1", spoon_pos, {
             "type": "box", "size": ".013 .07 .004", "rgba": ".72 .73 .75 1",
             "mass": ".04", "friction": "0.5 .003 .0001",
-        }),
-        _body("napkin_1", "-.22 .02 .006", {
+        }, euler=spoon_euler),
+        _body("napkin_1", napkin_pos, {
             "type": "box", "size": ".07 .05 .003", "rgba": ".90 .40 .38 1",
             "mass": ".02", "friction": "0.9 .006 .0002",  # cloth
-        }),
+        }, euler=napkin_euler),
     ])
 
     actuators = ET.SubElement(root, "actuator")
@@ -251,14 +299,14 @@ def dual_so101_xml() -> str:
     return ET.tostring(root, encoding="unicode")
 
 
-def load_dual_so101_model():
+def load_dual_so101_model(config: IntelSceneConfig | None = None):
     """Load the dual-arm model without writing generated MJCF into the repo."""
     mujoco = _mujoco()
     assets = {
         f"assets/{path.name}": path.read_bytes()
         for path in ARM_ASSETS.glob("*.stl")
     }
-    return mujoco.MjModel.from_xml_string(dual_so101_xml(), assets=assets)
+    return mujoco.MjModel.from_xml_string(dual_so101_xml(config), assets=assets)
 
 
 class IntelTableWorld(MockWorld):
@@ -266,7 +314,8 @@ class IntelTableWorld(MockWorld):
 
     mode = "simulation-scripted-manipulation"
 
-    def __init__(self) -> None:
+    def __init__(self, scene_config: IntelSceneConfig | None = None) -> None:
+        self.scene_config = scene_config or IntelSceneConfig()
         # Distinct starting zones (OQ-007): a shared literal zone string for
         # every object collapses the scheduler's workspace-conflict check
         # into full serialization regardless of arm (see
@@ -286,7 +335,7 @@ class IntelTableWorld(MockWorld):
             Detection("drawer", "fixture", "closed", "closed"),
         ])
         mujoco = _mujoco()
-        self.model = load_dual_so101_model()
+        self.model = load_dual_so101_model(self.scene_config)
         self.data = mujoco.MjData(self.model)
         self._mujoco = mujoco
         self._controller_steps = 0
@@ -637,6 +686,34 @@ class IntelTableObserver(FakeObserver):
         )
 
 
+class IntelTableVerifier(FakeVerifier):
+    """Verify scripted fixture primitives against the MuJoCo state.
+
+    The legacy table-setting route is intentionally still scripted, but a
+    scripted command must not turn into a fabricated postcondition.  Drawer
+    OPEN/CLOSE is the first fixture primitive with a concrete simulator
+    observable; other operations retain the existing object/terminal checks.
+    """
+
+    _DRAWER_TOLERANCE_M = 1e-3
+
+    def __init__(self, world: IntelTableWorld) -> None:
+        self.world = world
+
+    def check(self, step: Step, observation: Any) -> VerifyResult:
+        if step.op in {"OPEN", "CLOSE"} and step.args.get("object") == "drawer":
+            expected = DRAWER_OPEN if step.op == "OPEN" else DRAWER_CLOSED
+            observed = float(self.world.data.qpos[self.world._drawer_qpos_adr])
+            ok = abs(observed - expected) <= self._DRAWER_TOLERANCE_M
+            return VerifyResult(
+                ok=ok,
+                expected={"drawer_qpos": expected, "tolerance_m": self._DRAWER_TOLERANCE_M},
+                observed={"drawer_qpos": round(observed, 6)},
+                mismatch=() if ok else ("drawer_qpos",),
+            )
+        return super().check(step, observation)
+
+
 def intel_devices() -> DeviceRouter:
     return DeviceRouter([
         DeviceSpec("intel.perception.sim", ("perception", "verify"), local=True),
@@ -646,18 +723,123 @@ def intel_devices() -> DeviceRouter:
     ])
 
 
-def build_intel_sim_engine() -> OmniQ:
+def build_intel_sim_engine(
+    scene_config: IntelSceneConfig | None = None,
+    *,
+    recorder: Any | None = None,
+    envelope: MissionEnvelope | None = None,
+) -> OmniQ:
     """Construct the explicitly labelled Intel simulation path."""
-    world = IntelTableWorld()
+    scene_config = scene_config or IntelSceneConfig()
+    world = IntelTableWorld(scene_config)
+    # Include randomized build-time scene identity in the governed run
+    # envelope; otherwise every seed would hash to the same run_id because
+    # WorldState intentionally contains semantic zones, not raw MuJoCo pose.
+    if envelope is None and scene_config.randomized:
+        envelope = MissionEnvelope(mission_id=f"intel-table-scene-{scene_config.seed}")
     return OmniQ(
         world=world,
         observer=IntelTableObserver(),
         planner=IntelTablePlanner(),
         manipulator=FakeManipulator(world),
-        verifier=FakeVerifier(),
+        verifier=IntelTableVerifier(world),
         device=intel_devices(),
-        recorder=FakeRecorder(),
+        recorder=recorder or FakeRecorder(),
+        envelope=envelope,
     )
+
+
+def _write_json_once(path: Path, payload: dict[str, Any]) -> None:
+    """Persist one report artifact without silently overwriting evidence."""
+    if path.exists():
+        raise FileExistsError(f"evidence already exists at {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    encoded = json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n"
+    with temporary.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write(encoded)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, path)
+
+
+def _classify_intel_table_receipt(receipt: Any) -> str:
+    """Classify only outcomes evidenced by a legacy run receipt."""
+    if receipt.metrics.get("resolved"):
+        return "success"
+    failed = [action for action in receipt.actions if action.get("state") == "failed"]
+    details = [action.get("result") or {} for action in failed]
+    text = json.dumps(details, sort_keys=True, default=str).lower()
+    if "timeout" in text:
+        return "timeout"
+    if "collision" in text:
+        return "collision"
+    if any(detail.get("held") is False for detail in details):
+        return "grasp_failure"
+    if any(detail.get("placed") is False for detail in details):
+        return "placement_failure"
+    if failed:
+        return "transition_failure"
+    return "unresolved"
+
+
+def run_intel_table_evaluation_report(
+    root: str | Path,
+    *,
+    trials: int = 10,
+    seed: int = 100,
+) -> dict[str, Any]:
+    """Run bounded randomized legacy table-setting trials with retained receipts.
+
+    This is an exploratory controller/scene report.  It is deliberately not a
+    promotion gate: the general 3-DOF grasp path remains low-success, and the
+    report preserves those failures instead of converting them into a score.
+    """
+    if trials <= 0:
+        raise ValueError("trials must be positive")
+    root_path = Path(root)
+    root_path.mkdir(parents=True, exist_ok=True)
+    outcomes = {
+        "success": 0,
+        "grasp_failure": 0,
+        "placement_failure": 0,
+        "timeout": 0,
+        "collision": 0,
+        "transition_failure": 0,
+        "unresolved": 0,
+    }
+    entries: list[dict[str, Any]] = []
+    for index in range(trials):
+        trial_seed = seed + index
+        scene_config = IntelSceneConfig(seed=trial_seed, randomized=True)
+        receipt = build_intel_sim_engine(scene_config).run("set the table")
+        if receipt.content_hash != content_hash_of(receipt.as_dict()):
+            raise RuntimeError(f"receipt hash mismatch for trial seed {trial_seed}")
+        outcome = _classify_intel_table_receipt(receipt)
+        outcomes[outcome] += 1
+        receipt_name = f"trial-{index:02d}-seed-{trial_seed}.json"
+        _write_json_once(root_path / receipt_name, receipt.as_dict())
+        entries.append({
+            "trial": index,
+            "seed": trial_seed,
+            "scene": scene_config.as_dict(),
+            "outcome": outcome,
+            "resolved": bool(receipt.metrics.get("resolved")),
+            "run_id": receipt.run_id,
+            "content_hash": receipt.content_hash,
+            "receipt": receipt_name,
+        })
+    report = {
+        "schema_version": 1,
+        "mode": IntelTableWorld.mode,
+        "kind": "exploratory randomized legacy table-setting report; not a promotion claim",
+        "trials": trials,
+        "seed_start": seed,
+        "outcomes": outcomes,
+        "receipts": entries,
+    }
+    _write_json_once(root_path / "report.json", report)
+    return report
 
 
 # ---------------------------------------------------------------------------

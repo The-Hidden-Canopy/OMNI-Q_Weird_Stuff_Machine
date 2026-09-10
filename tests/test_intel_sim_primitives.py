@@ -6,6 +6,8 @@ installing the ``intel`` extra (``pip install -e ".[dev,intel]"``).
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pytest
 
@@ -18,8 +20,13 @@ from omni_q.intel_sim import (
     DRAWER_OPEN,
     GRIPPER_CLOSED,
     GRIPPER_OPEN,
+    IntelTableObserver,
+    IntelTableVerifier,
     IntelTableWorld,
     build_intel_sim_engine,
+    dual_so101_xml,
+    IntelSceneConfig,
+    run_intel_table_evaluation_report,
 )
 
 GRIPPER_QPOS_ADR = 5  # Jaw is joint index 5 within one arm's 6-joint block
@@ -41,6 +48,70 @@ def test_open_then_close_drawer_moves_its_qpos_both_ways():
 
     _send(world, "CLOSE", {"object": "drawer"})
     assert world.simulation_summary()["drawer_qpos"] == pytest.approx(DRAWER_CLOSED, abs=1e-6)
+
+
+def test_drawer_postcondition_verification_is_physics_backed_and_fail_closed():
+    world = IntelTableWorld()
+    verifier = IntelTableVerifier(world)
+    observer = IntelTableObserver()
+
+    _send(world, "OPEN", {"object": "drawer"})
+    open_step = TransitionRequest(
+        step_id="verify_open", op="OPEN", args={"object": "drawer"},
+        expected_revision=world.state().revision, actor="intel.left_arm",
+    )
+    assert verifier.check(open_step, observer.observe(world.state())).ok
+
+    # A stale/fabricated drawer label must not pass merely because the OPEN
+    # operation was requested.  Perturb the simulator, then re-run the same
+    # postcondition check against the observed state.
+    world.data.qpos[world._drawer_qpos_adr] = DRAWER_CLOSED
+    world._mujoco.mj_forward(world.model, world.data)
+    assert not verifier.check(open_step, observer.observe(world.state())).ok
+
+    _send(world, "CLOSE", {"object": "drawer"})
+    close_step = TransitionRequest(
+        step_id="verify_close", op="CLOSE", args={"object": "drawer"},
+        expected_revision=world.state().revision, actor="intel.left_arm",
+    )
+    assert verifier.check(close_step, observer.observe(world.state())).ok
+
+
+def test_legacy_scene_randomization_is_seeded_at_build_time():
+    base = IntelSceneConfig()
+    randomized = IntelSceneConfig(seed=701, randomized=True)
+    assert dual_so101_xml(base) == dual_so101_xml(IntelSceneConfig())
+    assert dual_so101_xml(randomized) == dual_so101_xml(randomized)
+    assert dual_so101_xml(randomized) != dual_so101_xml(
+        IntelSceneConfig(seed=702, randomized=True)
+    )
+
+
+def test_legacy_scene_randomization_bounds_fail_closed():
+    with pytest.raises(ValueError, match="position_jitter_m"):
+        IntelSceneConfig(position_jitter_m=0.011)
+    with pytest.raises(ValueError, match="yaw_jitter_rad"):
+        IntelSceneConfig(yaw_jitter_rad=0.26)
+
+
+def test_randomized_legacy_report_retains_hashed_receipts(tmp_path):
+    report = run_intel_table_evaluation_report(tmp_path, trials=2, seed=701)
+
+    assert report["kind"].endswith("not a promotion claim")
+    assert len(report["receipts"]) == 2
+    assert len({entry["run_id"] for entry in report["receipts"]}) == 2
+    assert sum(report["outcomes"].values()) == 2
+    for entry in report["receipts"]:
+        persisted = json.loads((tmp_path / entry["receipt"]).read_text(encoding="utf-8"))
+        assert persisted["content_hash"] == entry["content_hash"]
+        assert persisted["inputs"]["mode"] == "simulation-scripted-manipulation"
+        assert len(persisted["actions"]) > 0
+    assert (tmp_path / "report.json").exists()
+
+
+def test_randomized_legacy_report_rejects_empty_trial_count(tmp_path):
+    with pytest.raises(ValueError, match="trials must be positive"):
+        run_intel_table_evaluation_report(tmp_path, trials=0)
 
 
 def test_pick_and_place_keep_gripper_command_honest_on_failure():

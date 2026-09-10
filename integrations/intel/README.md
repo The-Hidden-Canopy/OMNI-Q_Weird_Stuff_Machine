@@ -99,8 +99,10 @@ alongside the YOLO perception node.
   branch. Fixed in `src/omni_q/fakes.py` (shared, not Intel-specific) to only
   apply that check to `op == "VERIFY"`. Tests: `tests/test_intel_sim_primitives.py`.
   Still open: bimanual primitives (OQ-011: HANDOFF has a minimal branch,
-  STABILIZE/REGRASP/COOPERATIVE_ROTATE don't yet), and OPEN/CLOSE postcondition
-  verification (currently a trivial pass, see `FakeVerifier`).
+  STABILIZE/REGRASP/COOPERATIVE_ROTATE don't yet). `OPEN`/`CLOSE` on the
+  drawer now have a MuJoCo-backed postcondition check in
+  `IntelTableVerifier`; the other legacy primitives retain their existing
+  bounded verifier behavior.
 - [x] Visual proof + kinematic object placement — `demo_intel_sim.py` gained
   `--viewer` (live interactive MuJoCo window, synced + paced per step) and
   `--render-dir` (PNG per step + assembled `trace.gif`, a first step toward
@@ -148,13 +150,17 @@ alongside the YOLO perception node.
   arm) this general path doesn't apply yet. Tests:
   `tests/test_intel_sim_primitives.py` (IK/gripper/revert behavior;
   updated to assert the *honest* outcome, not a success rate not yet
-  achieved), full suite green (173/173 after merging with the
+  achieved), full suite green (180/180 at this checkout after merging with the
   contact-handoff/perception work below).
 - [ ] LeRobot dataset/demonstration capture from the MuJoCo scene
 - [ ] Train/fine-tune a VLA or imitation-learning policy (SmolVLA, Pi0.5, ACT, or other)
 - [ ] Capability-node wrappers for arm primitives
 - [ ] Policy/perception export to OpenVINO IR, run on Core Ultra Series 2/3
-- [ ] Environment randomization + 10-seed evaluation harness
+- [x] Bounded environment randomization + 10-seed evaluation harness —
+  `IntelSceneConfig` applies explicit build-time tableware position/yaw jitter;
+  `run_intel_table_evaluation_report(...)` retains one hashed receipt per seed
+  and classifies observed outcomes. This is exploratory controller evidence,
+  not a promotion claim.
 - [ ] Intel inference benchmark script (latency, throughput, device, precision)
 - [ ] Anomalib + OpenVINO defect path (onsite)
 - [ ] Natural-language instruction → capability graph binding
