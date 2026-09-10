@@ -36,10 +36,12 @@ Sourcing plan for both the YOLO detector (OQ-008) and the Omni policy /
 planner — scoped to the one use case (bimanual dual-SO-101 table setting):
 [`../docs/datasets.md`](../docs/datasets.md).
 
-TL;DR: **synthetic-from-sim first** (perfect labels, exact in-distribution, no
-licence risk), seasoned with LVIS / Open Images for the detector and
-`dongyoonkim/so101-pi05-base-dataset` + `armnet/...bimanual_so101` for the
-policy; ground the planner on LIBERO.
+TL;DR (2 h to deadline): the detector is a **head-swap + fine-tune of our own
+`KissTheHabit/yolov8n-hituav-thermal-finetune`** on labelled frames rendered
+straight from the OQ-006/007 MuJoCo scene, exported to OpenVINO IR + QAIRT.
+Omni trains nothing now — it runs on `RulePlanner` + `ScheduledPlanner` +
+`RuntimeMutator` + the real MuJoCo path. Everything else is a post-deadline
+appendix.
 
 ## Related owned assets
 
