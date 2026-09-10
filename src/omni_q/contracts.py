@@ -92,9 +92,51 @@ class Constraint:
 
     kind: str
     value: Any = None
+    source: str = "operator"
+    justification: str = ""
 
     def as_dict(self) -> dict[str, Any]:
-        return {"kind": self.kind, "value": self.value}
+        return {
+            "kind": self.kind,
+            "value": self.value,
+            "source": self.source,
+            "justification": self.justification,
+        }
+
+
+class ConstraintValidationError(ValueError):
+    """An external request tried to mutate a graph without adequate authority."""
+
+
+_CONSTRAINT_KINDS = frozenset({"forbid_object", "keep_local", "pin", "prefer_arm", "style"})
+
+
+def validate_operator_constraint(
+    kind: str,
+    value: Any = None,
+    *,
+    source: str = "operator",
+    justification: str | None = None,
+) -> Constraint:
+    """Validate an operator-authored graph restriction before it is queued.
+
+    AI output can suggest a constraint but cannot inject it through this path.
+    The operator transcript/UI rationale is retained as evidence for later
+    replay, rather than silently becoming a planner mutation.
+    """
+    if source != "operator":
+        raise ConstraintValidationError("only an operator may submit a graph constraint")
+    if kind not in _CONSTRAINT_KINDS:
+        raise ConstraintValidationError(f"unsupported constraint kind: {kind}")
+    if not isinstance(justification, str) or not justification.strip():
+        raise ConstraintValidationError("operator constraint requires justification")
+    if kind == "forbid_object" and (not isinstance(value, str) or not value.strip()):
+        raise ConstraintValidationError("forbid_object requires an object id")
+    if kind == "prefer_arm" and value not in {"left", "right"}:
+        raise ConstraintValidationError("prefer_arm must be left or right")
+    if kind == "keep_local" and value is not None:
+        raise ConstraintValidationError("keep_local does not accept a value")
+    return Constraint(kind=kind, value=value, source=source, justification=justification.strip())
 
 
 @dataclass
@@ -105,6 +147,7 @@ class WorldState:
     constraints: tuple[Constraint, ...] = ()
     revision: int = 0
     ownership: dict[str, str | None] = field(default_factory=dict)
+    org_id: str = "local-demo"
 
     def misplaced(self) -> list[Detection]:
         return [o for o in self.objects.values() if o.misplaced]
@@ -123,6 +166,7 @@ class WorldState:
             "constraints": [c.as_dict() for c in self.constraints],
             "objects": {k: asdict(v) for k, v in self.objects.items()},
             "ownership": dict(self.ownership),
+            "org_id": self.org_id,
         }
 
 
@@ -215,6 +259,7 @@ class TransitionRequest:
     args: dict[str, Any]
     expected_revision: int
     actor: str | None = None
+    org_id: str = "local-demo"
 
 
 @dataclass(frozen=True)
@@ -315,6 +360,7 @@ class MissionEnvelope:
     """
 
     mission_id: str
+    org_id: str = "local-demo"
     version: int = 1
     permitted_ops: tuple[str, ...] = ()          # empty = any op allowed
     forbidden_objects: tuple[str, ...] = ()
@@ -326,6 +372,7 @@ class MissionEnvelope:
         payload = json.dumps(
             {
                 "mission_id": self.mission_id,
+                "org_id": self.org_id,
                 "version": self.version,
                 "permitted_ops": sorted(self.permitted_ops),
                 "forbidden_objects": sorted(self.forbidden_objects),

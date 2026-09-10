@@ -20,13 +20,20 @@ from .contracts import (
 
 
 class MockWorld:
-    def __init__(self, objects: list[Detection], constraints: tuple[Constraint, ...] = ()) -> None:
+    def __init__(
+        self,
+        objects: list[Detection],
+        constraints: tuple[Constraint, ...] = (),
+        *,
+        org_id: str = "local-demo",
+    ) -> None:
         self._objects: dict[str, Detection] = {o.object_id: o for o in objects}
         self._ownership: dict[str, str | None] = {o.object_id: None for o in objects}
         self._constraints: tuple[Constraint, ...] = constraints
         self.frame = 0
         self.revision = 0
         self.goal: str | None = None
+        self.org_id = org_id
 
     # -- construction --------------------------------------------------
     @classmethod
@@ -48,6 +55,7 @@ class MockWorld:
             constraints=self._constraints,
             revision=self.revision,
             ownership=dict(self._ownership),
+            org_id=self.org_id,
         )
 
     # -- authoritative transitions ---------------------------------
@@ -66,6 +74,10 @@ class MockWorld:
             raise TransitionRejected(
                 f"{request.step_id}: expected revision {request.expected_revision}, "
                 f"current revision is {self.revision}"
+            )
+        if request.org_id != self.org_id:
+            raise TransitionRejected(
+                f"{request.step_id}: request org {request.org_id} does not match world org {self.org_id}"
             )
 
         obj_id = request.args.get("object")

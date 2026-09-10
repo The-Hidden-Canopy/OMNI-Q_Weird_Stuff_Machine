@@ -32,8 +32,10 @@ from .contracts import (
     Verify,
     WorldState,
     merge_mode,
+    validate_operator_constraint,
 )
 from .events import EventBus
+from .provenance import run_id_for
 
 
 class OmniQ:
@@ -72,16 +74,30 @@ class OmniQ:
         self._run_id = ""
 
     # -- external control (Speechmatics / UI feed into these) ----------
-    def add_constraint(self, kind: str, value: Any = None) -> None:
-        self._pending_constraints.append(Constraint(kind, value))
-        self.bus.publish("constraint.queued", kind=kind, value=value)
+    def add_constraint(
+        self,
+        kind: str,
+        value: Any = None,
+        *,
+        source: str = "operator",
+        justification: str | None = None,
+    ) -> None:
+        constraint = validate_operator_constraint(
+            kind,
+            value,
+            source=source,
+            justification=justification,
+        )
+        self._pending_constraints.append(constraint)
+        self.bus.publish("constraint.queued", **constraint.as_dict())
 
     def _apply_constraints(self) -> bool:
         if not self._pending_constraints:
             return False
         for c in self._pending_constraints:
             self.world.add_constraint(c)
-            self.bus.publish("constraint.added", kind=c.kind, value=c.value)
+            self.bus.publish("constraint.added", **c.as_dict(),
+                             state_revision=self.world.state().revision)
             if c.kind == "keep_local":
                 self._escalate(AutonomyMode.LOCAL_ONLY)
         self._pending_constraints.clear()
@@ -101,7 +117,7 @@ class OmniQ:
         dec.envelope_digest = self.envelope.digest()
         d = dec.as_dict()
         self._decisions.append(d)
-        self.bus.publish("plan.decision", **d)
+        self.bus.publish("plan.decision", **d, graph_revision=dec.revision)
 
     def _recompile(self, world: WorldState, reason: str) -> None:
         self.graph = self.planner.replan(self.graph, world, reason)
@@ -117,28 +133,32 @@ class OmniQ:
         state = self.world.state()
         inherited = list(state.constraints)
         inherited.extend(
-            Constraint("forbid_object", object_id)
+            Constraint("forbid_object", object_id, source="mission_envelope",
+                       justification="fixed mission authority")
             for object_id in self.envelope.forbidden_objects
         )
         if self.envelope.local_only:
-            inherited.append(Constraint("keep_local"))
+            inherited.append(Constraint("keep_local", source="mission_envelope",
+                                        justification="fixed mission authority"))
         return replace(state, constraints=tuple(inherited))
 
     # -- run --------------------------------------------------------
     def run(self, goal: str) -> ReceiptRecord:
-        run_id = uuid.uuid4().hex[:12]
         started = time.time()
-        self._run_id = run_id
         self.world.start_mission(goal)
+        run_config = self._run_config(goal)
+        run_id = run_id_for(run_config)
+        self._run_id = run_id
         self._actions = []
         self._decisions = []
-        self.bus.publish("run.started", run_id=run_id, goal=goal,
-                         envelope=self.envelope.digest())
-
         world = self._effective_world()
+        self.bus.begin_run(run_id)
+        self.bus.publish("run.started", goal=goal, envelope=self.envelope.digest(),
+                         state_revision=world.revision)
         obs = self.observer.observe(world)
         self.bus.publish("observed", frame=obs.frame,
-                         misplaced=[d.object_id for d in obs.misplaced()])
+                         misplaced=[d.object_id for d in obs.misplaced()],
+                         state_revision=world.revision)
 
         self.graph = self.planner.plan(goal, world)
         self._capture_decision()
@@ -162,7 +182,8 @@ class OmniQ:
             # capability lost? -> recompile onto what remains
             if step.contract == "manipulate" and not self.manipulator.supports(step.op):
                 revisions += 1
-                self.bus.publish("capability.lost", op=step.op, step=step.id)
+                self.bus.publish("capability.lost", op=step.op, step=step.id,
+                                 state_revision=world.revision)
                 self._escalate(AutonomyMode.DEGRADED)
                 if revisions > self.max_revisions:
                     self._escalate(AutonomyMode.HOLD)
@@ -175,7 +196,8 @@ class OmniQ:
                 step.device = self.device.route(step, world)
             except RuntimeError as exc:
                 revisions += 1
-                self.bus.publish("placement.failed", step=step.id, error=str(exc))
+                self.bus.publish("placement.failed", step=step.id, error=str(exc),
+                                 state_revision=world.revision)
                 self._escalate(AutonomyMode.DEGRADED)
                 if revisions > self.max_revisions:
                     self._escalate(AutonomyMode.HOLD)
@@ -219,18 +241,40 @@ class OmniQ:
             run_id=run_id,
             goal=goal,
             inputs={"goal": goal, "world0": {"frame": obs.frame},
-                    "envelope": self.envelope.digest()},
+                    "envelope": self.envelope.digest(), "run_config": run_config,
+                    "mode": getattr(self.world, "mode", "mock")},
             plan=self.graph,
             actions=self._actions,
             metrics=metrics,
             decisions=self._decisions,
             rejected=rejected,
         )
-        self.bus.publish("run.finished", run_id=run_id, metrics=metrics,
-                         content_hash=receipt.content_hash)
+        self.bus.publish("run.finished", metrics=metrics,
+                         content_hash=receipt.content_hash,
+                         state_revision=self.world.state().revision,
+                         graph_revision=self.graph.revision)
         return receipt
 
     # -- helpers --------------------------------------------------
+    def _run_config(self, goal: str) -> dict[str, Any]:
+        """Stable run identity; excludes observation ticks and mutable ownership."""
+        state = self._effective_world()
+        return {
+            "goal": goal,
+            "org_id": state.org_id,
+            "envelope": self.envelope.digest(),
+            "objects": {
+                object_id: {
+                    "class": detection.cls,
+                    "zone": detection.zone,
+                    "target_zone": detection.target_zone,
+                    "status": detection.status.value,
+                }
+                for object_id, detection in sorted(state.objects.items())
+            },
+            "constraints": [constraint.as_dict() for constraint in state.constraints],
+        }
+
     def _next_step(self, executed: set[str]) -> Step | None:
         for step in self.graph.topo_order():
             if step.id in executed:
@@ -254,7 +298,9 @@ class OmniQ:
                 return False
 
         step.state = "running"
-        self.bus.publish("step.started", **step.as_dict())
+        self.bus.publish("step.started", **step.as_dict(),
+                         state_revision=world.revision,
+                         graph_revision=self.graph.revision)
         if step.contract == "manipulate":
             res = self.manipulator.execute(step, world)
             if res.ok:
@@ -264,6 +310,7 @@ class OmniQ:
                     args=dict(step.args),
                     expected_revision=world.revision,
                     actor=step.device,
+                    org_id=self.envelope.org_id,
                 )
                 try:
                     transition = self.world.apply_transition(request)
@@ -287,7 +334,9 @@ class OmniQ:
             "step": step.id, "op": step.op, "arm": step.arm,
             "device": step.device, "state": step.state, "result": step.result,
         })
-        self.bus.publish("step.finished", **step.as_dict())
+        self.bus.publish("step.finished", **step.as_dict(),
+                         state_revision=self.world.state().revision,
+                         graph_revision=self.graph.revision)
         return ok
 
     def _authorize(self, step: Step, world: WorldState) -> ActionAuthorization:
@@ -298,6 +347,9 @@ class OmniQ:
         if not self.envelope.op_permitted(step.op):
             verdict = AuthorizationVerdict.DENY
             reason = f"operation {step.op} is outside the mission envelope"
+        elif world.org_id != self.envelope.org_id:
+            verdict = AuthorizationVerdict.DENY
+            reason = "world organization scope does not match the mission envelope"
         elif obj_id in set(self.envelope.forbidden_objects) or obj_id in world.forbidden():
             verdict = AuthorizationVerdict.DENY
             reason = f"object {obj_id} is forbidden"
@@ -327,18 +379,24 @@ class OmniQ:
                 envelope_digest=proposed.envelope_digest,
             )
             self.bus.publish("authorization.failed", step=step.id, error=str(exc))
-        self.bus.publish("step.authorized", **finalized.as_dict())
+        self.bus.publish("step.authorized", authorization=finalized.as_dict(),
+                         state_revision=world.revision,
+                         graph_revision=self.graph.revision)
         return finalized
 
     def _verify_step(self, step: Step):
-        fresh_obs = self.observer.observe(self.world.state())
+        state = self.world.state()
+        fresh_obs = self.observer.observe(state)
         result = self.verifier.check(step, fresh_obs)
         self.bus.publish("verified", step=step.id, ok=result.ok,
-                         mismatch=list(result.mismatch))
+                         mismatch=list(result.mismatch),
+                         state_revision=state.revision,
+                         graph_revision=self.graph.revision)
         return result
 
     def _emit_graph(self, kind: str, **extra: Any) -> None:
-        self.bus.publish(kind, graph=self.graph.as_dict(), **extra)
+        self.bus.publish(kind, graph=self.graph.as_dict(), **extra,
+                         graph_revision=self.graph.revision)
 
 
 def _merge_rejected(decisions: list[dict[str, Any]]) -> list[dict[str, Any]]:
