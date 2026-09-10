@@ -64,6 +64,31 @@
 > range. See `integrations/intel/README.md` and `src/omni_q/intel_sim.py`'s
 > module docstring for the full writeup. Task completion (30 pts) is still
 > the single biggest point risk on the board.
+>
+> **Fourth addendum, same day:** a teammate independently landed real
+> orientation-aware IK (`_grasp_frame`/`_ik_reach_pad_pose`, jointly solving
+> position and orientation, verified against actual close+lift rather than
+> position error alone) plus a `cup_1` resized to fit the gripper's real
+> measured envelope. Result, honestly measured: `world._do_pick(6,"cup_1")`
+> now returns a genuine held grasp — the first reliable success this whole
+> investigation has produced, from real control + geometry work, not from
+> weakened physics. **The same merge also introduced a real problem**,
+> caught before it reached a demo or rubric claim: `contype`/`conaffinity`
+> set to 0/0 on every non-fingertip-pad arm geom, which under MuJoCo's
+> collision rule makes the whole arm mesh except the two pads unable to
+> collide with the table, the drawer, or any object — a no-clip exemption,
+> not a control improvement, and exactly the category of change the
+> no-simulation-cheating rule was established to rule out earlier this
+> session. Flagged to the user before touching it, given explicit direction
+> to fix it while preserving real-world realism, reverted entirely. Verified
+> the real grasp still holds with full collision restored (it does — the
+> orientation-aware control + correct geometry was always doing the real
+> work). Cost, accepted not hidden: full suite runtime ~95s → ~6min once
+> physics is honest. `plate_1`/`fork_1`/`spoon_1`/`napkin_1` still don't
+> hold. See `integrations/intel/README.md` and `src/omni_q/intel_sim.py`'s
+> module docstring for the full writeup. Task completion (30 pts) risk has
+> shifted from "grasping doesn't work at all" to "grasping works for one
+> object class, real physics confirmed, four to go."
 
 ## Method
 

@@ -40,6 +40,27 @@ def _send(world: IntelTableWorld, op: str, args: dict, actor: str = "intel.left_
     return world.apply_transition(request)
 
 
+def _disable_gripper_collision(world: IntelTableWorld, arm: str) -> None:
+    """Adversarial test fixture: force a real grasp failure by making one
+    arm's whole gripper (Fixed_Jaw + Moving_Jaw bodies -- every geom they
+    own, not just the named jaw_pad_* markers) unable to collide with
+    anything. Zeroing only the 4 named pad geoms isn't enough on its own:
+    with every geom in this scene on plain MuJoCo defaults (contype=
+    conaffinity=1, see intel_sim.py's no-clip-exemption revert), the
+    gripper's own unnamed collision meshes (Fixed_Jaw_Collision_1/2,
+    Moving_Jaw_Collision_1/2/3 from the source MJCF) still register real
+    contact even with the pad markers disabled -- checked directly, this
+    was silently letting the "adversarial" fixture grasp succeed anyway."""
+    mujoco = world._mujoco
+    for body_name in (f"{arm}_Fixed_Jaw", f"{arm}_Moving_Jaw"):
+        body_id = mujoco.mj_name2id(world.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+        for geom_id in range(world.model.ngeom):
+            if world.model.geom_bodyid[geom_id] == body_id:
+                world.model.geom_contype[geom_id] = 0
+                world.model.geom_conaffinity[geom_id] = 0
+    mujoco.mj_forward(world.model, world.data)
+
+
 def test_open_then_close_drawer_moves_its_qpos_both_ways():
     world = IntelTableWorld()
 
@@ -159,16 +180,16 @@ def test_open_close_rotate_present_execute_individually_and_differ():
 def test_failed_grasp_reverts_worldstate_instead_of_claiming_success():
     """A real grasp failure must not leave a scripted ownership claim.
 
-    The calibrated cup now succeeds on the nominal scene.  This adversarial
-    fixture disables the named pad contacts, forcing the physical check to
-    fail and exercising the same rollback boundary.
+    The calibrated cup now succeeds on the nominal scene (see
+    intel_sim.py's module docstring: real orientation-aware IK + a resized
+    cup_1 produce a genuine held grasp for the first time this
+    investigation has seen). This adversarial fixture (see
+    _disable_gripper_collision) disables the right gripper's own contact
+    geoms, forcing the physical check to fail and exercising the same
+    rollback boundary regardless of which object currently succeeds.
     """
     world = IntelTableWorld()
-    for geom_id in range(world.model.ngeom):
-        name = world._mujoco.mj_id2name(world.model, world._mujoco.mjtObj.mjOBJ_GEOM, geom_id) or ""
-        if "jaw_pad_" in name:
-            world.model.geom_contype[geom_id] = 0
-    world._mujoco.mj_forward(world.model, world.data)
+    _disable_gripper_collision(world, "right")
 
     request = TransitionRequest(
         step_id="t", op="PICK", args={"object": "cup_1"},
@@ -231,37 +252,50 @@ def test_oriented_pad_solver_returns_pose_metrics_and_respects_arm_only_scope():
     )
 
 
-def test_legacy_scene_exposes_named_pad_only_contacts_and_calibrated_cup():
+def test_legacy_scene_exposes_calibrated_cup_and_no_collision_exemptions():
+    """cup_1's real calibration survives, but the earlier version of this
+    test also asserted a contype/conaffinity scheme that exempted the arm
+    from colliding with the table/drawer/objects -- a no-clip cheat, not a
+    control improvement (see intel_sim.py's module docstring). Reverted:
+    every geom in this scene uses plain MuJoCo defaults (contype=
+    conaffinity=1) and collides with everything. The narrower, real fix
+    for the order-dependence bug that scheme was also solving --
+    tableware not shoving other tableware before its own governed PICK --
+    is now explicit named <exclude> pairs between the 5 tableware bodies,
+    not a bitmask that also happened to exempt the arm."""
     world = IntelTableWorld()
     mujoco = world._mujoco
     cup_id = mujoco.mj_name2id(world.model, mujoco.mjtObj.mjOBJ_GEOM, "cup_1")
     pad_id = world._pad_geom[0]
     assert tuple(world.model.geom_size[cup_id][:2]) == pytest.approx((0.022, 0.050), abs=1e-6)
     assert tuple(world.model.geom_friction[cup_id]) == pytest.approx((3.0, 0.020, 0.001), abs=1e-6)
-    assert int(world.model.geom_contype[pad_id]) == 4
-    assert int(world.model.geom_conaffinity[pad_id]) == 0
+    # Every geom -- pads included -- uses plain MuJoCo defaults, not a
+    # custom contype/conaffinity scheme (the pad's own friction/solref/
+    # solimp overrides are real material tuning, not a collision mask).
+    for geom_id in (pad_id, cup_id):
+        assert int(world.model.geom_contype[geom_id]) == 1
+        assert int(world.model.geom_conaffinity[geom_id]) == 1
     for object_id in ("plate_1", "cup_1", "fork_1", "spoon_1", "napkin_1"):
         geom_id = mujoco.mj_name2id(world.model, mujoco.mjtObj.mjOBJ_GEOM, object_id)
-        assert int(world.model.geom_contype[geom_id]) == 16
-        # Tableware contacts the table (bit 2) and named pads (bit 4), not
-        # unrelated tableware (bit 16), so one placement cannot shove the
-        # next object before its own governed transition.
-        assert int(world.model.geom_conaffinity[geom_id]) == 6
+        assert int(world.model.geom_contype[geom_id]) == 1
+        assert int(world.model.geom_conaffinity[geom_id]) == 1
+    # The real, narrower fix: explicit exclude pairs between all 5
+    # tableware bodies (10 pairs), on top of whatever arm self-collision
+    # excludes the source MJCF already declared.
+    assert world.model.nexclude >= 10
 
 
 def test_failed_grasp_restores_mujoco_state_for_a_clean_retry():
     """A rejected real attempt must roll back physics as well as WorldState.
 
-    Disable the named pad contacts to force a physical failure.  Compare all
-    state that the transition advances, not just the ownership label that the
-    MockWorld layer reverts.
+    Disable the right gripper's own contact geoms (see
+    _disable_gripper_collision) to force a physical failure regardless of
+    which object currently succeeds. Compare all state that the
+    transition advances, not just the ownership label that the MockWorld
+    layer reverts.
     """
     world = IntelTableWorld()
-    for geom_id in range(world.model.ngeom):
-        name = world._mujoco.mj_id2name(world.model, world._mujoco.mjtObj.mjOBJ_GEOM, geom_id) or ""
-        if "jaw_pad_" in name:
-            world.model.geom_contype[geom_id] = 0
-    world._mujoco.mj_forward(world.model, world.data)
+    _disable_gripper_collision(world, "right")
     before_qpos = world.data.qpos.copy()
     before_qvel = world.data.qvel.copy()
     before_ctrl = world.data.ctrl.copy()

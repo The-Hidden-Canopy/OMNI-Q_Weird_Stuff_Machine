@@ -269,16 +269,85 @@ alongside the YOLO perception node.
      precision** (real 6-DOF pose-aware IK, jointly solving position and
      full orientation with tighter convergence), not reach, not orientation
      search range. 207/207 tests still green.
+- [x] **Real orientation-aware IK landed (a teammate's independent work,
+  merged same day) -- the first genuine held grasp this whole
+  investigation has produced -- plus a real bug caught in the same merge.**
+  `_grasp_frame`/`_ik_reach_pad_pose` solve position and orientation
+  jointly (using `mj_jacGeom`'s rotational Jacobian, not just position),
+  with a bounded roll-candidate retry verified against actual close+lift
+  outcome, not just reach error -- exactly the "real 6-DOF pose-aware IK"
+  called for above. `cup_1` was also resized to fit the gripper's actually
+  -measured envelope (the previous 64mm cup left no real margin) and its
+  friction/contact-softness tuned to real ceramic/rubber-pad values.
+  **Result, honestly measured**: `world._do_pick(6,"cup_1")` now returns a
+  genuine held grasp. `plate_1`/`fork_1`/`spoon_1`/`napkin_1` still don't
+  hold. **The same commit also introduced a real problem**: `contype`/
+  `conaffinity` set to 0/0 on every non-fingertip-pad arm geom. Under
+  MuJoCo's collision rule (`(contype1 & conaffinity2) | (contype2 &
+  conaffinity1)` must be nonzero to collide), a geom with both at zero can
+  never collide with anything -- the entire arm mesh except the two pads
+  could pass through the table, the drawer, and every object with zero
+  contact resistance. Not a control improvement; the simulation no longer
+  simulating the arm's own body, exactly the category of change the
+  no-simulation-cheating rule exists to rule out. Flagged to the user
+  before touching it (this repo's collaboration norm for exactly this kind
+  of judgment call), given explicit direction to fix it while keeping real-
+  world realism, reverted entirely -- no contype/conaffinity anywhere in
+  the main scene now, plain MuJoCo defaults, everything collides with
+  everything. A second commit landed in parallel re-added a similar
+  arm/table exemption comment plus a bitmask-based tableware-vs-tableware
+  exclusion (to stop one placement shoving a later object before its own
+  governed PICK -- a real, separate, legitimate fix); merged that intent
+  forward as explicit named `<exclude>` pairs between the 5 tableware
+  bodies instead of a bitmask, so it doesn't reintroduce any arm exemption
+  alongside it. **Verified the fix doesn't regress the real grasp**:
+  `cup_1` still holds with full collision restored, because the
+  orientation-aware control + correctly-sized geometry was doing the real
+  work, not the no-clip exemption. Real cost, accepted not hidden: full
+  suite runtime ~95s → ~6min once physics is honest (more contact
+  resolution, more retry attempts on the objects that still fail).
+  Reconciled tests whose premises no longer held (an adversarial pad-
+  disable fixture, a separately-landed pattern, replaced two tests that
+  had assumed `cup_1` always fails, and a `contype`/`conaffinity`-asserting
+  test was rewritten to check for plain MuJoCo defaults + the exclude pairs
+  instead), plus one asserting a uniform tableware friction value that had
+  lost real material differentiation (napkin/cloth restored to grip more
+  than metal cutlery), and one asserting zero workspace scheduling
+  conflicts are always achievable (not a real guarantee once physics is
+  honest -- loosened to guard the actual regression it was meant to
+  catch). 294+/294+ tests green. Not addressed this pass: the separate,
+  pre-existing `_ContactHandoffController` scene below has used a similar
+  contype/conaffinity scheme since before this session -- predates this
+  merge, stays its own deliberately bounded evidence track, worth the
+  team's attention on its own terms but out of scope here.
+- [x] **The win is bigger than the 10-seed aggregate shows.** Re-ran the
+  evaluation harness after both fixes above
+  (`evidence/benchmark_results/intel_table_eval_2026-09-10-v6/`): still
+  10/10 `grasp_failure` in the summary table, but a trial's raw receipt
+  shows `pick_cup_1` *and* `move_cup_1` both genuinely succeeding -- a full
+  real pick-and-place -- before the plan reaches `fork_1`, which still
+  doesn't converge and exhausts its retries. The report's per-trial
+  outcome is a single first-blocking-failure label, so a trial that
+  completes one whole object looks identical in the summary to one that
+  never succeeds at anything. Two concrete follow-ups this surfaces: (1) a
+  finer-grained per-object outcome tally in the report generator, so real
+  progress like this doesn't hide behind a single failure label; (2) the
+  scheduler could let a persistently-failing object stop blocking attempts
+  on the rest of the plan, since that's the only reason `cup_1`'s real
+  success doesn't already show up here.
+
 ### Legacy table-setting follow-up (2026-09-10)
 
 The legacy `simulation-scripted-manipulation` route now has a bounded,
 object-aware contact primitive in `IntelTableWorld`: it derives a live grasp
 frame from each object's observed yaw, tracks a named fingertip pad with a
 6D damped-least-squares solve, preserves joint-limit margins, and retries only
-from a restored MuJoCo snapshot.  The scene uses explicit pad-only contact
-geometries, a calibrated `cup_1` envelope, table-support collision groups,
-and tableware masks that allow table/pad contact without unrelated objects
-shoving one another.
+from a restored MuJoCo snapshot. The scene uses real fingertip-pad friction
+tuning and a calibrated `cup_1` envelope (not, as an earlier version of this
+note said, pad-only contact geometries or arm/table collision groups --
+that turned out to be a no-clip exemption, reverted above); tableware not
+shoving other tableware before its own governed PICK is now explicit named
+`<exclude>` pairs between the 5 tableware bodies.
 
 This is a capability improvement, not a completed table-setting claim.  The
 latest local probes show physically grounded isolated grasps for the calibrated
@@ -288,9 +357,11 @@ The engine therefore continues to report failed transitions and replan/hold;
 it does not convert those failures into a success score.  The separate
 `simulation-contact-handoff` path remains the only OQ-010/OQ-011 promotion
 evidence, with its own receipts and 10/10 deterministic gate.
-The fresh [10-seed legacy report](../../evidence/benchmark_results/intel_table_eval_2026-09-10-v4/report.json)
-records 0/10 complete runs (2 grasp failures, 8 placement failures); this is
-exploratory diagnostic evidence, not a promotion score.
+An earlier [10-seed legacy report](../../evidence/benchmark_results/intel_table_eval_2026-09-10-v4/report.json)
+(before the no-clip fix) recorded 0/10 complete runs (2 grasp failures, 8
+placement failures); the [v6 report](../../evidence/benchmark_results/intel_table_eval_2026-09-10-v6/README.md)
+above is the current state. Both are exploratory diagnostic evidence, not a
+promotion score.
 
 ### Contact-handoff evidence boundary
 
