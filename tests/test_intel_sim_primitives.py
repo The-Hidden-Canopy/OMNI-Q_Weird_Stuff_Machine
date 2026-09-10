@@ -40,6 +40,27 @@ def _send(world: IntelTableWorld, op: str, args: dict, actor: str = "intel.left_
     return world.apply_transition(request)
 
 
+def _disable_gripper_collision(world: IntelTableWorld, arm: str) -> None:
+    """Adversarial test fixture: force a real grasp failure by making one
+    arm's whole gripper (Fixed_Jaw + Moving_Jaw bodies -- every geom they
+    own, not just the named jaw_pad_* markers) unable to collide with
+    anything. Zeroing only the 4 named pad geoms isn't enough on its own:
+    with every geom in this scene on plain MuJoCo defaults (contype=
+    conaffinity=1, see intel_sim.py's no-clip-exemption revert), the
+    gripper's own unnamed collision meshes (Fixed_Jaw_Collision_1/2,
+    Moving_Jaw_Collision_1/2/3 from the source MJCF) still register real
+    contact even with the pad markers disabled -- checked directly, this
+    was silently letting the "adversarial" fixture grasp succeed anyway."""
+    mujoco = world._mujoco
+    for body_name in (f"{arm}_Fixed_Jaw", f"{arm}_Moving_Jaw"):
+        body_id = mujoco.mj_name2id(world.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+        for geom_id in range(world.model.ngeom):
+            if world.model.geom_bodyid[geom_id] == body_id:
+                world.model.geom_contype[geom_id] = 0
+                world.model.geom_conaffinity[geom_id] = 0
+    mujoco.mj_forward(world.model, world.data)
+
+
 def test_open_then_close_drawer_moves_its_qpos_both_ways():
     world = IntelTableWorld()
 
@@ -162,16 +183,13 @@ def test_failed_grasp_reverts_worldstate_instead_of_claiming_success():
     The calibrated cup now succeeds on the nominal scene (see
     intel_sim.py's module docstring: real orientation-aware IK + a resized
     cup_1 produce a genuine held grasp for the first time this
-    investigation has seen). This adversarial fixture disables the named
-    pad contacts, forcing the physical check to fail and exercising the
-    same rollback boundary regardless of which object currently succeeds.
+    investigation has seen). This adversarial fixture (see
+    _disable_gripper_collision) disables the right gripper's own contact
+    geoms, forcing the physical check to fail and exercising the same
+    rollback boundary regardless of which object currently succeeds.
     """
     world = IntelTableWorld()
-    for geom_id in range(world.model.ngeom):
-        name = world._mujoco.mj_id2name(world.model, world._mujoco.mjtObj.mjOBJ_GEOM, geom_id) or ""
-        if "jaw_pad_" in name:
-            world.model.geom_contype[geom_id] = 0
-    world._mujoco.mj_forward(world.model, world.data)
+    _disable_gripper_collision(world, "right")
 
     request = TransitionRequest(
         step_id="t", op="PICK", args={"object": "cup_1"},
@@ -270,18 +288,14 @@ def test_legacy_scene_exposes_calibrated_cup_and_no_collision_exemptions():
 def test_failed_grasp_restores_mujoco_state_for_a_clean_retry():
     """A rejected real attempt must roll back physics as well as WorldState.
 
-    Disable the named pad contacts to force a physical failure regardless
-    of which object currently succeeds (see the same fixture in
-    test_failed_grasp_reverts_worldstate_instead_of_claiming_success).
-    Compare all state that the transition advances, not just the
-    ownership label that the MockWorld layer reverts.
+    Disable the right gripper's own contact geoms (see
+    _disable_gripper_collision) to force a physical failure regardless of
+    which object currently succeeds. Compare all state that the
+    transition advances, not just the ownership label that the MockWorld
+    layer reverts.
     """
     world = IntelTableWorld()
-    for geom_id in range(world.model.ngeom):
-        name = world._mujoco.mj_id2name(world.model, world._mujoco.mjtObj.mjOBJ_GEOM, geom_id) or ""
-        if "jaw_pad_" in name:
-            world.model.geom_contype[geom_id] = 0
-    world._mujoco.mj_forward(world.model, world.data)
+    _disable_gripper_collision(world, "right")
     before_qpos = world.data.qpos.copy()
     before_qvel = world.data.qvel.copy()
     before_ctrl = world.data.ctrl.copy()
