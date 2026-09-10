@@ -36,7 +36,7 @@ def test_merge_mode_never_downgrades_without_reset():
 
 def test_keep_local_escalates_mode():
     engine = build_mock_engine()
-    engine.add_constraint("keep_local")
+    engine.add_constraint("keep_local", justification="test operator command")
     receipt = engine.run("inspect and correct the workspace")
     assert receipt.metrics["mode"] == "LOCAL_ONLY"
     assert "mode.changed" in [e.kind for e in engine.bus.log]
@@ -46,7 +46,7 @@ def test_keep_local_escalates_mode():
 
 def test_plan_decision_records_rejected_forbidden_object():
     engine = build_mock_engine()
-    engine.add_constraint("forbid_object", "connector_2")
+    engine.add_constraint("forbid_object", "connector_2", justification="test boundary")
     receipt = engine.run("inspect and correct the workspace")
 
     assert receipt.decisions, "every compile should emit a PlanDecision"

@@ -61,8 +61,8 @@ def scenario_constraint_change() -> None:
     bus = EventBus()
     bus.subscribe(_printer)
     engine = build_mock_engine(bus)
-    engine.add_constraint("keep_local")
-    engine.add_constraint("prefer_arm", "left")
+    engine.add_constraint("keep_local", justification="spoken operator command: keep inference local")
+    engine.add_constraint("prefer_arm", "left", justification="spoken operator preference")
     # the left arm disappears before the run
     engine.device.set_online("arduino.left_arm", False)
     engine.run(GOAL)
