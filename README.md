@@ -87,6 +87,10 @@ hardware evidence yet.
 The `intel` project extra tracks the later LeRobot/OpenVINO policy stack; it is
 not required for, nor proof of, the current MuJoCo controller smoke.
 
+Set `OMNIQ_RECEIPTS_DIR` to keep per-run evidence bundles (inputs, graph,
+actions, metrics, hashes — verifiable via `verify_ledger`) instead of the
+default temp location.
+
 To run the judge-facing UI and its mock session event stream:
 
 ```bash
@@ -100,8 +104,17 @@ the boundary between the frontend event surface and real provider work.
 
 ## Working the backlog
 
-- [`BACKLOG.md`](BACKLOG.md) — all 48 tasks (OQ-001…OQ-048), owners, dependencies, critical path
+- [`BACKLOG.md`](BACKLOG.md) — all 48 tasks (OQ-001…OQ-048), owners, dependencies, critical path — 17 marked done, 10 in progress (core + hand-action specs) as of 2026-09-10
 - [`agents/`](agents/) — per-owner filtered task lists; bootstrap here without chat history
+
+## Measured evidence
+
+- [`integrations/intel/so101_capability_map.md`](integrations/intel/so101_capability_map.md) —
+  measured SO-101 joint limits, gripper range, wrist-roll travel, and reach from the pinned MuJoCo model (OQ-003)
+- [`integrations/intel/flourish_envelope.md`](integrations/intel/flourish_envelope.md) —
+  measured joint-velocity, grip-force, and bimanual shared-workspace bounds, with the OQ-014 spin trial protocol (OQ-026 pre-work)
+- [`evidence/benchmark_results/yolo_host_baseline_2026-09-10/README.md`](evidence/benchmark_results/yolo_host_baseline_2026-09-10/README.md) —
+  host latency/memory baseline for the perception model (ONNX CPU vs PyTorch CUDA) anchoring the Qualcomm variants (OQ-029)
 
 ## Documents
 
