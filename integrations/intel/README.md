@@ -8,6 +8,14 @@ Official title: **"Bimanual VLA Manipulation with Multi-Modal Reasoning"**, chal
 option **"Setting Up a Dinner Table"**. Full brief:
 [`docs/challenge-briefs/intel-online-physical-ai-challenge.md`](../../docs/challenge-briefs/intel-online-physical-ai-challenge.md)
 ([source PDF](../../docs/challenge-briefs/intel-online-physical-ai-challenge.pdf)).
+Host "Getting Started" reference links (MuJoCo, SO-101 assets, LeRobot,
+Physical AI Studio, OpenVINO) mapped to what's done here:
+[`docs/challenge-briefs/intel-online-getting-started.md`](../../docs/challenge-briefs/intel-online-getting-started.md).
+Per that guidance, participants build the MuJoCo scene from scratch — no stock
+scene is provided; **SO-101 assets are exactly what's already vendored**
+(`assets/menagerie_so_arm100/`, Apache-2.0, sourced from the same
+[TheRobotStudio/SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100) lineage
+via MuJoCo Menagerie's mirror) — no licensing action needed there.
 
 Two simulated **SO-101** arms in **MuJoCo**, natural-language instructions, camera
 reasoning, coordinated manipulation, multi-step table-setting (open a drawer,
