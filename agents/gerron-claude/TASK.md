@@ -27,10 +27,28 @@ closed-loop verification, natural language + runtime constraint mutation.
   states; `pytest` = 6 passing (import surface, contract conformance, normal /
   constraint-change / world-change end-to-end, forbidden-object).
 
+## Prior-art pass (folded in — see `docs/prior-art.md`)
+
+Lifted from sibling THC repos, additive to OQ-001:
+- `AutonomyMode` + `merge_mode` (SOCOM_REACT) — monotone degradation; engine
+  escalates on lost capability / `keep_local` / revision-cap.
+- `PlanDecision` reason object (SOCOM_REACT) — per-compile audit; forbidden and
+  non-authoritative detections are now *recorded as rejected*, not silently
+  dropped. Feeds OQ-047.
+- `MissionEnvelope` (SOCOM_REACT `SignedMissionEnvelope`) — signed authority,
+  `.digest()`, `max_revisions`. Feeds OQ-025/031/034.
+- Parent-chained `ReceiptRecord` + `verify_chain` + provenance block
+  (FALCON `artifacts.py` + VIGIL `audit/receipt.py`). Feeds OQ-037/038.
+- `DataStatus` on `Detection` (Open-World-Model-Harness) — planner won't act on
+  non-`LIVE` knowledge. Feeds OQ-009/018.
+
+Deferred (documented): executive/planner split, world transition-request seam,
+event causal lineage.
+
 ## Next up
 
-- **OQ-023** (no new deps) — natural-language goal parser feeding
-  `RulePlanner` explicit constraints. Then OQ-009 once OQ-008 lands.
+- **OQ-023** — natural-language goal parser feeding `RulePlanner` explicit
+  constraints + the `MissionEnvelope`. Then OQ-009 once OQ-008 lands.
 
 ## Notes
 

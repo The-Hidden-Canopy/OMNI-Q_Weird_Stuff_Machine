@@ -21,11 +21,25 @@ import hashlib
 import json
 import time
 from dataclasses import asdict, dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from enum import Enum
+from typing import Any, Protocol, Sequence, runtime_checkable
 
 # ---------------------------------------------------------------------------
 # Shared value types
 # ---------------------------------------------------------------------------
+
+
+class DataStatus(str, Enum):
+    """How much a piece of world knowledge can be trusted.
+
+    Borrowed from Open-World-Model-Harness: an inference is never promoted to an
+    authoritative fact. The planner must re-``Observe`` or lower its commitment
+    before acting on anything that is not ``LIVE``.
+    """
+
+    LIVE = "live"
+    STALE = "stale"
+    FALLBACK = "fallback"
 
 
 @dataclass(frozen=True)
@@ -35,10 +49,16 @@ class Detection:
     zone: str
     target_zone: str
     conf: float = 0.95
+    status: DataStatus = DataStatus.LIVE
+    verified_frame: int = 0
 
     @property
     def misplaced(self) -> bool:
         return self.zone != self.target_zone
+
+    @property
+    def authoritative(self) -> bool:
+        return self.status is DataStatus.LIVE
 
 
 @dataclass(frozen=True)
@@ -83,6 +103,8 @@ class WorldState:
     objects: dict[str, Detection]
     goal: str | None = None
     constraints: tuple[Constraint, ...] = ()
+    revision: int = 0
+    ownership: dict[str, str | None] = field(default_factory=dict)
 
     def misplaced(self) -> list[Detection]:
         return [o for o in self.objects.values() if o.misplaced]
@@ -96,9 +118,11 @@ class WorldState:
     def as_dict(self) -> dict[str, Any]:
         return {
             "frame": self.frame,
+            "revision": self.revision,
             "goal": self.goal,
             "constraints": [c.as_dict() for c in self.constraints],
             "objects": {k: asdict(v) for k, v in self.objects.items()},
+            "ownership": dict(self.ownership),
         }
 
 
@@ -111,7 +135,7 @@ class Step:
     deps: tuple[str, ...] = ()
     arm: str | None = None              # left | right | None (planner may leave open)
     device: str | None = None          # filled by a Device provider
-    state: str = "pending"             # pending | running | done | failed | skipped
+    state: str = "pending"             # pending | running | done | failed | denied | skipped
     result: dict[str, Any] | None = None
     rationale: str = ""
 
@@ -173,6 +197,67 @@ class ManipResult:
     detail: dict[str, Any] = field(default_factory=dict)
 
 
+class TransitionRejected(ValueError):
+    """A world rejected a command before it could alter authoritative state."""
+
+
+@dataclass(frozen=True)
+class TransitionRequest:
+    """A revision-bound request to alter the authoritative world.
+
+    Providers may propose or execute a physical command, but only the world
+    adapter applies its represented state change.  ``expected_revision`` keeps
+    a stale plan from silently overwriting newer observations.
+    """
+
+    step_id: str
+    op: str
+    args: dict[str, Any]
+    expected_revision: int
+    actor: str | None = None
+
+
+@dataclass(frozen=True)
+class TransitionResult:
+    step_id: str
+    ok: bool
+    state_revision: int
+    detail: dict[str, Any] = field(default_factory=dict)
+
+
+class AuthorizationVerdict(str, Enum):
+    ALLOW = "ALLOW"
+    LIMIT = "LIMIT"
+    REQUIRE_APPROVAL = "REQUIRE_APPROVAL"
+    DENY = "DENY"
+
+
+@dataclass(frozen=True)
+class ActionAuthorization:
+    """Finalized authorization evidence emitted before a step can execute."""
+
+    run_id: str
+    step_id: str
+    op: str
+    verdict: AuthorizationVerdict
+    reason: str
+    state_revision: int
+    envelope_digest: str
+    content_hash: str = ""
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "run_id": self.run_id,
+            "step_id": self.step_id,
+            "op": self.op,
+            "verdict": self.verdict.value,
+            "reason": self.reason,
+            "state_revision": self.state_revision,
+            "envelope_digest": self.envelope_digest,
+            "content_hash": self.content_hash,
+        }
+
+
 @dataclass(frozen=True)
 class VerifyResult:
     ok: bool
@@ -192,6 +277,97 @@ class DeviceSpec:
         return need in self.kinds
 
 
+class AutonomyMode(str, Enum):
+    """Monotone-escalating operating state (SOCOM_REACT ``envelope.py``).
+
+    Losing a capability or a placement option raises the mode; it never drops
+    without an explicit reset. Higher = more constrained.
+    """
+
+    NOMINAL = "NOMINAL"
+    DEGRADED = "DEGRADED"          # a capability / arm is gone
+    LOCAL_ONLY = "LOCAL_ONLY"     # cloud placement withdrawn
+    HOLD = "HOLD"                 # cannot make progress this cycle
+    PROTECTIVE_STOP = "PROTECTIVE_STOP"
+
+
+_MODE_PRECEDENCE = {
+    AutonomyMode.NOMINAL: 0,
+    AutonomyMode.DEGRADED: 1,
+    AutonomyMode.LOCAL_ONLY: 2,
+    AutonomyMode.HOLD: 3,
+    AutonomyMode.PROTECTIVE_STOP: 4,
+}
+
+
+def merge_mode(current: AutonomyMode, incoming: AutonomyMode) -> AutonomyMode:
+    """Never downgrade the safety state without an explicit reset."""
+    return incoming if _MODE_PRECEDENCE[incoming] >= _MODE_PRECEDENCE[current] else current
+
+
+@dataclass(frozen=True)
+class MissionEnvelope:
+    """Fixed operator authority (SOCOM_REACT ``SignedMissionEnvelope``).
+
+    Transient constraints come and go on the :class:`WorldState`; this is the
+    part a recompile may **not** widen. A partitioned / re-placed planner
+    inherits it unchanged.
+    """
+
+    mission_id: str
+    version: int = 1
+    permitted_ops: tuple[str, ...] = ()          # empty = any op allowed
+    forbidden_objects: tuple[str, ...] = ()
+    local_only: bool = False
+    max_revisions: int = 6
+    signature: str = ""
+
+    def digest(self) -> str:
+        payload = json.dumps(
+            {
+                "mission_id": self.mission_id,
+                "version": self.version,
+                "permitted_ops": sorted(self.permitted_ops),
+                "forbidden_objects": sorted(self.forbidden_objects),
+                "local_only": self.local_only,
+                "max_revisions": self.max_revisions,
+            },
+            sort_keys=True,
+        )
+        return "sha256:" + hashlib.sha256(payload.encode()).hexdigest()
+
+    def op_permitted(self, op: str) -> bool:
+        return not self.permitted_ops or op in self.permitted_ops
+
+
+@dataclass
+class PlanDecision:
+    """Reason object attached to every (re)compile (SOCOM_REACT ``planner.py``).
+
+    Auditable without pretending the planner itself is 'explainable AI'.
+    """
+
+    goal: str
+    revision: int
+    selected_ops: tuple[str, ...]
+    candidates_considered: int
+    candidates_feasible: int
+    governing_constraints: tuple[str, ...] = ()
+    rejected: dict[str, str] = field(default_factory=dict)   # target -> why
+    mode: AutonomyMode = AutonomyMode.NOMINAL
+    state_hash: str = ""
+    envelope_digest: str = ""
+    latency_ms: float = 0.0
+    reason: str = ""
+
+    def as_dict(self) -> dict[str, Any]:
+        d = asdict(self)
+        d["mode"] = self.mode.value
+        d["selected_ops"] = list(self.selected_ops)
+        d["governing_constraints"] = list(self.governing_constraints)
+        return d
+
+
 @dataclass(frozen=True)
 class ReceiptRecord:
     run_id: str
@@ -201,19 +377,50 @@ class ReceiptRecord:
     actions: tuple[dict[str, Any], ...]
     metrics: dict[str, Any]
     hashes: dict[str, str]
+    decisions: tuple[dict[str, Any], ...] = ()
+    rejected: tuple[dict[str, Any], ...] = ()
+    provenance: dict[str, Any] = field(default_factory=dict)
+    parent_hash: str = "GENESIS"
+    content_hash: str = ""
     ts: float = field(default_factory=time.time)
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "run_id": self.run_id, "goal": self.goal, "inputs": self.inputs,
             "plan": self.plan, "actions": list(self.actions),
-            "metrics": self.metrics, "hashes": self.hashes, "ts": self.ts,
+            "metrics": self.metrics, "hashes": self.hashes,
+            "decisions": list(self.decisions), "rejected": list(self.rejected),
+            "provenance": self.provenance, "parent_hash": self.parent_hash,
+            "content_hash": self.content_hash, "ts": self.ts,
         }
 
 
 def sha256_of(obj: Any) -> str:
     blob = json.dumps(obj, sort_keys=True, default=str).encode()
     return hashlib.sha256(blob).hexdigest()
+
+
+def canonical_bytes(record_dict: dict[str, Any]) -> bytes:
+    """Deterministic bytes for hashing a receipt — ``content_hash`` excluded
+    (VIGIL ``audit/receipt.py``)."""
+    data = {k: v for k, v in record_dict.items() if k != "content_hash"}
+    return json.dumps(data, sort_keys=True, separators=(",", ":"), default=str).encode()
+
+
+def content_hash_of(record_dict: dict[str, Any]) -> str:
+    return "sha256:" + hashlib.sha256(canonical_bytes(record_dict)).hexdigest()
+
+
+def verify_chain(records: Sequence[ReceiptRecord]) -> None:
+    """Raise ``ValueError`` on the first hash or parent-link inconsistency."""
+    prev: ReceiptRecord | None = None
+    for i, r in enumerate(records):
+        expected = content_hash_of(r.as_dict())
+        if r.content_hash != expected:
+            raise ValueError(f"receipt {i} ({r.run_id}): content_hash mismatch")
+        if prev is not None and r.parent_hash != prev.content_hash:
+            raise ValueError(f"receipt {i} ({r.run_id}): parent_hash != prior content_hash")
+        prev = r
 
 
 # ---------------------------------------------------------------------------
@@ -224,6 +431,23 @@ def sha256_of(obj: Any) -> str:
 @runtime_checkable
 class Observe(Protocol):
     def observe(self, world: WorldState) -> Observation: ...
+
+
+@runtime_checkable
+class World(Protocol):
+    """The sole authority for mutable scene state.
+
+    This is deliberately separate from ``Manipulate``: an arm driver may
+    report a command result, but it cannot mutate a planner's snapshot.
+    """
+
+    def state(self) -> WorldState: ...
+
+    def start_mission(self, goal: str) -> None: ...
+
+    def apply_transition(self, request: TransitionRequest) -> TransitionResult: ...
+
+    def add_constraint(self, constraint: Constraint) -> None: ...
 
 
 @runtime_checkable
@@ -254,6 +478,8 @@ class Device(Protocol):
 
 @runtime_checkable
 class Receipt(Protocol):
+    def authorize(self, authorization: ActionAuthorization) -> ActionAuthorization: ...
+
     def record(
         self,
         run_id: str,
@@ -262,10 +488,13 @@ class Receipt(Protocol):
         plan: PlanGraph,
         actions: list[dict[str, Any]],
         metrics: dict[str, Any],
+        decisions: list[dict[str, Any]] | None = ...,
+        rejected: list[dict[str, Any]] | None = ...,
     ) -> ReceiptRecord: ...
 
 
 CONTRACTS: dict[str, type] = {
+    "World": World,
     "Observe": Observe,
     "Plan": Plan,
     "Manipulate": Manipulate,

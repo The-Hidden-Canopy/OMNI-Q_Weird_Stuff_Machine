@@ -10,16 +10,21 @@ from __future__ import annotations
 from typing import Any
 
 from .contracts import (
+    ActionAuthorization,
+    AutonomyMode,
     Detection,
     ManipResult,
     Observation,
+    PlanDecision,
     PlanGraph,
     ReceiptRecord,
     Step,
     VerifyResult,
     WorldState,
+    content_hash_of,
     sha256_of,
 )
+from .provenance import build_provenance
 
 # ---------------------------------------------------------------------------
 # Observe
@@ -54,6 +59,9 @@ class RulePlanner:
 
     _ACTIONABLE = ("correct", "tidy", "put away", "clear", "set", "inspect")
 
+    def __init__(self) -> None:
+        self.last_decision: PlanDecision | None = None
+
     def plan(self, goal: str, world: WorldState) -> PlanGraph:
         graph = PlanGraph(goal=goal)
         low = goal.lower()
@@ -61,6 +69,11 @@ class RulePlanner:
             # Nothing recognised: at least look.
             graph.steps.append(Step("observe_0", "observe", "observe",
                                     rationale="unrecognised goal; observe only"))
+            self.last_decision = PlanDecision(
+                goal=goal, revision=graph.revision, selected_ops=("observe",),
+                candidates_considered=0, candidates_feasible=0,
+                reason="unrecognised goal; observe only",
+            )
             return graph
 
         forbidden = world.forbidden()
@@ -69,9 +82,15 @@ class RulePlanner:
         prefer_arm = next((c.value for c in world.constraints
                            if c.kind == "prefer_arm"), None)
 
+        candidates = sorted(world.misplaced(), key=lambda d: d.object_id)
+        rejected: dict[str, str] = {}
         move_ids: list[str] = []
-        for det in sorted(world.misplaced(), key=lambda d: d.object_id):
+        for det in candidates:
             if det.object_id in forbidden:
+                rejected[det.object_id] = "forbidden by constraint"
+                continue
+            if not det.authoritative:
+                rejected[det.object_id] = f"non-authoritative detection ({det.status.value})"
                 continue
             oid = det.object_id
             pick = Step(
@@ -99,11 +118,27 @@ class RulePlanner:
             deps=tuple(move_ids),
             rationale="re-check workspace after action",
         ))
+
+        gov = tuple(sorted({c.kind for c in world.constraints}))
+        self.last_decision = PlanDecision(
+            goal=goal,
+            revision=graph.revision,
+            selected_ops=tuple(s.op for s in graph.steps),
+            candidates_considered=len(candidates),
+            candidates_feasible=len(move_ids),
+            governing_constraints=gov,
+            rejected=rejected,
+            state_hash=sha256_of(world.as_dict())[:16],
+            reason=f"{len(move_ids)} object(s) actionable, {len(rejected)} rejected",
+        )
         return graph
 
     def replan(self, current: PlanGraph, world: WorldState, reason: str) -> PlanGraph:
         fresh = self.plan(current.goal, world)
         fresh.revision = current.revision + 1
+        if self.last_decision is not None:
+            self.last_decision.revision = fresh.revision
+            self.last_decision.reason = f"replan: {reason}"
         return fresh
 
 
@@ -119,7 +154,9 @@ class FakeManipulator:
     }
 
     def __init__(self, world_ref: Any) -> None:
-        # world_ref is the mutable MockWorld so MOVE has an effect.
+        # Kept for constructor compatibility with existing providers/tests.
+        # State changes are deliberately applied by World.apply_transition(),
+        # never by this executor.
         self._world = world_ref
 
     def supports(self, op: str) -> bool:
@@ -130,10 +167,9 @@ class FakeManipulator:
         if op == "MOVE":
             obj = step.args["object"]
             zone = step.args["to"]
-            self._world.move_object(obj, zone)
-            return ManipResult(step.id, True, {"moved": obj, "to": zone})
+            return ManipResult(step.id, True, {"requested_move": obj, "to": zone})
         if op == "PICK":
-            return ManipResult(step.id, True, {"grasped": step.args.get("object")})
+            return ManipResult(step.id, True, {"requested_pick": step.args.get("object")})
         if op == "LOCATE":
             return ManipResult(step.id, True,
                                {"misplaced": [d.object_id for d in world.misplaced()]})
@@ -148,6 +184,26 @@ class FakeManipulator:
 
 class FakeVerifier:
     def check(self, step: Step, observation: Observation) -> VerifyResult:
+        by_id = {d.object_id: d for d in observation.detections}
+        obj_id = step.args.get("object")
+        if step.op == "PICK":
+            ok = obj_id in by_id
+            return VerifyResult(
+                ok=ok,
+                expected={"object_present": obj_id},
+                observed={"object_present": obj_id in by_id},
+                mismatch=() if ok else (str(obj_id),),
+            )
+        if step.op in {"MOVE", "PLACE"}:
+            target = step.args.get("to")
+            observed = by_id.get(obj_id)
+            ok = observed is not None and observed.zone == target
+            return VerifyResult(
+                ok=ok,
+                expected={"object": obj_id, "zone": target},
+                observed={"object": obj_id, "zone": observed.zone if observed else None},
+                mismatch=() if ok else (str(obj_id),),
+            )
         remaining = [d.object_id for d in observation.misplaced()]
         expected = {"workspace_clear": True}
         observed = {"workspace_clear": observation.workspace_clear,
@@ -166,8 +222,30 @@ class FakeVerifier:
 
 
 class FakeRecorder:
+    """Parent-chained, self-describing receipts (FALCON ledger + VIGIL chain)."""
+
     def __init__(self) -> None:
         self.records: list[ReceiptRecord] = []
+        self.authorizations: list[ActionAuthorization] = []
+
+    def _last_hash(self) -> str:
+        return self.records[-1].content_hash if self.records else "GENESIS"
+
+    def authorize(self, authorization: ActionAuthorization) -> ActionAuthorization:
+        """Finalize the action authorization before the engine invokes a driver."""
+        base = authorization.as_dict()
+        finalized = ActionAuthorization(
+            run_id=authorization.run_id,
+            step_id=authorization.step_id,
+            op=authorization.op,
+            verdict=authorization.verdict,
+            reason=authorization.reason,
+            state_revision=authorization.state_revision,
+            envelope_digest=authorization.envelope_digest,
+            content_hash=content_hash_of(base),
+        )
+        self.authorizations.append(finalized)
+        return finalized
 
     def record(
         self,
@@ -177,9 +255,11 @@ class FakeRecorder:
         plan: PlanGraph,
         actions: list[dict[str, Any]],
         metrics: dict[str, Any],
+        decisions: list[dict[str, Any]] | None = None,
+        rejected: list[dict[str, Any]] | None = None,
     ) -> ReceiptRecord:
         plan_d = plan.as_dict()
-        rec = ReceiptRecord(
+        base = ReceiptRecord(
             run_id=run_id,
             goal=goal,
             inputs=inputs,
@@ -191,6 +271,14 @@ class FakeRecorder:
                 "plan": sha256_of(plan_d),
                 "actions": sha256_of(actions),
             },
+            decisions=tuple(decisions or ()),
+            rejected=tuple(rejected or ()),
+            provenance=build_provenance("omni_q.engine"),
+            parent_hash=self._last_hash(),
+        )
+        # freeze once more with the content hash filled in
+        rec = ReceiptRecord(
+            **{**base.as_dict(), "content_hash": content_hash_of(base.as_dict())}
         )
         self.records.append(rec)
         return rec

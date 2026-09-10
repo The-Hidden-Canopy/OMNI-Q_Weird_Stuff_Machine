@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import omni_q
 from omni_q import build_mock_engine
-from omni_q.contracts import CONTRACTS, Observe, Plan, Manipulate, Verify, Device, Receipt
+from omni_q.contracts import CONTRACTS, Observe, Plan, Manipulate, Verify, Device, Receipt, World
 from omni_q.devices import default_devices
 from omni_q.fakes import FakeManipulator, FakeObserver, FakeRecorder, FakeVerifier, RulePlanner
 from omni_q.world import MockWorld
@@ -12,12 +12,13 @@ from omni_q.world import MockWorld
 
 def test_import_surface():
     assert omni_q.__version__
-    assert set(CONTRACTS) == {"Observe", "Plan", "Manipulate", "Verify", "Device", "Receipt"}
+    assert set(CONTRACTS) == {"World", "Observe", "Plan", "Manipulate", "Verify", "Device", "Receipt"}
 
 
 def test_fakes_satisfy_contracts():
     world = MockWorld.sample()
     assert isinstance(FakeObserver(), Observe)
+    assert isinstance(world, World)
     assert isinstance(RulePlanner(), Plan)
     assert isinstance(FakeManipulator(world), Manipulate)
     assert isinstance(FakeVerifier(), Verify)

@@ -84,6 +84,7 @@ pip install -e ".[dev,intel]"
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — capability nodes, graph compilation, placement
 - [`DEMO.md`](DEMO.md) — the one reproducible behavior and how to run it
 - [`docs/strategy-notes.md`](docs/strategy-notes.md) — track analysis and rubric strategy
+- [`docs/prior-art.md`](docs/prior-art.md) — patterns borrowed from sibling THC repos (SOCOM_REACT, Open-World-Model-Harness, FALCON-DARPA, VIGIL)
 - [`docs/challenge-briefs/intel-online-physical-ai-challenge.md`](docs/challenge-briefs/intel-online-physical-ai-challenge.md) —
   official Intel Online Challenge brief (transcription + [source PDF](docs/challenge-briefs/intel-online-physical-ai-challenge.pdf))
 

@@ -15,7 +15,7 @@ Status legend: ` ` todo · `~` in progress · `x` done.
 |---|----|-------|------|------------|-----------|
 | x | OQ-001 | Gerron/Claude | Freeze Omni capability contracts: Observe, Plan, Manipulate, Verify, Device, Receipt | — | Interfaces compile and fake capabilities execute end-to-end — `src/omni_q/`, `python -m omni_q.demo`, 6 tests |
 |   | OQ-002 | Gerron/GPT | Build agent-control repo scaffold: five agent dirs, task files, repo maps, coding pointers, active scopes | — | Every agent can bootstrap from repo state without chat history |
-|   | OQ-003 | Gerron/Kimi | Inspect SO-101/MuJoCo implementation and write arm capability map | — | Joint names, limits, gripper range, workspace assumptions, wrist-roll limits, control API, cameras documented |
+| ~ | OQ-003 | Gerron/Kimi | Inspect SO-101/MuJoCo implementation and write arm capability map | — | Joint names, limits, gripper range, workspace assumptions, wrist-roll limits, control API, cameras documented |
 |   | OQ-004 | Damion/Claude | Independently audit Intel challenge requirements against intended design | — | Written PASS/GAP matrix for natural language, camera reasoning, two-arm coordination, multi-step table setting, Intel execution |
 |   | OQ-005 | Bryan/Codex | Build minimal live Omni graph UI shell | OQ-001 | UI can display goal, observations, both arms, graph nodes, current action, verification state |
 |   | OQ-006 | Gerron/GPT | Stand up Intel MuJoCo dual-SO-101 environment | OQ-003 | Two simulated arms boot reliably and accept commanded joint/end-effector actions |
@@ -111,3 +111,10 @@ becomes intelligence rather than robot debugging.
   repo with the demo. The repo is the proof surface, not the pitch deck.
 - **Briefs may shift at kickoff** (2026-09-10 15:00 UTC). The capability-node
   abstraction (OQ-001) is safe to build now; it holds for all three sponsors.
+- **Reuse over greenfield.** `docs/prior-art.md` maps concrete subsystems from
+  `SOCOM_REACT` (rolling-horizon replanning, signed authority envelope,
+  degradation modes, decision-reason object), `Open-World-Model-Harness` (world
+  boundary, causal event log, honest knowledge status), `FALCON-DARPA`
+  (parent-chained evidence packages), and `VIGIL` (receipt canonicalization +
+  fail-closed pipeline) onto specific OQ tasks. Check it before building
+  OQ-009/012/013/015/018/023/025/031/034/037.
