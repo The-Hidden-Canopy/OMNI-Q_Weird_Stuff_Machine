@@ -30,6 +30,17 @@ friction._
 GenieX carries the on-device reasoning / VLM node (LLM/VLM runtime). Model TBD
 from Hugging Face or Qualcomm AI Hub — must be small enough for GenieX to carry.
 
+## Datasets
+
+Sourcing plan for both the YOLO detector (OQ-008) and the Omni policy /
+planner — scoped to the one use case (bimanual dual-SO-101 table setting):
+[`../docs/datasets.md`](../docs/datasets.md).
+
+TL;DR: **synthetic-from-sim first** (perfect labels, exact in-distribution, no
+licence risk), seasoned with LVIS / Open Images for the detector and
+`dongyoonkim/so101-pi05-base-dataset` + `armnet/...bimanual_so101` for the
+policy; ground the planner on LIBERO.
+
 ## Related owned assets
 
 IDA model family (IDA_AI ~966M, IDA_MoE, IDA_Swift/_Native), IDA-TRAIN-V2
