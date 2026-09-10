@@ -1,4 +1,8 @@
-# Qualcomm integration (primary track)
+# Qualcomm integration (secondary track)
+
+The main track is **Intel online** — see
+[`integrations/intel/README.md`](../intel/README.md). This is the second
+hardware surface, pursued after the Intel critical path.
 
 **Challenge:** use GenieX, select and deploy a model from Hugging Face or
 Qualcomm AI Hub, then bring it to life through on-device AI, hardware
