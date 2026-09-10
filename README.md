@@ -132,6 +132,8 @@ the boundary between the frontend event surface and real provider work.
   official Intel Online Challenge brief (transcription + [source PDF](docs/challenge-briefs/intel-online-physical-ai-challenge.pdf))
 - [`docs/challenge-briefs/intel-online-getting-started.md`](docs/challenge-briefs/intel-online-getting-started.md) —
   host reference links (MuJoCo, SO-101 assets, LeRobot, Physical AI Studio, OpenVINO) mapped to what's done/pending in this repo
+- [`docs/oq-004-requirements-audit.md`](docs/oq-004-requirements-audit.md) —
+  independent PASS/GAP audit against the brief + 100-pt rubric: task completion and OpenVINO optimization are the two biggest current point risks
 
 ## License
 
