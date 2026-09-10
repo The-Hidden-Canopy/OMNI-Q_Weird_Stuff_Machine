@@ -1,0 +1,238 @@
+"""OQ-012 / OQ-013 / OQ-044 — bimanual task scheduler."""
+
+from __future__ import annotations
+
+import pytest
+
+from omni_q.contracts import Constraint, Detection, PlanGraph, Step, WorldState
+from omni_q.fakes import RulePlanner
+from omni_q.scheduler import DEFAULT_LAYOUT, Region, schedule
+from omni_q.world import MockWorld
+
+
+def _world(objects: list[Detection], constraints: tuple[Constraint, ...] = ()) -> WorldState:
+    return WorldState(
+        frame=1,
+        objects={o.object_id: o for o in objects},
+        constraints=constraints,
+        ownership={o.object_id: None for o in objects},
+    )
+
+
+def _chain(oid: str) -> list[Step]:
+    return [
+        Step(f"pick_{oid}", "manipulate", "PICK", args={"object": oid}),
+        Step(f"move_{oid}", "manipulate", "MOVE", args={"object": oid, "to": _TARGET[oid]},
+             deps=(f"pick_{oid}",)),
+    ]
+
+
+_TARGET: dict[str, str] = {}
+
+
+def _graph(*chains: list[Step]) -> PlanGraph:
+    g = PlanGraph(goal="tidy the workspace")
+    move_ids = []
+    for steps in chains:
+        g.steps.extend(steps)
+        move_ids.extend(s.id for s in steps if s.op == "MOVE")
+    g.steps.append(Step("verify_final", "verify", "VERIFY", deps=tuple(move_ids)))
+    return g
+
+
+# ---------------------------------------------------------------------------
+# parallelism vs serialisation
+# ---------------------------------------------------------------------------
+
+
+def test_opposite_regions_run_both_arms_in_parallel():
+    _TARGET.update(x="bin", y="setting_1")
+    world = _world([
+        Detection("x", "connector", zone="A", target_zone="bin"),      # right side
+        Detection("y", "plate", zone="tray", target_zone="setting_1"),  # left side
+    ])
+    sch = schedule(_graph(_chain("x"), _chain("y")), world)
+
+    assert sch.metrics["max_parallelism"] == 2
+    assert sch.assignment["pick_x"] == "right"
+    assert sch.assignment["pick_y"] == "left"
+    assert sch.metrics["serialized_conflicts"] == 0
+    # picks share a wave, moves share a wave
+    assert _wave_of(sch, "pick_x") == _wave_of(sch, "pick_y")
+    assert _wave_of(sch, "move_x") == _wave_of(sch, "move_y")
+
+
+def test_same_centre_region_is_serialised_with_a_workspace_barrier():
+    _TARGET.update(p="center", q="center")
+    world = _world([
+        Detection("p", "cup", zone="drawer", target_zone="center"),
+        Detection("q", "fork", zone="drawer", target_zone="center"),
+    ])
+    sch = schedule(_graph(_chain("p"), _chain("q")), world)
+
+    assert sch.metrics["max_parallelism"] == 1
+    assert sch.metrics["serialized_conflicts"] >= 1
+    assert any(b.kind == "workspace" for b in sch.barriers)
+    # even though the two picks were handed to different arms, they never coexist
+    assert _wave_of(sch, "pick_p") != _wave_of(sch, "pick_q")
+
+
+# ---------------------------------------------------------------------------
+# arm assignment (OQ-044)
+# ---------------------------------------------------------------------------
+
+
+def test_role_follows_reach_not_task_order():
+    _TARGET.update(a="tray", b="bin")
+    world = _world([
+        Detection("a", "plate", zone="B", target_zone="tray"),   # left-only
+        Detection("b", "bolt", zone="A", target_zone="bin"),      # right-only
+    ])
+    sch = schedule(_graph(_chain("a"), _chain("b")), world)
+    # first-declared object is NOT forced onto "left"
+    assert sch.assignment["pick_a"] == "left"
+    assert sch.assignment["pick_b"] == "right"
+
+
+def test_explicit_step_arm_is_honoured_even_when_unreachable():
+    _TARGET.update(z="bin")
+    world = _world([Detection("z", "part", zone="A", target_zone="bin")])  # right-only
+    steps = _chain("z")
+    steps[0].arm = "left"
+    steps[1].arm = "left"
+    sch = schedule(_graph(steps), world)
+    assert sch.assignment["pick_z"] == "left"
+    assert any(b.kind == "reach" for b in sch.barriers)
+
+
+def test_prefer_arm_constraint_wins_when_reachable():
+    _TARGET.update(c="center")
+    world = _world(
+        [Detection("c", "mug", zone="drawer", target_zone="center")],
+        constraints=(Constraint("prefer_arm", "left", justification="operator said so"),),
+    )
+    sch = schedule(_graph(_chain("c")), world)
+    assert sch.assignment["pick_c"] == "left"
+
+
+# ---------------------------------------------------------------------------
+# gripper occupancy & barriers (OQ-013)
+# ---------------------------------------------------------------------------
+
+
+def test_an_arm_cannot_pick_a_second_object_while_holding_one():
+    _TARGET.update(m="bin", n="bin")
+    world = _world([
+        Detection("m", "clip", zone="A", target_zone="bin"),          # right
+        Detection("n", "washer", zone="setting_2", target_zone="bin"),  # right
+    ])
+    sch = schedule(_graph(_chain("m"), _chain("n")), world)
+    assert sch.assignment["pick_m"] == "right" and sch.assignment["pick_n"] == "right"
+    # the two picks are never in the same wave (one hand, one object at a time)
+    assert _wave_of(sch, "pick_m") != _wave_of(sch, "pick_n")
+    # and a pick never precedes its own move on the same arm within a wave
+    for w in sch.waves:
+        arms_used = [ss.arm for ss in w.steps if ss.arm]
+        assert len(arms_used) == len(set(arms_used))
+
+
+def test_verify_step_gets_its_own_trailing_wave():
+    _TARGET.update(x="bin", y="setting_1")
+    world = _world([
+        Detection("x", "connector", zone="A", target_zone="bin"),
+        Detection("y", "plate", zone="tray", target_zone="setting_1"),
+    ])
+    sch = schedule(_graph(_chain("x"), _chain("y")), world)
+    last = sch.waves[-1]
+    assert [ss.step_id for ss in last.steps] == ["verify_final"]
+    assert last.steps[0].arm is None
+    assert any(b.kind == "verify" for b in sch.barriers)
+
+
+def test_no_wave_holds_two_conflicting_regions():
+    world = MockWorld.sample().state()
+    sch = schedule(RulePlanner().plan("tidy the workspace", world), world)
+    layout = DEFAULT_LAYOUT
+    for w in sch.waves:
+        regs = [layout.get(ss.region_id, Region(ss.region_id or "center", 0.0))
+                for ss in w.steps if ss.region_id]
+        for i in range(len(regs)):
+            for j in range(i + 1, len(regs)):
+                assert not regs[i].conflicts_with(regs[j], 0.15)
+
+
+# ---------------------------------------------------------------------------
+# hand-off
+# ---------------------------------------------------------------------------
+
+
+def test_handoff_crosses_arms_without_a_false_workspace_barrier():
+    world = MockWorld.sample().state()
+    g = PlanGraph(goal="spin and place")
+    g.steps = [
+        Step("pick_p", "manipulate", "PICK", args={"object": "plate_1"}),
+        Step("handoff_p", "manipulate", "HANDOFF",
+             args={"object": "plate_1", "to_actor": "right"}, deps=("pick_p",)),
+        Step("place_p", "manipulate", "PLACE",
+             args={"object": "plate_1", "to": "A"}, deps=("handoff_p",)),
+        Step("verify_final", "verify", "VERIFY", deps=("place_p",)),
+    ]
+    sch = schedule(g, world)
+    assert sch.metrics["handoffs"] == 1
+    assert sch.assignment["pick_p"] == "left"
+    assert sch.assignment["place_p"] == "right"
+    assert "pick_p" in sch.arm_timeline["left"]
+    assert "place_p" in sch.arm_timeline["right"]
+    assert not any(b.kind == "workspace" for b in sch.barriers)
+
+
+# ---------------------------------------------------------------------------
+# annotate() integration seam
+# ---------------------------------------------------------------------------
+
+
+def test_annotate_fills_arms_and_keeps_a_valid_dag():
+    world = MockWorld.sample().state()
+    graph = RulePlanner().plan("tidy the workspace", world)
+    annotated = schedule(graph, world).annotate(graph)
+
+    for s in annotated.steps:
+        if s.contract == "manipulate":
+            assert s.arm in ("left", "right")
+    # still a DAG
+    annotated.topo_order()
+    # a later-wave step now also depends on the previous wave
+    move = annotated.by_id("move_connector_2")
+    assert "pick_connector_2" in move.deps
+
+
+def test_annotated_graph_runs_through_the_engine():
+    from omni_q import build_mock_engine
+
+    engine = build_mock_engine()
+    world = engine.world.state()
+    graph = RulePlanner().plan("inspect and correct the workspace", world)
+    annotated = schedule(graph, world).annotate(graph)
+
+    class _FixedPlanner(RulePlanner):
+        def plan(self, goal, world):  # noqa: D401 - test stub
+            super().plan(goal, world)
+            return annotated
+
+    engine.planner = _FixedPlanner()
+    receipt = engine.run("inspect and correct the workspace")
+    assert receipt.metrics["resolved"] is True
+    arms = {a["arm"] for a in engine._actions if a["op"] in {"PICK", "MOVE"}}
+    assert arms <= {"left", "right"} and arms
+
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
+
+
+def _wave_of(sch, step_id: str) -> int:
+    for w in sch.waves:
+        if any(ss.step_id == step_id for ss in w.steps):
+            return w.index
+    raise AssertionError(f"{step_id} not scheduled")

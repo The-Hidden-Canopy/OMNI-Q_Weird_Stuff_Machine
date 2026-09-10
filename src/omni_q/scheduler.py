@@ -202,8 +202,19 @@ def _assign_arms(
     chains = _object_chains(graph)
     chained_ids = {s.id for steps in chains.values() for s in steps}
 
+    # every step gets a region up front
+    for s in graph.steps:
+        region_id[s.id] = _region_for(s, world, layout).id if s.contract == "manipulate" else None
+
+    def regions_of(steps: list[Step]) -> list[Region]:
+        return [layout.get(region_id[s.id], Region(region_id[s.id] or "center", 0.0))
+                for s in steps]
+
     def reachable(arm: str, regions: list[Region]) -> bool:
         return all(arm_reaches(arm, r, overlap) for r in regions)
+
+    def other(arm: str) -> str:
+        return arms[1] if arm == arms[0] else arms[0]
 
     def choose(regions: list[Region], explicit: str | None) -> tuple[str, list[Barrier]]:
         notes: list[Barrier] = []
@@ -217,37 +228,49 @@ def _assign_arms(
             return prefer, notes
         fit = [a for a in arms if reachable(a, regions)]
         if not fit:
-            # chain spans both arms -> needs a handoff (out of scope here)
-            notes.append(Barrier(("left", "right"), "reach",
+            notes.append(Barrier((arms[0], arms[1]), "reach",
                                  f"{[r.id for r in regions]} spans both arms; needs handoff"))
             fit = list(arms)
-        arm = min(fit, key=lambda a: (load[a], arms.index(a)))
-        return arm, notes
+        return min(fit, key=lambda a: (load[a], arms.index(a))), notes
 
-    # object chains first (pick + move + present share one arm)
-    for obj, steps in chains.items():
-        regions = []
-        for s in steps:
-            r = _region_for(s, world, layout)
-            region_id[s.id] = r.id
-            regions.append(r)
-        explicit = next((s.arm for s in steps if s.arm in arms), None)
-        arm, notes = choose(regions, explicit)
-        barriers.extend(notes)
-        for s in steps:
-            assignment[s.id] = arm
-        load[arm] += len(steps)
-
-    # standalone manipulate steps (e.g. a bare HANDOFF / PRESENT)
-    for s in graph.steps:
-        if s.contract != "manipulate" or s.id in chained_ids:
-            if s.contract != "manipulate":
-                assignment[s.id] = None
-                region_id[s.id] = None
+    for _obj, steps in chains.items():
+        hand_idx = next((i for i, s in enumerate(steps) if s.op == "HANDOFF"), None)
+        if hand_idx is None:
+            explicit = next((s.arm for s in steps if s.arm in arms), None)
+            arm, notes = choose(regions_of(steps), explicit)
+            barriers.extend(notes)
+            for s in steps:
+                assignment[s.id] = arm
+            load[arm] += len(steps)
             continue
-        r = _region_for(s, world, layout)
-        region_id[s.id] = r.id
-        arm, notes = choose([r], s.arm if s.arm in arms else None)
+
+        # a hand-off splits the chain: giver keeps the pre-steps + the HANDOFF,
+        # the named receiver takes everything after it (OQ-044 across arms).
+        pre, post = steps[: hand_idx + 1], steps[hand_idx + 1:]
+        giver_explicit = next((s.arm for s in pre if s.arm in arms), None)
+        giver, notes = choose(regions_of(pre[:-1]) or regions_of(pre), giver_explicit)
+        barriers.extend(notes)
+        for s in pre:
+            assignment[s.id] = giver
+        load[giver] += len(pre)
+
+        req = steps[hand_idx].args.get("to_actor") or steps[hand_idx].args.get("to")
+        receiver = req if req in arms else other(giver)
+        if post and not reachable(receiver, regions_of(post)):
+            barriers.append(Barrier((giver, receiver), "reach",
+                                    f"post-handoff arm {receiver} cannot reach "
+                                    f"{[r.id for r in regions_of(post)]}"))
+        for s in post:
+            assignment[s.id] = receiver
+        load[receiver] += len(post)
+
+    for s in graph.steps:
+        if s.contract != "manipulate":
+            assignment[s.id] = None
+            continue
+        if s.id in chained_ids:
+            continue
+        arm, notes = choose(regions_of([s]), s.arm if s.arm in arms else None)
         barriers.extend(notes)
         assignment[s.id] = arm
         load[arm] += 1
