@@ -78,6 +78,7 @@ pip install -e ".[dev]" && pytest       # 6 tests, OQ-001 acceptance
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — capability nodes, graph compilation, placement
 - [`DEMO.md`](DEMO.md) — the one reproducible behavior and how to run it
 - [`docs/strategy-notes.md`](docs/strategy-notes.md) — track analysis and rubric strategy
+- [`docs/prior-art.md`](docs/prior-art.md) — patterns borrowed from sibling THC repos (SOCOM_REACT, Open-World-Model-Harness, FALCON-DARPA, VIGIL)
 
 ## License
 

@@ -111,3 +111,10 @@ becomes intelligence rather than robot debugging.
   repo with the demo. The repo is the proof surface, not the pitch deck.
 - **Briefs may shift at kickoff** (2026-09-10 15:00 UTC). The capability-node
   abstraction (OQ-001) is safe to build now; it holds for all three sponsors.
+- **Reuse over greenfield.** `docs/prior-art.md` maps concrete subsystems from
+  `SOCOM_REACT` (rolling-horizon replanning, signed authority envelope,
+  degradation modes, decision-reason object), `Open-World-Model-Harness` (world
+  boundary, causal event log, honest knowledge status), `FALCON-DARPA`
+  (parent-chained evidence packages), and `VIGIL` (receipt canonicalization +
+  fail-closed pipeline) onto specific OQ tasks. Check it before building
+  OQ-009/012/013/015/018/023/025/031/034/037.
