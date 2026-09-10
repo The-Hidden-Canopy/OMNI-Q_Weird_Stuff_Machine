@@ -39,8 +39,9 @@ planner — scoped to the one use case (bimanual dual-SO-101 table setting):
 TL;DR (2 h to deadline): the detector is a **head-swap + fine-tune of our own
 `KissTheHabit/yolov8n-hituav-thermal-finetune`** on a **large real-image subset**
 (Open Images V7 + Objects365 + COCO + LVIS, filtered to the 7 tableware classes
-via FiftyOne), exported to OpenVINO IR + QAIRT; a few thousand MuJoCo frames are
-a 20% top-up, not the base. Omni trains nothing now — `RulePlanner` +
+via FiftyOne), exported to OpenVINO IR + QAIRT; MuJoCo-rendered frames added on
+top for depth where real data is thin (`drawer`, the exact deploy camera,
+occlusion/clutter). Omni trains nothing now — `RulePlanner` +
 `ScheduledPlanner` + `RuntimeMutator` + the real MuJoCo path. Rest is a
 post-deadline appendix.
 

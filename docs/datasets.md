@@ -56,9 +56,23 @@ sets — [Cutlery Detection](https://universe.roboflow.com/home-detection/cutler
 already YOLOv8 txt, ~10 min to merge. Train on those first, then swap in the
 Open Images + Objects365 + LVIS haul when it lands.
 
-**Sim frames are a top-up, not the base:** once the real-trained detector runs,
-add a few thousand rendered MuJoCo frames to close the last domain gap to the
-challenge camera. Mix ratio ~80% real / 20% sim.
+### Synthetic — for depth where real data is thin
+
+Real data is the base; render MuJoCo frames to **fill its gaps**, not to replace
+it. Ground-truth poses → exact boxes, so scale it up freely. Target where the
+real haul is weakest:
+
+- **`drawer`** — only Open Images carries it, sparsely. Render lots.
+- **the exact deploy view** — the challenge's third-person table camera
+  intrinsics/extrinsics, on the real object meshes.
+- **hard combos real photos under-sample** — heavy occlusion, near-empty vs.
+  fully-set tables, extreme lighting, tight clutter, the OQ-007 place-setting
+  geometry, mid-manipulation frames (an arm across the object).
+
+Blend by **need, not a fixed ratio** — roughly real-heavy overall, but
+synthetic-heavy for `drawer` and the deploy-camera slice. Keep frames distinct
+(breadth over repetition still applies). Train the merged real+sim set together,
+short passes.
 
 ---
 
