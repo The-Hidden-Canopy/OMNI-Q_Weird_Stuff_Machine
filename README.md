@@ -46,6 +46,7 @@ Perception starts from an already-published artifact:
 
 ```
 docs/            strategy + design notes
+  ui.md           judge-facing UI runbook and event-stream scope
 src/             Omni Q core: objective → capability graph → routing → verification
 models/          model references and export/deploy paths
 integrations/    sponsor tech, each doing a necessary job in the loop
@@ -86,6 +87,17 @@ hardware evidence yet.
 The `intel` project extra tracks the later LeRobot/OpenVINO policy stack; it is
 not required for, nor proof of, the current MuJoCo controller smoke.
 
+To run the judge-facing UI and its mock session event stream:
+
+```bash
+PYTHONPATH=src python -m omni_q.server
+# open http://127.0.0.1:8770
+```
+
+The UI is deliberately labelled **MOCK MODE — NOT HARDWARE**. See
+[`docs/ui.md`](docs/ui.md) for the screen map, live constraint behavior, and
+the boundary between the frontend event surface and real provider work.
+
 ## Working the backlog
 
 - [`BACKLOG.md`](BACKLOG.md) — all 48 tasks (OQ-001…OQ-048), owners, dependencies, critical path
@@ -95,6 +107,7 @@ not required for, nor proof of, the current MuJoCo controller smoke.
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — capability nodes, graph compilation, placement
 - [`DEMO.md`](DEMO.md) — the one reproducible behavior and how to run it
+- [`docs/ui.md`](docs/ui.md) — judge-facing UI runbook, controls, and scope boundary
 - [`docs/strategy-notes.md`](docs/strategy-notes.md) — track analysis and rubric strategy
 - [`docs/prior-art.md`](docs/prior-art.md) — patterns borrowed from sibling THC repos (SOCOM_REACT, Open-World-Model-Harness, FALCON-DARPA, VIGIL)
 - [`docs/challenge-briefs/intel-online-physical-ai-challenge.md`](docs/challenge-briefs/intel-online-physical-ai-challenge.md) —
