@@ -58,11 +58,14 @@ demo/            run_demo entry point
 
 ## Getting started
 
+Mock mode runs the full Observe → Plan → Manipulate → Verify → Receipt loop with
+no hardware and no third-party dependencies (Python 3.10+):
+
 ```
 git clone https://github.com/The-Hidden-Canopy/OMNI-Q_Weird_Stuff_Machine.git
 cd OMNI-Q_Weird_Stuff_Machine
-# install — see requirements once the stack lands
-./demo/run_demo.sh
+./demo/run_demo.sh                      # PYTHONPATH=src python -m omni_q.demo
+pip install -e ".[dev]" && pytest       # 6 tests, OQ-001 acceptance
 ```
 
 ## Working the backlog

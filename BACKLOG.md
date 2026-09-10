@@ -13,7 +13,7 @@ Status legend: ` ` todo · `~` in progress · `x` done.
 
 | ✓ | ID | Owner | Task | Depends on | Done when |
 |---|----|-------|------|------------|-----------|
-| ~ | OQ-001 | Gerron/Claude | Freeze Omni capability contracts: Observe, Plan, Manipulate, Verify, Device, Receipt | — | Interfaces compile and fake capabilities execute end-to-end |
+| x | OQ-001 | Gerron/Claude | Freeze Omni capability contracts: Observe, Plan, Manipulate, Verify, Device, Receipt | — | Interfaces compile and fake capabilities execute end-to-end — `src/omni_q/`, `python -m omni_q.demo`, 6 tests |
 |   | OQ-002 | Gerron/GPT | Build agent-control repo scaffold: five agent dirs, task files, repo maps, coding pointers, active scopes | — | Every agent can bootstrap from repo state without chat history |
 |   | OQ-003 | Gerron/Kimi | Inspect SO-101/MuJoCo implementation and write arm capability map | — | Joint names, limits, gripper range, workspace assumptions, wrist-roll limits, control API, cameras documented |
 |   | OQ-004 | Damion/Claude | Independently audit Intel challenge requirements against intended design | — | Written PASS/GAP matrix for natural language, camera reasoning, two-arm coordination, multi-step table setting, Intel execution |

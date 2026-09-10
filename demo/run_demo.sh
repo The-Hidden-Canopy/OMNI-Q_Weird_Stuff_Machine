@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
-# Omni Q demo entry point.
+# Omni Q mock demo (OQ-001): Observe -> Plan -> Manipulate -> Verify -> Receipt.
 #
-# Runs the one reproducible behavior described in DEMO.md:
-#   goal -> perceive -> compose graph -> act -> verify -> (constraint change / replan)
+# Runs the three observable states from DEMO.md with fake providers only:
+#   1. NORMAL   2. CONSTRAINT CHANGE   3. FAILURE / WORLD CHANGE
 #
-# TODO: wire to src/ once the core lands.
+# No hardware, no third-party deps. Real providers land per the BACKLOG.
 set -euo pipefail
+cd "$(dirname "$0")/.."
 
-echo "Omni Q demo — not yet implemented."
-echo "See DEMO.md for the target behavior and presentation flow."
-exit 1
+PY="${PYTHON:-}"
+if [ -z "$PY" ]; then
+  for c in python3 python py; do command -v "$c" >/dev/null 2>&1 && { PY="$c"; break; }; done
+fi
+[ -n "$PY" ] || { echo "no python interpreter found; set \$PYTHON" >&2; exit 1; }
+
+PYTHONPATH=src exec "$PY" -m omni_q.demo

@@ -7,7 +7,7 @@ closed-loop verification, natural language + runtime constraint mutation.
 
 | ✓ | ID | Pri | Task | Depends on |
 |---|----|-----|------|------------|
-| ~ | OQ-001 | P0 | Freeze capability contracts: Observe, Plan, Manipulate, Verify, Device, Receipt | — |
+| x | OQ-001 | P0 | Freeze capability contracts: Observe, Plan, Manipulate, Verify, Device, Receipt | — |
 |   | OQ-009 | P0 | World-state representation: objects, poses, ownership, goals, constraints across frames | OQ-001, OQ-008 |
 |   | OQ-012 | P0 | Bimanual task scheduler: reachability, occupied grippers, deps, workspace conflicts, parallelism | OQ-009, OQ-010 |
 |   | OQ-013 | P0 | Collision / resource barriers between arms | OQ-012 |
@@ -19,12 +19,18 @@ closed-loop verification, natural language + runtime constraint mutation.
 |   | OQ-034 | P1 | Unified Omni provider abstraction: Intel + Qualcomm as one graph | OQ-022, OQ-031 |
 |   | OQ-044 | P2 | Dynamic arm-role reassignment by reach/state, not fixed left/right | OQ-012 |
 
-## In progress
+## Done
 
-- **OQ-001** — six contracts as `runtime_checkable` Protocols in
-  `src/omni_q/contracts.py`; fake providers in `src/omni_q/fakes.py`; engine loop
-  in `src/omni_q/engine.py`. Done when `import omni_q` succeeds and the fake loop
-  runs Observe→Plan→Manipulate→Verify→Receipt end-to-end with a passing test.
+- **OQ-001** — six `runtime_checkable` Protocols in `src/omni_q/contracts.py`;
+  fake providers (`fakes.py`, `devices.py`); engine loop (`engine.py`); SSE
+  bridge (`server.py`); `python -m omni_q.demo` runs all three observable
+  states; `pytest` = 6 passing (import surface, contract conformance, normal /
+  constraint-change / world-change end-to-end, forbidden-object).
+
+## Next up
+
+- **OQ-023** (no new deps) — natural-language goal parser feeding
+  `RulePlanner` explicit constraints. Then OQ-009 once OQ-008 lands.
 
 ## Notes
 
