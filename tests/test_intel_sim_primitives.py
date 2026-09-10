@@ -170,6 +170,21 @@ def test_failed_grasp_reverts_worldstate_instead_of_claiming_success():
     assert world.state().ownership["cup_1"] is None
 
 
+def test_pad_tracked_ik_converges_tighter_than_body_tracked_ik():
+    """Not a grasp-success test (that's still an honest failure -- see
+    test_failed_grasp_reverts_worldstate_instead_of_claiming_success).  This
+    protects the real, measured improvement from generalizing the
+    contact-handoff's fixed-wrist-roll + pad-geom technique: reach error for
+    _do_pick's final approach should land in the ~1-5cm band this technique
+    achieves, not regress back toward the ~5-9cm band the old free-wrist-roll
+    5-joint solve produced for the same target."""
+    world = IntelTableWorld()
+
+    result = world._do_pick(6, "cup_1")
+
+    assert result["reach_error_m"] < 0.06
+
+
 def test_failed_grasp_restores_mujoco_state_for_a_clean_retry():
     """A rejected real attempt must roll back physics as well as WorldState.
 

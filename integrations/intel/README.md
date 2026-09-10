@@ -167,11 +167,23 @@ alongside the YOLO perception node.
 - [ ] Intel inference benchmark script (latency, throughput, device, precision)
 - [ ] Anomalib + OpenVINO defect path (onsite)
 - [ ] Natural-language instruction → capability graph binding
-- [ ] Apply the contact-handoff grasp fix (fixed wrist-roll per arm +
-  pad-geom IK target + iterative pad-bracket refinement, all proven 10/10
-  in `_ContactHandoffController`) to the general `_do_pick`/`_do_place`
-  path above, generalized across object geometries instead of one
-  hand-tuned cup sequence.
+- [x] Attempted: apply the contact-handoff grasp fix (fixed wrist-roll +
+  pad-geom IK target) to the general `_do_pick`/`_do_place` path —
+  `IntelTableWorld._ik_reach_pad`, ported from `_ContactHandoffController`.
+  **Real, measured improvement, still not a working grasp.** Position
+  accuracy tightened significantly (reach error ~0.04-0.05m → as low as
+  ~0.01m for some targets), but a swept roll/height search around the
+  best-converging configuration never produced a positive lift for
+  `cup_1`. More telling: the roll value that converges best for `cup_1`'s
+  position (0.8 rad) converges *worst* for `plate_1`'s (1.65 rad — the
+  other end of the sweep — is best there). **One fixed scalar per arm does
+  not generalize across object geometries/positions** — this needs either
+  real per-target orientation solving (not just one pinned roll angle) or
+  adopting the contact-handoff scene's more forgiving physics (much higher
+  friction, compliant `solref`/`solimp`, contact-group masking, a
+  lighter/smaller test object all at once, not individually). Tests still
+  assert the honest outcome (195/195 green — none of this regressed
+  anything, it just didn't yet close the gap).
 ### Contact-handoff evidence boundary
 
 The OQ-010/OQ-011 contact tranche is available through

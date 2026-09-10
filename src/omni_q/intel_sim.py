@@ -18,20 +18,29 @@ failed grasp/placement reverts the WorldState change and reports the step as
 failed, so the engine's normal replan loop actually retries instead of the
 receipt silently claiming success.
 
-**Current fidelity, measured, not assumed:** IK position convergence is
-reliable (~1cm) once aimed at a target that clears the object's own volume.
-The pinch itself is not: this adapter only solves 3-DOF position, so wrist
-orientation is whatever the redundant IK null-space happens to settle into --
-not controlled to face the jaws at the object. Position-only IK also turned
-out to be dangerous near the table: with 5 joints solving a 3-task position,
-the unweighted minimum-norm solution was measured swinging the shoulder/
-forearm through tableware even for a small vertical lift where that swing
-wasn't geometrically necessary, which is why ``_IK_JOINT_WEIGHTS`` and the
-safe-transit-height waypointing in ``_move_to``/``_ik_track_line`` exist.
-Net result: grasp attempts are real physics with an honest pass/fail signal,
-but the pass rate is currently low -- reliable grasping needs orientation-
-aware (6-DOF) IK, not more tuning of this 3-DOF controller. See
-integrations/intel/README.md for what that would take.
+**Current fidelity, measured, not assumed:** two IK paths exist. The
+safe-transit motion (``_ik_reach``/``_move_to``/``_ik_track_line``) is
+5-joint, weighted to discourage the proximal joints -- 5 joints solving a
+3D position task is redundant, and the unweighted minimum-norm solution was
+measured swinging the shoulder/forearm through tableware even for a small
+vertical lift where that swing wasn't geometrically necessary. The final
+pinch (``_ik_reach_pad``) instead pins wrist-roll to a fixed value and
+solves only 4 joints, tracking the fingertip pad geom rather than the
+gripper body origin -- ported from ``_ContactHandoffController``, which
+proved this pattern 10/10 for one hand-tuned cup sequence elsewhere in this
+file. Applied generally here, it measurably tightens position accuracy
+(reach error dropped from ~0.04-0.05m to as low as ~0.01m for some
+targets) but **does not reliably produce a held grasp**: a swept roll/
+height search around the best-converging configuration never produced a
+positive lift for `cup_1`, and the roll value that converges best for one
+object converges worst for another (0.8 rad is the best fit found for
+`cup_1`'s position, 1.65 rad -- the opposite end of the range tried -- is
+best for `plate_1`'s). One fixed scalar per arm does not generalize across
+object geometries and positions; this needs either real per-target
+orientation solving (not just roll) or the contact-handoff scene's more
+forgiving physics tuning (much higher friction, compliant contact solver
+params, a lighter/smaller test object), not more scalar tuning of this
+controller. See integrations/intel/README.md for the fuller writeup.
 
 This is still a proxy, not hardware evidence -- no vision-guided grasp point,
 no force control. The separate OQ-010/OQ-011 contact adapter uses only MuJoCo
@@ -347,6 +356,13 @@ class IntelTableWorld(MockWorld):
             0: mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "left_Fixed_Jaw"),
             6: mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "right_Fixed_Jaw"),
         }
+        # Fingertip pad geom (same one the proven _ContactHandoffController
+        # tracks) for the final precision pinch -- more accurate than the
+        # Fixed_Jaw body origin used for safe-transit motion above.
+        self._pad_geom = {
+            0: mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "left_fixed_jaw_pad_4"),
+            6: mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "right_fixed_jaw_pad_4"),
+        }
         # (qpos address, dof/qvel address) per tableware freejoint -- used by
         # the IK grasp/place below; a freejoint is 7 qpos (xyz + quat) but
         # only 6 dof (linvel + angvel), so the two addresses are not
@@ -526,6 +542,51 @@ class IntelTableWorld(MockWorld):
             self._controller_steps += sub_steps
         return err_norm
 
+    # Proven fix, ported from _ContactHandoffController (10/10 for its one
+    # hand-tuned cup sequence): pin wrist-roll to a fixed per-arm value
+    # instead of leaving it in the redundant position-only solve, and track
+    # the fingertip pad geom instead of the Fixed_Jaw body origin. This is
+    # what _ik_reach's 5-joint weighted solve above doesn't do -- it avoids
+    # the table (safe transit), but never controlled jaw *orientation*, which
+    # is why the general grasp path converges on position (~1cm) without
+    # reliably pinching anything. Values are the same ones proven in the
+    # contact-handoff scene; not yet re-tuned per object geometry here.
+    _GRASP_WRIST_ROLL = {0: 1.65, 6: -1.65}
+
+    def _ik_reach_pad(
+        self, arm_offset: int, target_pos, *, iters: int = 300, max_dq: float = 0.04, tol: float = 0.01,
+    ) -> float:
+        """4-DOF (Rotation/Pitch/Elbow/Wrist_Pitch) IK tracking the fixed-jaw
+        pad geom toward ``target_pos`` with wrist-roll pinned to
+        ``_GRASP_WRIST_ROLL[arm_offset]`` for the whole solve -- see the
+        class comment above. Returns the final pad position error (m)."""
+        import numpy as np
+
+        mujoco = self._mujoco
+        pad_id = self._pad_geom[arm_offset]
+        roll = self._GRASP_WRIST_ROLL[arm_offset]
+        jacp = np.zeros((3, self.model.nv))
+        lo = self.model.jnt_range[arm_offset:arm_offset + 4, 0]
+        hi = self.model.jnt_range[arm_offset:arm_offset + 4, 1]
+        target = np.asarray(target_pos, dtype=float)
+        err_norm = float("inf")
+        for _ in range(iters):
+            self.data.ctrl[arm_offset + 4] = roll  # re-pin every iteration; the servo can drift under load
+            mujoco.mj_jacGeom(self.model, self.data, jacp, None, pad_id)
+            jac = jacp[:, arm_offset:arm_offset + 4]
+            err = target - self.data.geom_xpos[pad_id]
+            err_norm = float(np.linalg.norm(err))
+            if err_norm < tol:
+                break
+            damping = 0.04
+            dq = jac.T @ np.linalg.solve(jac @ jac.T + damping * damping * np.eye(3), err)
+            dq = np.clip(dq, -max_dq, max_dq)
+            q_now = self.data.qpos[arm_offset:arm_offset + 4]
+            self.data.ctrl[arm_offset:arm_offset + 4] = np.clip(q_now + dq, lo, hi)
+            mujoco.mj_step(self.model, self.data, nstep=3)
+            self._controller_steps += 3
+        return err_norm
+
     def _set_gripper(self, arm_offset: int, value: float, *, settle_steps: int = 15) -> None:
         self.data.ctrl[arm_offset + 5] = value
         self._mujoco.mj_step(self.model, self.data, nstep=settle_steps)
@@ -569,10 +630,11 @@ class IntelTableWorld(MockWorld):
         return self._ik_track_line(arm_offset, cur, (x, y, z))
 
     def _do_pick(self, arm_offset: int, obj: str) -> dict[str, Any]:
-        """Approach from above (via a safe transit height), close the
-        gripper on the real object, lift, and report whether it's actually
-        being carried (measured height gain) -- not just whether the motion
-        finished."""
+        """Approach from above (via a safe transit height, unweighted-vs-table
+        motion), then switch to the fixed-wrist-roll pad-tracking solve for
+        the actual pinch (see ``_ik_reach_pad``) -- close the gripper on the
+        real object, lift, and report whether it's actually being carried
+        (measured height gain), not just whether the motion finished."""
         qpos_adr, _ = self._object_joints[obj]
         start_z = float(self.data.qpos[qpos_adr + 2])
         xy = self.data.qpos[qpos_adr:qpos_adr + 2].copy()
@@ -581,15 +643,18 @@ class IntelTableWorld(MockWorld):
 
         self._set_gripper(arm_offset, GRIPPER_OPEN)
         self._move_to(arm_offset, (xy[0], xy[1], clear_z))
-        cur = self.data.body(self._tcp_body[arm_offset]).xpos.copy()
-        # centre height, not clear_z: the old fixed "centre + 1.2cm" put the
-        # target *inside* tall objects (cup half-height alone is 5.5cm) --
-        # the servo just pushed into the object's own volume instead of
-        # converging. Centre height is what a side pinch actually needs.
-        reach_err = self._ik_track_line(arm_offset, cur, (xy[0], xy[1], start_z))
-        self._set_gripper(arm_offset, GRIPPER_CLOSED, settle_steps=60)  # let the grip actually settle
-        cur = self.data.body(self._tcp_body[arm_offset]).xpos.copy()
-        self._ik_track_line(arm_offset, cur, (xy[0], xy[1], clear_z))  # lift straight up
+
+        # Precision pinch: pinned wrist-roll + pad-tip tracking, not the
+        # Fixed_Jaw body origin _move_to just used. One re-center pass on the
+        # object's actual current position -- the safe-transit approach can
+        # still nudge it slightly even without the old shoulder-sweep.
+        reach_err = self._ik_reach_pad(arm_offset, (xy[0], xy[1], start_z))
+        xy_now = self.data.qpos[qpos_adr:qpos_adr + 2].copy()
+        z_now = float(self.data.qpos[qpos_adr + 2])
+        reach_err = self._ik_reach_pad(arm_offset, (xy_now[0], xy_now[1], z_now), iters=150)
+
+        self._set_gripper(arm_offset, GRIPPER_CLOSED, settle_steps=180)  # let the grip actually settle
+        self._ik_reach_pad(arm_offset, (xy_now[0], xy_now[1], z_now + (clear_z - start_z)), iters=250)  # lift
 
         lifted_z = float(self.data.qpos[qpos_adr + 2])
         lift = lifted_z - start_z
@@ -599,10 +664,18 @@ class IntelTableWorld(MockWorld):
         }
 
     def _do_place(self, arm_offset: int, obj: str, to_zone: str | None) -> dict[str, Any]:
-        """Carry (still gripping -- no teleport), via a safe transit height,
-        to the target zone's real table position, release, and report
-        whether it actually ended up there, not just whether the arm reached
-        the coordinate."""
+        """Carry (still gripping -- no teleport) to the target zone's real
+        table position, release, and report whether it actually ended up
+        there, not just whether the arm reached the coordinate.
+
+        No ``_move_to`` call here: by the time PLACE runs, _do_pick's lift
+        already left the arm elevated at a safe height with wrist-roll
+        pinned (the planner always sequences PICK before MOVE/PLACE for the
+        same object, and a failed PICK never reaches here). Switching back
+        to the body-tracked, roll-unpinned solve mid-carry would let the
+        pinch orientation drift and likely drop the object -- everything
+        here stays on ``_ik_reach_pad``, horizontal first at the current
+        height, then descend onto the target."""
         import numpy as np
 
         target = ZONE_POSITIONS.get(to_zone)
@@ -613,12 +686,11 @@ class IntelTableWorld(MockWorld):
         half_h = OBJECT_HALF_HEIGHT.get(obj, 0.01)
         clear = np.array([0.0, 0.0, half_h + GRASP_CLEARANCE])
 
-        self._move_to(arm_offset, tuple(target_arr + clear))
-        cur = self.data.body(self._tcp_body[arm_offset]).xpos.copy()
-        place_err = self._ik_track_line(arm_offset, cur, target_arr)  # centre height, not centre + fixed offset
+        cur_pad_z = float(self.data.geom_xpos[self._pad_geom[arm_offset]][2])
+        self._ik_reach_pad(arm_offset, (target_arr[0], target_arr[1], cur_pad_z))
+        place_err = self._ik_reach_pad(arm_offset, target_arr, iters=250)
         self._set_gripper(arm_offset, GRIPPER_OPEN, settle_steps=40)  # let it drop/settle
-        cur = self.data.body(self._tcp_body[arm_offset]).xpos.copy()
-        self._ik_track_line(arm_offset, cur, target_arr + clear)  # retract straight up
+        self._ik_reach_pad(arm_offset, target_arr + clear, iters=250)  # retract straight up
 
         final_xy = self.data.qpos[qpos_adr:qpos_adr + 2].copy()
         offset = float(np.linalg.norm(final_xy - target_arr[:2]))
