@@ -72,6 +72,27 @@ Status legend: ` ` todo · `~` in progress · `x` done.
 |   | OQ-047 | Bryan/Codex | "Why Omni did that" display | OQ-018 | UI surfaces one-sentence reasoning/constraint explanation for the current graph transition |
 |   | OQ-048 | Damion/Claude | Final red-team pass | All demo-critical tasks | Identify anything scripted, unsupported, unverifiable, flaky or confusing before submission |
 
+## Hand vocabulary expansion — "hands, not clamps on sticks"
+
+Richer manipulation set so the arms *do something once holding it*. Spec + planner/scheduler
+= Gerron/Claude (`src/omni_q/actions.py`, `docs/actions.md`); sim primitives = Gerron/GPT.
+Feeds the Speechmatics demo (OQ-024): `nlu` choreography phrases + `RuntimeMutator` are the
+speech → semantic-state-mutation layer.
+
+| ✓ | ID | Owner | Task | Depends on | Done when |
+|---|----|-------|------|------------|-----------|
+| x | OQ-HAND-001 | Gerron/Claude | Grip-state actions (PRE_SHAPE, PINCH/WIDE/EDGE_GRIP, SOFT/FIRM_HOLD, RELEASE, MICRO_RELEASE, REGRIP, SHIFT_GRIP) | OQ-001 | in the registry with metadata + pre/post |
+| x | OQ-HAND-002 | Gerron/Claude | Contact-manipulation actions (NUDGE, PUSH, PULL, SLIDE, DRAG, SWEEP, PRESS, PIN, BRACE, STABILIZE, TAP, BUMP_ALIGN) | OQ-001 | in the registry; SLIDE is a no-grasp alt to PICK+PLACE |
+| x | OQ-HAND-003 | Gerron/Claude | Orientation / flourish actions (ROTATE_IN_HAND, TWIRL, SPIN, ROLL, FLIP, TURN_HANDLE_TO, PRESENT, ORIENT_*, ALIGN_EDGE, NAPKIN_FLICK) | OQ-001 | in the registry, `style_action` flagged |
+| x | OQ-HAND-004 | Gerron/Claude | Bimanual hand actions (HANDOFF, RECEIVE, PASS_THROUGH, CO_HOLD, CO_ROTATE, CO_ALIGN, CO_STABILIZE, ASSIST_GRASP, TRANSFER_LOAD, REGRASP_WITH_PARTNER, HOLD_WHILE_OTHER_ACTS) | OQ-HAND-001 | category `BIMANUAL` → scheduler gives them both arms in their wave |
+| x | OQ-HAND-005 | Gerron/Claude | Action metadata + preconditions/effects | OQ-HAND-001..004 | `ActionSpec` (category, requires_contact/grasp, supports_bimanual, precision, style_action, blocking, preconditions, effects, args, composes); 84 ops, 17 tests |
+| ~ | OQ-HAND-006 | Gerron/Claude | Planner/scheduler chooses SLIDE/NUDGE vs PICK/PLACE | OQ-HAND-005 | scheduler now reads style/bimanual/grasp/blocking off the registry; planner cost-based op choice still to do |
+| ~ | OQ-HAND-007 | Gerron/GPT | Plate spin routine | OQ-HAND-004, OQ-014 | `SPIN_PLATE` / `SPIN_AND_PLACE` routines + `expand()` to primitives; MuJoCo primitive pending |
+| ~ | OQ-HAND-008 | Gerron/GPT | Cup handle orientation | OQ-HAND-003 | `ROTATE_CUP_HANDLE` / `TURN_HANDLE_TO` in spec; sim primitive pending |
+| ~ | OQ-HAND-009 | Gerron/GPT | Utensil alignment micro-actions | OQ-HAND-002 | `TWIRL_UTENSIL`, `ALIGN_PARALLEL`, `STRAIGHTEN`, `NUDGE` in spec; sim primitive pending |
+| ~ | OQ-HAND-010 | Gerron/GPT | Napkin spread / fold-ish routine | OQ-HAND-003 | `NAPKIN_ROUTINE` / `SPREAD` / `NAPKIN_FLICK` in spec; sim primitive pending |
+| ~ | OQ-HAND-011 | Gerron/Claude | Dance-while-working: speech style-mode → scheduler idle-slack flourishes | OQ-HAND-005, OQ-015 | spoken vocab ("fancy", "together", "opposite", "freeze", "back to work") → `style` mode; scheduler fills idle-arm slack with non-blocking IDLE_FLOURISH, never adding a wave or reordering; last STYLE wins; `minimum_time` strips flourishes. Sim primitives pending |
+
 ## Critical path (Intel)
 
 Protect this sequence above everything else:

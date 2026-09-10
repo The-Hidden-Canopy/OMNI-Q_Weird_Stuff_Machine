@@ -94,7 +94,7 @@ def _classify_goal(text: str) -> tuple[str, list[str]]:
 # constraint rules  (kind, value) — order defines output order
 # ---------------------------------------------------------------------------
 
-_CLAUSE_END = r"(?=,|\.|;|$|\s+and\b|\s+but\b|\s+then\b|\s+while\b|\s+alone\b)"
+_CLAUSE_END = r"(?=,|\.|;|$|\s+and\b|\s+but\b|\s+then\b|\s+while\b|\s+when\b|\s+alone\b)"
 
 Rule = Callable[[str, "dict[str, str] | None"], "list[tuple[str, Any]]"]
 
@@ -112,10 +112,27 @@ def _rule_stop_using_arm(text: str, vocab: dict[str, str] | None) -> list[tuple[
     return out
 
 
+# spoken choreography -> canonical style mode (first match wins).
+# minimum_time / freeze are checked first so "stop dancing" beats "dancing".
+_STYLE_PHRASES: list[tuple[str, str]] = [
+    (r"\b(back to work|stop (screwing|messing) (around|about)|knock it off"
+     r"|be serious|just finish|cut it out|enough|minimum time|efficient(ly)?)\b", "minimum_time"),
+    (r"\b(freeze|hold still|stop moving|don['’]?t move|hold it)\b", "freeze"),
+    (r"\b(mirror( me)?|mirrored|opposite( each other| of each other)?|the other way)\b", "mirrored"),
+    (r"\b(together|in sync|synchroni[sz]e[d]?|as one|match each other)\b", "synchronized"),
+    (r"\b(take turns|one (arm )?at a time|alternate)\b", "take_turns"),
+    (r"\b(do a wave|dance|boogie|get down|groove)\b", "dance"),
+    (r"\b(show(ing)? off|showboat|be fancy|with (a )?flair|a flourish|flourish"
+     r"|fancy|razzle|make it (look good|fancy)|like you('?re| are) excited|excited)\b", "show_off"),
+    (r"\b(faster|speed up|hurry|pick it up|double time)\b", "fast"),
+    (r"\b(slow down|slower|take your time|ease up)\b", "slow"),
+]
+
+
 def _rule_style(text: str, vocab: dict[str, str] | None) -> list[tuple[str, Any]]:
-    if re.search(r"\b(show(ing)? off|showboat|flourish|be fancy|with flair|fancy"
-                 r"|razzle|make it look good)\b", text):
-        return [("style", "show_off")]
+    for pat, mode in _STYLE_PHRASES:
+        if re.search(pat, text):
+            return [("style", mode)]
     return []
 
 
@@ -179,10 +196,11 @@ def _rule_spin(text: str, vocab: dict[str, str] | None) -> list[tuple[str, dict[
     out: list[tuple[str, dict[str, Any]]] = []
     pat = re.compile(r"\b(spin|rotate|turn|twirl|flip)\s+(the\s+|that\s+|this\s+)?"
                      r"(?P<obj>[a-z][a-z ]*?)\s*(?P<deg>\d{2,3})?\s*(deg|degrees|°)?"
+                     r"(?!\s+when\s+you\s+(put|place|set))"
                      rf"\s*{_CLAUSE_END}")
     for m in pat.finditer(text):
         obj = m.group("obj").strip()
-        if not obj or obj in _ARM_WORDS:
+        if not obj or obj in _ARM_WORDS or len(obj.split()) > 3 or " when " in f" {obj} ":
             continue
         d: dict[str, Any] = {"object": resolve(obj, vocab)}
         if m.group("deg"):
@@ -210,7 +228,18 @@ def _rule_nudge(text: str, vocab: dict[str, str] | None) -> list[tuple[str, dict
     return out
 
 
-_MUTATION_RULES = [_rule_spin, _rule_nudge]
+def _rule_spin_on_place(text: str, vocab: dict[str, str] | None) -> list[tuple[str, dict[str, Any]]]:
+    # "spin the plates when you put them down" — a standing rule for a class of
+    # objects, not a one-off. Handled by the planner injecting SPIN_AND_PLACE.
+    m = re.search(
+        r"\b(spin|twirl|rotate)\s+(the\s+)?(?P<cls>[a-z]+?)s?\s+"
+        r"(when|as|while)\s+you\s+(put|place|set)\s+(them|it|those)\s+down\b", text)
+    if not m:
+        return []
+    return [("spin_on_place", {"object_class": m.group("cls").rstrip("s")})]
+
+
+_MUTATION_RULES = [_rule_spin_on_place, _rule_spin, _rule_nudge]
 
 
 @dataclass

@@ -322,6 +322,95 @@ def test_flourish_slots_into_an_existing_slack_wave():
 
 
 # ---------------------------------------------------------------------------
+# dance-while-working (speech -> style mode -> scheduler)
+# ---------------------------------------------------------------------------
+
+
+def _sequential_graph() -> PlanGraph:
+    # y's pick waits on x's move -> every wave has exactly one arm working
+    g = PlanGraph(goal="tidy")
+    g.steps = [
+        Step("pick_x", "manipulate", "PICK", args={"object": "x"}),
+        Step("move_x", "manipulate", "MOVE", args={"object": "x", "to": "bin"}, deps=("pick_x",)),
+        Step("pick_y", "manipulate", "PICK", args={"object": "y"}, deps=("move_x",)),
+        Step("move_y", "manipulate", "MOVE", args={"object": "y", "to": "tray"}, deps=("pick_y",)),
+        Step("verify_final", "verify", "VERIFY", deps=("move_x", "move_y")),
+    ]
+    return g
+
+
+def _seq_world(*styles: str) -> WorldState:
+    _TARGET.clear()
+    return WorldState(
+        frame=1,
+        objects={
+            "x": Detection("x", "connector", zone="A", target_zone="bin"),
+            "y": Detection("y", "plate", zone="B", target_zone="tray"),
+        },
+        constraints=tuple(Constraint("style", s, justification="spoken") for s in styles),
+        ownership={"x": None, "y": None},
+    )
+
+
+def test_dance_mode_fills_idle_arm_slack_without_delaying_the_goal():
+    g = _sequential_graph()
+    plain = schedule(g, _seq_world())
+    danced = schedule(g, _seq_world("dance"))
+
+    assert danced.style_mode == "dance"
+    assert danced.metrics["idle_flourishes"] > 0
+    # the goal path is untouched: same wave count, same real-work order
+    assert danced.metrics["waves"] == plain.metrics["waves"]
+    real = lambda s: [ss.step_id for w in s.waves for ss in w.steps if not ss.flourish]
+    assert real(danced) == real(plain)
+    # every injected step is a non-blocking flourish on an otherwise-idle arm
+    for w in danced.waves:
+        busy_real = {ss.arm for ss in w.steps if not ss.flourish and ss.arm}
+        for ss in w.steps:
+            if ss.flourish:
+                assert ss.arm not in busy_real
+
+
+def test_synchronized_mode_uses_one_primitive():
+    danced = schedule(_sequential_graph(), _seq_world("show_off", "together"))
+    assert danced.style_mode == "synchronized"
+    injected = [ss.step_id for w in danced.waves for ss in w.steps
+                if ss.flourish and ss.step_id.startswith("idle_")]
+    assert injected and all("sway" in i for i in injected)
+
+
+def test_last_style_constraint_wins_and_minimum_time_strips_flourishes():
+    _TARGET.update(x="bin")
+    world = WorldState(
+        frame=1,
+        objects={"x": Detection("x", "connector", zone="A", target_zone="bin")},
+        constraints=(Constraint("style", "show_off", justification="a"),
+                     Constraint("style", "back to work", justification="b")),
+        ownership={"x": None},
+    )
+    g = _graph(_chain("x") + [_present("x")])
+    sch = schedule(g, world)
+    assert sch.style_mode == "minimum_time"
+    assert sch.metrics["flourishes_scheduled"] == 0
+    assert sch.metrics["flourish_waves_added"] == 0
+    assert "present_x" in sch.dropped
+
+
+def test_bimanual_op_takes_both_arms_in_its_wave():
+    g = PlanGraph(goal="co-rotate demo")
+    g.steps = [
+        Step("pick_p", "manipulate", "PICK", args={"object": "plate_1"}),
+        Step("co", "manipulate", "CO_ROTATE", args={"object": "plate_1", "degrees": 140},
+             deps=("pick_p",)),
+        Step("place_p", "manipulate", "PLACE", args={"object": "plate_1", "to": "A"}, deps=("co",)),
+        Step("verify_final", "verify", "VERIFY", deps=("place_p",)),
+    ]
+    sch = schedule(g, MockWorld.sample().state())
+    co_wave = next(w for w in sch.waves if any(ss.step_id == "co" for ss in w.steps))
+    assert len(co_wave.steps) == 1        # nothing else runs alongside a bimanual op
+
+
+# ---------------------------------------------------------------------------
 # ScheduledPlanner — live integration
 # ---------------------------------------------------------------------------
 

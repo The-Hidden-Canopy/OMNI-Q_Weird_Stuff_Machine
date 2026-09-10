@@ -23,17 +23,29 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from . import actions as _actions
 from .contracts import PlanGraph, Step, WorldState
 
 ARMS: tuple[str, str] = ("left", "right")
 
-# Steps that exist only for showmanship (OQ-015). They never change the final
-# goal and are dropped rather than allowed to delay it past one slack wave.
+# Steps that exist only for showmanship (OQ-015). The action registry
+# (OQ-HAND-*) is authoritative; this literal set is a fallback for ops it does
+# not know. Flourishes never change the goal and are dropped rather than delay
+# it past one slack wave.
 FLOURISH_OPS: frozenset[str] = frozenset({"PRESENT", "FLOURISH", "SHOWCASE", "SPIN_SHOW"})
+
+# ops that occupy *both* arms for their wave
+_BOTH_ARMS = _actions.ActionCategory.BIMANUAL
+
+# ops that free / occupy the assigned arm's gripper
+_RELEASES = {"MOVE", "PLACE", "RELEASE", "DRAG", "CENTER_ON_MARK", "PLACE_LEFT_OF",
+             "PLACE_RIGHT_OF", "PLACE_ABOVE_RIGHT_OF", "NEST", "STACK", "SPREAD"}
+_GRABS = {"PICK", "PINCH_GRIP", "WIDE_GRIP", "EDGE_GRIP", "ASSIST_GRASP"}
 
 
 def _is_flourish(step: Step) -> bool:
-    return step.contract == "manipulate" and step.op in FLOURISH_OPS
+    return step.contract == "manipulate" and (
+        step.op in FLOURISH_OPS or _actions.is_style(step.op))
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +152,7 @@ class Schedule:
     assignment: dict[str, str | None]      # step_id -> arm
     regions: dict[str, str | None]         # step_id -> region id
     dropped: list[str] = field(default_factory=list)   # flourishes with no slack
+    style_mode: str = "unset"              # last STYLE constraint, normalised
 
     # -- integration seam ------------------------------------------------
     def annotate(self, graph: PlanGraph) -> PlanGraph:
@@ -181,6 +194,7 @@ class Schedule:
             "barriers": [b.as_dict() for b in self.barriers],
             "arm_timeline": {k: list(v) for k, v in self.arm_timeline.items()},
             "dropped": list(self.dropped),
+            "style_mode": self.style_mode,
             "metrics": dict(self.metrics),
         }
 
@@ -331,8 +345,12 @@ def schedule(
         for s in graph.steps if region_id.get(s.id) is not None
     }
 
-    mandatory = [s for s in graph.steps if not _is_flourish(s)]
-    flourishes = [s for s in graph.steps if _is_flourish(s)]
+    # A flourish is a droppable *leaf*: if another step depends on it (e.g. a
+    # CO_ROTATE inside a spin routine) it stays mandatory.
+    depended_on = {d for s in graph.steps for d in s.deps}
+    flourishes = [s for s in graph.steps if _is_flourish(s) and s.id not in depended_on]
+    _flourish_ids = {s.id for s in flourishes}
+    mandatory = [s for s in graph.steps if s.id not in _flourish_ids]
 
     done: set[str] = set()
     waves: list[Wave] = []
@@ -367,24 +385,30 @@ def schedule(
 
         for s in ready:
             arm = assignment[s.id]
-            if s.op == "HANDOFF":
+            if _actions.category_of(s.op) is _BOTH_ARMS:   # HANDOFF, CO_ROTATE, ...
                 if used_arms:
                     continue
                 obj = s.args.get("object")
                 placed.append(ScheduledStep(s.id, arm, region_id.get(s.id)))
                 used_arms.update(arms)
-                to_actor = s.args.get("to_actor") or s.args.get("to")
-                if obj is not None:
-                    arm_hold = {a: (obj if a == to_actor else (None if arm_hold[a] == obj else arm_hold[a]))
-                                for a in arms}
-                handoffs += 1
+                if s.op == "HANDOFF":
+                    to_actor = s.args.get("to_actor") or s.args.get("to")
+                    if obj is not None:
+                        arm_hold = {a: (obj if a == to_actor
+                                        else (None if arm_hold[a] == obj else arm_hold[a]))
+                                    for a in arms}
+                    handoffs += 1
                 done.add(s.id)
                 continue
 
             if arm in used_arms:
                 continue
-            if s.op == "PICK" and arm_hold[arm] is not None:
+            if s.op in _GRABS and arm_hold[arm] is not None:
                 continue  # gripper already occupied
+            obj = s.args.get("object")
+            if _actions.needs_grasp(s.op) and obj and obj in arm_hold.values() \
+                    and arm_hold[arm] != obj:
+                continue  # a different arm is holding the object
 
             reg = region_obj.get(s.id, Region("center", 0.0))
             clash = next(((r, owner) for (r, owner) in used_regions
@@ -398,9 +422,9 @@ def schedule(
             used_arms.add(arm)
             used_regions.append((reg, s.id))
             done.add(s.id)
-            if s.op == "PICK":
-                arm_hold[arm] = s.args.get("object")
-            elif s.op in {"MOVE", "PLACE"}:
+            if s.op in _GRABS:
+                arm_hold[arm] = obj
+            elif s.op in _RELEASES:
                 arm_hold[arm] = None
 
         if not placed:
@@ -409,16 +433,25 @@ def schedule(
             reg = region_obj.get(s.id, Region("center", 0.0))
             placed.append(ScheduledStep(s.id, assignment[s.id], reg.id))
             done.add(s.id)
-            if s.op == "PICK":
+            if s.op in _GRABS:
                 arm_hold[assignment[s.id]] = s.args.get("object")
-            elif s.op in {"MOVE", "PLACE"}:
+            elif s.op in _RELEASES:
                 arm_hold[assignment[s.id]] = None
 
         waves.append(Wave(len(waves), placed))
 
     # -- OQ-015: place flourishes in slack, never delaying the goal --------
+    mode = _style_mode(world)
+    # "stop screwing around and finish" -> drop every flourish, keep only work
+    strip_flourishes = mode in {"minimum_time", "freeze"}
     dropped, flourish_waves_added = _place_flourishes(
-        waves, flourishes, assignment, region_obj, overlap, arms, allow_flourish_wave, barriers)
+        waves, [] if strip_flourishes else flourishes,
+        assignment, region_obj, overlap, arms, allow_flourish_wave, barriers)
+    if strip_flourishes:
+        dropped = [s.id for s in flourishes]
+
+    # -- dance-while-working: fill idle-arm slack (never adds/reorders) ----
+    idle_flourishes = _fill_idle_slack(waves, arms, mode) if _actions.wants_idle_flourish(mode) else 0
 
     arm_timeline: dict[str, list[str]] = {a: [] for a in arms}
     for w in waves:
@@ -438,8 +471,53 @@ def schedule(
         "flourishes_scheduled": len(flourishes) - len(dropped),
         "flourishes_dropped": len(dropped),
         "flourish_waves_added": flourish_waves_added,
+        "idle_flourishes": idle_flourishes,
     }
-    return Schedule(waves, barriers, arm_timeline, metrics, assignment, region_id, dropped)
+    return Schedule(waves, barriers, arm_timeline, metrics, assignment, region_id,
+                    dropped, style_mode=mode)
+
+
+def _style_mode(world: WorldState) -> str:
+    """The last STYLE constraint wins ("make it fancy" ... "back to work").
+
+    ``"unset"`` means no operator style was given — the planner still decides
+    whether to emit `PRESENT`/flourish steps; the scheduler just schedules
+    whatever is there.
+    """
+    styles = [c.value for c in world.constraints if c.kind == "style"]
+    return _actions.style_mode(styles[-1]) if styles else "unset"
+
+
+def _fill_idle_slack(waves: list[Wave], arms: tuple[str, str], mode: str) -> int:
+    """Add non-blocking IDLE_FLOURISH steps to arms that are idle in a wave.
+
+    Only touches already-idle arms in already-existing non-final waves, so the
+    dependency graph and wave count are untouched — "dance occupies available
+    slack but cannot violate the table-setting dependency graph".
+    """
+    ops = _actions.IDLE_FLOURISH_OPS
+    if not ops or len(waves) < 2:
+        return 0
+    injected = 0
+    for w in waves[:-1]:                       # never the trailing verify wave
+        if any(ss.arm is None for ss in w.steps):   # barrier wave -> skip
+            continue
+        busy = {ss.arm for ss in w.steps if ss.arm}
+        idle = [a for a in arms if a not in busy]
+        if not idle:
+            continue
+        if mode == "synchronized":
+            op = "SWAY"
+            picks = {a: op for a in idle}
+        elif mode == "mirrored":
+            picks = {a: "MIRROR" for a in idle}
+        else:                                  # show_off / dance / take_turns
+            picks = {a: ops[(w.index + i) % len(ops)] for i, a in enumerate(idle)}
+        for a, op in picks.items():
+            w.steps.append(ScheduledStep(f"idle_{op.lower()}_w{w.index}_{a}", a, None,
+                                         flourish=True))
+            injected += 1
+    return injected
 
 
 def _place_flourishes(

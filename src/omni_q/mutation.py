@@ -27,6 +27,8 @@ _DEFER_REASON: dict[str, str] = {
              "recorded as a planner hint until that lands"),
     "nudge": ("needs a within-zone pose adjustment; the planner works in discrete "
               "zones until real poses arrive (OQ-009 remainder)"),
+    "spin_on_place": ("standing rule: the planner should swap PLACE -> SPIN_AND_PLACE "
+                      "for this object class on the remaining ops (OQ-HAND-007)"),
 }
 
 
