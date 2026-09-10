@@ -182,6 +182,35 @@ alongside the YOLO perception node.
   commands. Also not yet run on actual Core Ultra Series 2/3 hardware
   (this dev machine has a Core 5 210H) — re-run on target hardware before
   submission per the brief's requirement.
+- [x] Camera reasoning — closes the OQ-004 audit's other flat gap ("observer
+  reads ground-truth state, not rendered frames"). Two independently-built
+  pieces landed the same session and compose cleanly: `src/omni_q/vision.py`
+  (this work) — a swappable `CameraSource` (`MuJoCoCameraSource`, real
+  rendering today; `OpenCVCameraSource` for a real UVC/USB camera on the
+  onsite track, **not exercised against physical hardware here** — no rig
+  available) feeding a real `OpenVINODetector` (proper YOLOv8 decode: box
+  regression + class sigmoid already baked into the exported graph, this
+  class does the NMS) and `project_to_table`, a real pinhole back-projection
+  from the camera's actual MuJoCo fovy/position/rotation onto the table
+  plane — validated by hand against a known object's position before
+  trusting it (round-trip + visual cross-check against the rendered frame,
+  not just internal self-consistency). `src/omni_q/frame_observer.py`
+  (built independently, same session, by someone else acting on the same
+  audit finding) — `FrameObserver` implements the full `Observe` contract
+  on top of an injectable detector + zone map, with IoU-based stable object
+  ids across frames (the brief's "stable object IDs from simulated camera
+  frames"), deliberately built with `StubDetector`/`grid_zone_map`
+  placeholders precisely so a real detector/zone-map could swap in without
+  touching `FrameObserver` itself. `vision.as_frame_detector` /
+  `vision.make_camera_zone_map` are that swap-in: real inference in place
+  of the stub, and a zone map grounded in actual camera geometry
+  (`project_to_table` + nearest-zone lookup) in place of the coarse 3×3
+  image-grid guess. End-to-end: a real "Car" detection (thermal-model label,
+  honestly meaningless for tableware) lands in zone `tray_cup` — cup_1's
+  actual start position. `src/omni_q/demo_vision.py` for a standalone
+  run. Same class-label caveat as the OpenVINO benchmark above: real
+  pipeline, placeholder classes until OQ-008's fine-tune lands. Tests:
+  `tests/test_vision.py`, `tests/test_frame_observer.py`.
 - [ ] Anomalib + OpenVINO defect path (onsite)
 - [ ] Natural-language instruction → capability graph binding
 - [x] Attempted: apply the contact-handoff grasp fix (fixed wrist-roll +

@@ -33,6 +33,7 @@ approximation, not a second ground-truth read of the WorldState.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 
@@ -127,6 +128,7 @@ class OpenVINODetector:
         import openvino as ov
         import yaml
 
+        model_xml_path = Path(model_xml_path)  # accept a plain str too, not just Path
         core = ov.Core()
         model = core.read_model(model_xml_path)
         self._compiled = core.compile_model(model, device)
@@ -139,9 +141,9 @@ class OpenVINODetector:
         if class_names is not None:
             self.class_names = class_names
         else:
-            meta_path = model_xml_path.parent / "metadata.yaml" if hasattr(model_xml_path, "parent") else None
+            meta_path = model_xml_path.parent / "metadata.yaml"
             self.class_names = {}
-            if meta_path is not None and meta_path.exists():
+            if meta_path.exists():
                 meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
                 self.class_names = {int(k): v for k, v in (meta.get("names") or {}).items()}
 
@@ -236,3 +238,70 @@ def project_to_table(
         return None
     hit = cam_pos + t * ray_world
     return float(hit[0]), float(hit[1])
+
+
+# ---------------------------------------------------------------------------
+# Adapters onto omni_q.frame_observer.FrameObserver
+# ---------------------------------------------------------------------------
+#
+# FrameObserver (OQ-004 gap / OQ-008, added independently the same session)
+# implements the full Observe contract -- stable per-object ids across
+# frames via IoU tracking, zone assignment, Observation construction -- and
+# is deliberately built around two injectable seams so its own StubDetector
+# and grid_zone_map placeholders can be swapped for something real without
+# touching FrameObserver itself:
+#
+#     Detector  = Callable[[frame], list[Detection2D]]   (normalised [0,1] xyxy)
+#     ZoneMap   = Callable[[cx, cy], str]
+#
+# These two functions ARE that real swap-in, built from the pieces above:
+# real MuJoCo-rendered frames, real OpenVINO inference, and real camera-
+# geometry back-projection in place of a coarse 3x3 image-grid guess.
+
+
+def as_frame_detector(detector: "OpenVINODetector", frame_size: tuple[int, int]):
+    """Wrap an ``OpenVINODetector`` (pixel-space ``RawDetection``) as a
+    ``frame_observer.Detector`` (normalised-``[0,1]`` ``Detection2D``) --
+    the seam ``FrameObserver`` was built to accept in place of its own
+    ``StubDetector``."""
+    from .frame_observer import Detection2D
+
+    width, height = frame_size
+
+    def run(frame) -> list:
+        raw = detector.detect(frame)
+        out = []
+        for r in raw:
+            x1, y1, x2, y2 = r.bbox_xyxy
+            out.append(Detection2D(r.cls_name, r.conf, (x1 / width, y1 / height, x2 / width, y2 / height)))
+        return out
+
+    return run
+
+
+def make_camera_zone_map(cam: MuJoCoCameraSource, zone_positions: dict[str, tuple[float, float, float]],
+                         frame_size: tuple[int, int]):
+    """A real ``frame_observer.ZoneMap`` grounded in the camera's actual
+    pose instead of a coarse image-grid guess: back-projects the normalised
+    detection centre through ``project_to_table`` and returns the nearest
+    known zone by Euclidean distance in table-plane coordinates.
+
+    ``zone_positions`` is the same real-position table used for tableware
+    placement -- see ``intel_sim.ZONE_POSITIONS`` -- so the zone this
+    function names for a *detected* object is the same coordinate space as
+    where the planner intends to *place* one, not a separate guess."""
+    pos, rot, fovy = cam.camera_pose()
+    width, height = frame_size
+
+    def zone_map(cx: float, cy: float) -> str:
+        world_xy = project_to_table((cx * width, cy * height), frame_size, pos, rot, fovy)
+        if world_xy is None or not zone_positions:
+            return "unknown"
+        best_name, best_dist = "unknown", float("inf")
+        for name, (zx, zy, _zz) in zone_positions.items():
+            dist = ((world_xy[0] - zx) ** 2 + (world_xy[1] - zy) ** 2) ** 0.5
+            if dist < best_dist:
+                best_name, best_dist = name, dist
+        return best_name
+
+    return zone_map

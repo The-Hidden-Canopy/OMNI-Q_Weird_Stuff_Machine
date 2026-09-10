@@ -19,6 +19,20 @@
 > still pending) or on actual Core Ultra Series 2/3 silicon. The verdict
 > tables below are left as originally written (point-in-time record); read
 > them alongside this note, not as superseded.
+>
+> **Second addendum, same day, commit `19d9ce7`→later:** the "camera
+> reasoning" flat GAP is also now a demonstrated pipeline, from two
+> independently-built pieces that landed the same session and composed
+> cleanly: a real MuJoCo-render → OpenVINO-inference → camera-geometry
+> back-projection stack (`src/omni_q/vision.py`, this work) wired as the
+> real detector + zone map for `src/omni_q/frame_observer.py`'s
+> `FrameObserver` (built independently by someone else acting on this same
+> audit finding — stable-id tracking, full `Observe`-contract compliance).
+> End to end: a real detection lands in the zone matching its actual object's
+> real position. See `integrations/intel/README.md` for the full writeup.
+> Same caveat as the OpenVINO addendum above: real pipeline, placeholder
+> class labels until OQ-008's fine-tune lands, and `FrameObserver` isn't
+> wired into `build_intel_sim_engine()`'s default engine yet (still opt-in).
 
 ## Method
 

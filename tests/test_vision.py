@@ -113,3 +113,36 @@ def test_openvino_detector_runs_real_inference_on_a_real_render():
         assert 0 <= x1 < x2 <= 640
         assert 0 <= y1 < y2 <= 480
         assert 0.0 <= d.conf <= 1.0
+
+
+@pytest.mark.skipif(not _MODEL_XML.exists(), reason=(
+    "set OMNIQ_TEST_OPENVINO_MODEL to a local OpenVINO IR .xml -- see "
+    "evidence/benchmark_results/openvino_inference_2026-09-10/README.md"
+))
+def test_real_detector_and_zone_map_wire_into_frame_observer():
+    """The actual point of these adapters: a real render, through real
+    OpenVINO inference, through a real camera-geometry zone map, satisfies
+    frame_observer.FrameObserver's Observe contract end to end -- no
+    ground-truth WorldState read anywhere in this path."""
+    from omni_q.contracts import DataStatus
+    from omni_q.frame_observer import FrameObserver
+    from omni_q.intel_sim import IntelTableWorld, ZONE_POSITIONS
+    from omni_q.vision import MuJoCoCameraSource, OpenVINODetector, as_frame_detector, make_camera_zone_map
+
+    world = IntelTableWorld()
+    cam = MuJoCoCameraSource(world.model, world.data, "table_overhead", width=640, height=480)
+    detector = OpenVINODetector(_MODEL_XML, device="CPU", conf_threshold=0.1)
+
+    zones = dict(ZONE_POSITIONS)
+    zones.update({"tray_plate": (-.13, -.08, .026), "tray_cup": (.16, -.06, .055)})
+    observer = FrameObserver(
+        as_frame_detector(detector, (640, 480)),
+        zone_map=make_camera_zone_map(cam, zones, (640, 480)),
+        frame_source=lambda w: cam.capture(),
+    )
+
+    observation = observer.observe(world.state())
+
+    for d in observation.detections:
+        assert d.status is DataStatus.LIVE
+        assert d.zone in zones or d.zone == "unknown"
