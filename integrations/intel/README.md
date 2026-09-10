@@ -230,6 +230,45 @@ alongside the YOLO perception node.
   lighter/smaller test object all at once, not individually). Tests still
   assert the honest outcome (195/195 green — none of this regressed
   anything, it just didn't yet close the gap).
+- [x] Follow-up investigation, one level deeper on the finding above — two
+  separate results, both real:
+  1. **Falsified a real hypothesis.** Tested whether the best roll per
+     object correlates with the arm's own shoulder bearing to the target
+     (a genuine kinematic-compensation idea — rotating the shoulder yaw
+     rotates the wrist's reference frame with it, so a fixed world-frame
+     roll would need to counter-rotate). Linear fit against measured data
+     across all 5 tracked objects: large residuals (up to ~1.9 rad).
+     Roll alone doesn't explain the variance — ruled out, not just
+     untried.
+  2. **Found and fixed a real scene bug.** With wrist-roll fully freed
+     (5-DOF, best case), `fork_1`/`spoon_1`'s pad IK still failed to
+     converge (~0.20m error) *regardless of roll* — because their scene
+     position was ~0.64m from each arm's base, ~65% past the arm's own
+     independently measured max reach (~0.386m radius,
+     `so101_capability_map.md`, OQ-003 — cross-validated by this
+     session's own IK sweep landing on the same ~0.39-0.40m boundary via
+     a completely different method). Physically unreachable, full stop,
+     independent of grasp technique — a legitimate factually-wrong-
+     parameter fix under the no-simulation-cheating rule, not a realism
+     compromise. Repositioned both to an in-reach, collision-checked spot
+     (`src/omni_q/intel_sim.py`, `tableware_pose(...)` call for
+     fork_1/spoon_1). Also surfaced, while investigating: the drawer's
+     `OPEN` op was never kinematically linked to these bodies at all —
+     "opening" it never moved them regardless of scene geometry, so that
+     part of the brief's scenario has been symbolic since OQ-007. Not
+     fixed this pass (flagged, scope was the reach bug).
+  3. **Reposition alone doesn't close the gap** (expected, checked, not
+     assumed): re-ran the 10-seed harness after the fix —
+     `evidence/benchmark_results/intel_table_eval_2026-09-10-v3/`, still
+     10/10 grasp failure, unchanged from v2. Reachability was necessary
+     but never sufficient: a direct probe shows the pad-tracking
+     controller's own position error only drops to ~0.05m even at best
+     case, looser than the ~0.01-0.02m a reliable cutlery pinch needs —
+     the same ceiling `plate_1`/`cup_1` already hit despite never having a
+     reachability problem. **The real remaining blocker is controller
+     precision** (real 6-DOF pose-aware IK, jointly solving position and
+     full orientation with tighter convergence), not reach, not orientation
+     search range. 207/207 tests still green.
 ### Contact-handoff evidence boundary
 
 The OQ-010/OQ-011 contact tranche is available through

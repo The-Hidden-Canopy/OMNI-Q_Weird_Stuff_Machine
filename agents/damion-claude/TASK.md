@@ -56,7 +56,35 @@ reproducible by anyone (probes and commands are in the doc), but a second
 red-team pass by someone who didn't write the implementation is still
 worth doing before submission — see OQ-048.
 
+## Extra: grasp-controller deep dive (self-directed, off my P0/P1 queue)
+
+With OQ-021 done and the rest of my queue blocked, kept pulling the thread
+on OQ-004's #1 priority recommendation (generalize the grasp fix) since I
+already had the context from the IK work. Two real results, not a "fix":
+
+1. Tested whether wrist-roll should compensate for the arm's own shoulder
+   bearing to the target (a real kinematic hypothesis) — falsified by
+   measurement (large residuals across all 5 objects).
+2. Found and fixed a genuine scene bug instead: `fork_1`/`spoon_1` sat
+   ~65% past the arm's own independently-measured max reach
+   (`so101_capability_map.md`, OQ-003), cross-validated by my own IK
+   convergence sweep landing on the same boundary. Repositioned them to an
+   in-reach, collision-checked spot — legitimate under the no-cheating
+   rule (factually-wrong parameter, not a realism compromise). Also found,
+   flagged but did not fix: the drawer's `OPEN` never kinematically linked
+   to these bodies at all.
+
+Re-ran the 10-seed harness after the fix: still 10/10 grasp failure
+(`evidence/benchmark_results/intel_table_eval_2026-09-10-v3/`) — expected,
+checked, not assumed. Reachability was real but not the bottleneck; the
+controller's own position precision (~0.05m best case) is. Full writeup:
+`integrations/intel/README.md`, `src/omni_q/intel_sim.py` module docstring,
+`docs/oq-004-requirements-audit.md` third addendum. 207/207 tests green.
+
 ## Next up: OQ-033 (blocked on OQ-031) / OQ-048 (blocked on demo-critical tasks)
 
-Both still gated on other people's work landing first. No open task right
-now — check back once OQ-031 (Qualcomm) or the demo-critical queue moves.
+Both still gated on other people's work landing first. No open P0/P1 task
+right now — check back once OQ-031 (Qualcomm) or the demo-critical queue
+moves. The real 6-DOF pose-aware IK fix needed to actually close the grasp
+gap is a bigger build, not audit work — flagged for whoever owns OQ-010
+next, or worth picking up directly if nothing else unblocks first.

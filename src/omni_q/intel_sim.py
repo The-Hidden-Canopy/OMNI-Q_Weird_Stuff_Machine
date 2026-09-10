@@ -30,17 +30,41 @@ gripper body origin -- ported from ``_ContactHandoffController``, which
 proved this pattern 10/10 for one hand-tuned cup sequence elsewhere in this
 file. Applied generally here, it measurably tightens position accuracy
 (reach error dropped from ~0.04-0.05m to as low as ~0.01m for some
-targets) but **does not reliably produce a held grasp**: a swept roll/
-height search around the best-converging configuration never produced a
-positive lift for `cup_1`, and the roll value that converges best for one
-object converges worst for another (0.8 rad is the best fit found for
-`cup_1`'s position, 1.65 rad -- the opposite end of the range tried -- is
-best for `plate_1`'s). One fixed scalar per arm does not generalize across
-object geometries and positions; this needs either real per-target
-orientation solving (not just roll) or the contact-handoff scene's more
-forgiving physics tuning (much higher friction, compliant contact solver
-params, a lighter/smaller test object), not more scalar tuning of this
-controller. See integrations/intel/README.md for the fuller writeup.
+targets) but **does not reliably produce a held grasp**.
+
+**Update, same investigation, one level deeper:** the "one roll scalar
+doesn't generalize" finding above turned out to be two separate problems,
+not one. (1) Tested whether the best roll per object correlates with the
+arm's own shoulder bearing to the target (a real kinematic-compensation
+hypothesis, not another magic number) -- linear fit against measured data
+across all 5 tracked objects came back with large residuals (up to ~1.9
+rad), i.e. **falsified**; roll alone doesn't explain the variance. (2) A
+much bigger, independent bug: with wrist-roll fully freed (5-DOF, best
+case), `fork_1`/`spoon_1`'s pad-tracking IK still didn't converge (~0.20m
+error, vs 0.01m tol) *regardless of roll* -- because their scene position,
+~0.64m from each arm's base, is physically outside the arm's own
+independently measured reach envelope (~0.386m radius, see
+`so101_capability_map.md`, OQ-003 -- cross-validated by this file's own IK
+convergence sweep separately finding the same ~0.39-0.40m boundary). That
+was a real scene-authoring bug (an unreachable target position), not a
+physics-realism question, and has been fixed by repositioning them (see
+the comment at their `tableware_pose(...)` call below) -- legitimate under
+the no-simulation-cheating rule the same way any factually-wrong-parameter
+correction is. Repositioning alone raised their reach convergence from
+~0.20m to ~0.05m error but **still doesn't produce a held grasp** (lift
+~0, same as the already-reachable objects) -- meaning even for objects
+that were always in reach (`cup_1`, `plate_1`), the deeper, still-open
+problem is that this controller's own position-tracking ceiling (~0.03-
+0.05m even at best) simply isn't tight enough for a reliable pinch, not
+orientation or reachability specifically. The honest next step is real
+6-DOF pose-aware IK (position + full orientation, solved jointly, with
+tighter damping/convergence tuning) or the contact-handoff scene's own
+combined physics tuning -- which stays a deliberately separate, bounded
+evidence track (see `integrations/intel/README.md`'s "Contact-handoff
+evidence boundary"), not something to fold into this general path without
+the same scrutiny. See `integrations/intel/README.md` for the fuller
+writeup and `docs/oq-021-red-team-findings.md` for how this compounds with
+downstream testability.
 
 This is still a proxy, not hardware evidence -- no vision-guided grasp point,
 no force control. The separate OQ-010/OQ-011 contact adapter uses only MuJoCo
@@ -261,8 +285,23 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     worldbody.append(_drawer("0 -.40 .01"))
     plate_pos, plate_euler = tableware_pose((-.13, -.08, .026))
     cup_pos, cup_euler = tableware_pose((.16, -.06, .055))
-    fork_pos, fork_euler = tableware_pose((-.04, -.40, .035))
-    spoon_pos, spoon_euler = tableware_pose((.04, -.40, .035))
+    # fork_1/spoon_1 used to sit at (+/-.04, -.40) -- co-located with the
+    # drawer prop above. Measured (two independent ways: this file's own IK
+    # convergence sweep, and OQ-003's separately-published reach probe in
+    # so101_capability_map.md) that position is ~0.64m from each arm's base,
+    # well outside the arm's real ~0.386m max reach radius -- physically
+    # unreachable on top of anything about grasp orientation. Repositioned
+    # to a spot verified in-reach (~0.25-0.27m radial, solid margin) and
+    # collision-checked against plate_1/cup_1/napkin_1's own footprints.
+    # The drawer body itself is left at its old position: it's a passive
+    # prop the arm's controller never actually touches (OPEN only writes
+    # its qpos directly, see IntelTableWorld.apply_transition), so moving it
+    # doesn't change what's reachable -- it also means, worth noting
+    # explicitly, that fork_1/spoon_1 were never kinematically attached to
+    # the drawer's slide joint in the first place, so "opening" it was
+    # always symbolic and didn't literally reveal these bodies either way.
+    fork_pos, fork_euler = tableware_pose((-.32, -.05, .035))
+    spoon_pos, spoon_euler = tableware_pose((.32, -.05, .035))
     napkin_pos, napkin_euler = tableware_pose((-.22, .02, .006))
     worldbody.extend([
         # Rim half-height .016 (32mm full thickness), not the original .007

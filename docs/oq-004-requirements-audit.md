@@ -33,6 +33,23 @@
 > Same caveat as the OpenVINO addendum above: real pipeline, placeholder
 > class labels until OQ-008's fine-tune lands, and `FrameObserver` isn't
 > wired into `build_intel_sim_engine()`'s default engine yet (still opt-in).
+>
+> **Third addendum, same day:** OQ-021's red-team pass
+> ([`docs/oq-021-red-team-findings.md`](oq-021-red-team-findings.md)) found
+> two more real issues (a latent perception-failure/success confusion in
+> `FrameObserver`, and the scheduler's "concurrent" waves being
+> planning-graph-only, not real-time-simultaneous) — see that doc. Separately,
+> follow-up on this audit's own grasp-generalization priority (#1) falsified
+> the "single wrist-roll scalar" hypothesis and found+fixed a genuine scene
+> bug: `fork_1`/`spoon_1` sat ~65% past the arm's own independently measured
+> reach envelope, confirmed two ways. Fixing that was necessary but not
+> sufficient — the 10-seed harness is still 10/10 grasp failure after the fix
+> (`evidence/benchmark_results/intel_table_eval_2026-09-10-v3/`); the real
+> remaining blocker is the pad-tracking controller's own position precision
+> (~0.05m best case vs ~0.01-0.02m needed), not reach or orientation search
+> range. See `integrations/intel/README.md` and `src/omni_q/intel_sim.py`'s
+> module docstring for the full writeup. Task completion (30 pts) is still
+> the single biggest point risk on the board.
 
 ## Method
 
