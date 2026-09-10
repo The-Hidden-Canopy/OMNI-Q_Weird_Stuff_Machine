@@ -67,11 +67,28 @@ class MutationResult:
 
 
 class RuntimeMutator:
-    """Applies spoken changes to a live ``OmniQ`` engine, safely."""
+    """Applies spoken changes to a live ``OmniQ`` engine, safely.
 
-    def __init__(self, engine: Any) -> None:
+    ``planner`` — when it's a ``rewrite.RewritingPlanner`` (or anything with
+    ``register_mutation``), structural mutations (spin / nudge / spin_on_place)
+    are registered there so the next (re)plan executes them as graph edits
+    instead of being deferred.
+    """
+
+    def __init__(self, engine: Any, *, planner: Any = None) -> None:
         self.engine = engine
+        self.planner = planner or getattr(engine, "planner", None)
         self.history: list[MutationResult] = []
+
+    def _can_rewrite(self) -> bool:
+        if not hasattr(self.planner, "register_mutation"):
+            return False
+        # wire the rewrite op-gate to the engine's real manipulator once
+        if getattr(self.planner, "can_run", None) is None:
+            mani = getattr(self.engine, "manipulator", None)
+            if mani is not None and hasattr(mani, "supports"):
+                self.planner.can_run = mani.supports
+        return True
 
     def apply(self, text: str, *, vocab: dict[str, str] | None = None) -> MutationResult:
         parsed = nlu.parse(text, vocab=vocab)
@@ -92,8 +109,21 @@ class RuntimeMutator:
                 continue
             res.applied.append((kind, value))
 
+        _MUT_OP = {"spin": "SPIN", "spin_on_place": "SPIN", "nudge": "NUDGE"}
         for kind, payload in parsed.mutations:
-            res.deferred.append((kind, payload, _DEFER_REASON.get(kind, "unsupported mutation")))
+            tgt = payload.get("object") or payload.get("object_class")
+            can = getattr(self.planner, "can_run", None) if self._can_rewrite() else None
+            op = _MUT_OP.get(kind)
+            if self._can_rewrite() and (can is None or op is None or can(op)):
+                self.planner.register_mutation(kind, payload)
+                res.applied.append((f"rewrite:{kind}", tgt))
+            elif self._can_rewrite():
+                res.deferred.append((kind, payload,
+                                     f"planner can rewrite but the manipulator can't run {op} "
+                                     f"yet (OQ-HAND-007+)"))
+            else:
+                res.deferred.append((kind, payload,
+                                     _DEFER_REASON.get(kind, "unsupported mutation")))
 
         self.history.append(res)
         return res
