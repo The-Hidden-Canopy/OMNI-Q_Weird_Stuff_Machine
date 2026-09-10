@@ -1,112 +1,128 @@
 # Architecture
 
-> Draft. Fills in as the stack lands. Rationale: [`docs/strategy-notes.md`](docs/strategy-notes.md).
+Rationale: [`docs/strategy-notes.md`](docs/strategy-notes.md). This describes
+what's built; the mock stack runs today (`python -m omni_q.demo`), the Intel
+sim path via `python -m omni_q.demo_intel_sim`.
 
-## Core idea
-
-Function is separate from placement. A capability describes *what* can be done; a
-placement decision says *where* it runs. Omni Q holds both and can change either
-without rewriting the other.
+## The layers — each with a reason to exist
 
 ```
-objective (natural language)
-        ↓
-world state  ← perception nodes
-        ↓
-capability graph        ← decompose objective into capability calls
-        ↓
-placement                ← assign each node to a device/runtime under constraints
-        ↓
-execution                ← run nodes, stream state
-        ↓
-verification             ← check result → success or replan
+Perception    a swarm of cheap specialist detectors      "what appears to be happening?"
+   │          (objects, human/hand, hazard, affordance,   → emits Claims (hypotheses + provenance)
+   ▼           robot-state) — MXFP2 on the Intel box
+Ontology      the fusion authority                        "what do we currently believe exists?"
+   │          reconciles Claims into Entities + Relations;
+   ▼           IS-A merge, preserved disagreement, deltas
+OMNI-Q        objective + world → capability graph         "given that, what should happen next?"
+   │          plan · schedule · rewrite · react            (FP16/INT8; wakes on meaningful deltas)
+   ▼
+Execution     device routing + arm drivers                "what am I permitted and able to do?"
+              MissionEnvelope gates every step
 ```
 
-## Capability nodes
+Full ontology writeup: [`docs/ontology.md`](docs/ontology.md).
 
-Each device, sensor, and model is registered as a node with a typed interface,
-not called directly by hardcoded logic. Examples:
+## The seven contracts (`src/omni_q/contracts.py`)
 
-```
-detect_object   segment   VLM   camera_1
-VISION   LEFT_ARM   RIGHT_ARM   GRASP   MOVE   VOICE   VERIFY
-```
+`runtime_checkable` Protocols; nothing above them calls hardware directly.
 
-Removing a node (`LEFT_ARM ❌`) forces recompilation of any graph that depended
-on it onto the remaining nodes.
+| contract | in | out |
+|----------|----|-----|
+| **World** | — | authoritative `WorldState` (the only thing that mutates reality, via `TransitionRequest`) |
+| **Observe** | `WorldState` | `Observation` (compact scene state, never raw video) |
+| **Plan** | goal + `WorldState` | `PlanGraph` (+ recompile) |
+| **Manipulate** | `Step` | `ManipResult` |
+| **Verify** | expected vs `Observation` | `VerifyResult` |
+| **Device** | `Step` + `WorldState` | a device name (placement is separate from function) |
+| **Receipt** | a run | parent-chained, hash-verified `ReceiptRecord` + fail-closed `ActionAuthorization` |
 
-## Placement targets
+Data types are frozen where they cross a boundary. Governed execution: every
+manipulate step is authorized (`ALLOW/LIMIT/REQUIRE_APPROVAL/DENY`) and the
+receipt is finalized *before* the action runs. Borrowed patterns:
+[`docs/prior-art.md`](docs/prior-art.md).
 
-```
-SNAPDRAGON X ELITE          ARDUINO UNO Q            HOST
-├── NPU  (perception)       ├── sensors              ├── GPU
-├── GPU  (reasoning)        ├── actuators            └── CPU
-├── CPU                     ├── physical I/O
-└── task routing            └── realtime device state
-```
-
-Constraints that trigger re-placement: *"keep everything local"*, *"move vision
-to GPU"*, *"kill the cloud connection"*.
-
-## Perception substrate (Qualcomm)
-
-Omni Q does not ingest raw video unless necessary. The perception node emits
-compact structured state:
-
-```json
-{
-  "frame": 8814,
-  "objects": [
-    {"id": "part_7", "class": "connector", "conf": 0.96, "bbox": [/* ... */]}
-  ],
-  "workspace_clear": true
-}
-```
-
-Deploy path (object detection does not go through GenieX directly):
+## The engine loop (`omni_q.engine.OmniQ`)
 
 ```
-HF YOLO → Qualcomm AI Hub / QAIRT → Snapdragon X Elite → live detection → OMNI Q
+start_mission → observe → plan → ┌─ apply queued constraints → recompile
+                                 │  next step → route (Device) → authorize (Receipt)
+                                 │           → manipulate → apply_transition (World)
+                                 │           → observe → verify
+                                 └─ on {constraint change · lost capability · step fail ·
+                                       verify mismatch} → recompile; AutonomyMode escalates
+                                        monotonically (NOMINAL→DEGRADED→LOCAL_ONLY→HOLD)
+→ receipt (metrics, decisions, rejected, provenance, content hash)
 ```
 
-GenieX carries the reasoning/VLM node:
+## Composable decorators — no engine edits to add behaviour
+
+**Planner stack** (compose outermost-first):
 
 ```
-camera → YOLO on Qualcomm → scene state → GenieX local model → OMNI Q decision → Arduino / device collaboration
+ReactivePlanner( ScheduledPlanner( RewritingPlanner( RulePlanner() ) ) )
 ```
 
-## Observable states (for the demo)
+| decorator | doc | does |
+|-----------|-----|------|
+| `RulePlanner` | — | goal + world → a linear PICK/MOVE/VERIFY graph (stand-in for a GenieX/VLA planner) |
+| `RewritingPlanner` | [`docs/rewrite.md`](docs/rewrite.md) | collapse PICK+MOVE → SLIDE / NUDGE when cheap (OQ-HAND-006); apply spoken `spin`/`nudge` as graph edits (OQ-025) |
+| `ScheduledPlanner` | [`docs/scheduler.md`](docs/scheduler.md) | bimanual wave scheduling, reach/load arm choice (OQ-044), collision/gripper barriers (OQ-013), style flourishes + dance-in-slack (OQ-015 / OQ-HAND-011) |
+| `ReactivePlanner` | [`docs/ontology.md`](docs/ontology.md) | while the ontology reports a workspace conflict, return a safe hold graph; resume the task when it clears |
 
-1. **NORMAL** — graph builds and executes.
-2. **CONSTRAINT CHANGE** — spoken constraint mutates the graph.
-3. **FAILURE / WORLD CHANGE** — capability lost or world moved → replan.
+**Observe stack:** `ReactiveObserver( OntologyObserver( swarm ) )` — or, without
+the swarm, `FrameObserver(detector)` (single detector + IoU/centre tracker for
+stable ids), or `FakeObserver` (reads the world directly, mock only).
 
-## Open questions
+**Device:** `ProviderRouter([INTEL_PROVIDER, QUALCOMM_PROVIDER])`
+([`docs/providers.md`](docs/providers.md)) routes one graph across either
+sponsor track — perception, reasoning and each arm land on distinct devices
+(complementary work, OQ-031); `keep_local` drops the cloud; a track going
+offline mid-run triggers a normal replan onto the other (OQ-034).
 
-- Graph representation and scheduler (library vs. hand-rolled).
-- Node interface schema and registration format.
-- Verification signals per capability type.
-- Export path specifics for the thermal YOLO on X Elite (ONNX / QNN / QAIRT).
+## Natural language → graph
 
-## Intel online stack (confirmed)
+`omni_q.nlu.parse(text)` → a canonical goal + `(kind, value)` constraints
+(`forbid_object`, `keep_local`, `prefer_arm`, `style`) + structural `mutations`
+(`spin`, `nudge`, `spin_on_place`). `omni_q.mutation.RuntimeMutator` applies
+them to a live engine: constraints via `add_constraint` (recompiled under the
+`MissionEnvelope`), mutations registered on the `RewritingPlanner`.
+[`docs/runtime-mutation.md`](docs/runtime-mutation.md).
+
+## Action vocabulary (`omni_q.actions`)
+
+84 ops with metadata (`category`, `requires_contact/grasp`, `supports_bimanual`,
+`precision`, `style_action`, `blocking`, preconditions/effects) + composite
+routines (`SPIN_PLATE`, `NAPKIN_ROUTINE`, …) with `expand()`. The scheduler and
+rewriter read this instead of hard-coded op sets.
+[`docs/actions.md`](docs/actions.md).
+
+## Perception model (OQ-008)
+
+`perception/` fine-tunes a 7-class detector (`plate cup fork spoon knife napkin
+drawer`) from our own `KissTheHabit/yolov8n-hituav-thermal-finetune` on a large
+real-image haul (Open Images V7 + Objects365 + COCO + LVIS) with a synthetic
+MuJoCo top-up for the thin classes. [`docs/datasets.md`](docs/datasets.md) ·
+[`perception/README.md`](perception/README.md).
+
+Deploy: `best.pt → ONNX → OpenVINO IR` (Intel, run at **MXFP2** for the swarm) ·
+`→ QAIRT` (Qualcomm bonus). Real thermal-model OpenVINO benchmark:
+`evidence/benchmark_results/openvino_inference_2026-09-10/`.
+
+## Intel online stack (the entry track)
 
 Per the official brief
-([`docs/challenge-briefs/intel-online-physical-ai-challenge.md`](docs/challenge-briefs/intel-online-physical-ai-challenge.md)),
-the dual-arm MuJoCo track — "Bimanual VLA Manipulation with Multi-Modal
-Reasoning" — is pinned to a specific toolchain rather than left open:
+([`docs/challenge-briefs/intel-online-physical-ai-challenge.md`](docs/challenge-briefs/intel-online-physical-ai-challenge.md)) —
+"Bimanual VLA Manipulation with Multi-Modal Reasoning":
 
 ```
-Simulation Engine   MuJoCo (or compatible LeRobot Gym env)
-Policy               Hugging Face LeRobot training/fine-tuning
-                     candidate policies: SmolVLA, Pi0.5, ACT, or other VLA/IL
-Model Training        local or cloud, unconstrained (Intel provides no training infra)
-Model Inference        Intel OpenVINO (+ OpenVINO Physical AI), Core Ultra Series 2/3
+Simulation   MuJoCo (or a compatible LeRobot Gym env)
+Policy       Hugging Face LeRobot fine-tune — SmolVLA / Pi0.5 / ACT / other VLA/IL
+Training     local or cloud (Intel provides no training infra)
+Inference    Intel OpenVINO (+ OpenVINO Physical AI), Core Ultra Series 2/3
 ```
 
-OMPL is not named in the official brief — drop it as a confirmed dependency;
-it's optional internal plumbing for `MOVE`/`GRASP` at most. Judged on a 100-point
-rubric (task completion 30, VLA reasoning 20, robustness across 10 randomized
-seeds 15, OpenVINO optimization 20, reproducibility 10, innovation 5).
-
-See [`integrations/intel/README.md`](integrations/intel/README.md) for how this
-maps onto the `LEFT_ARM`/`RIGHT_ARM`/`GRASP`/`MOVE`/`VERIFY` capability nodes.
+100-pt rubric: task completion 30 · VLA reasoning 20 · robustness / 10 seeds 15 ·
+OpenVINO optimization 20 · reproducibility 10 · innovation 5. Independent audit:
+[`docs/oq-004-requirements-audit.md`](docs/oq-004-requirements-audit.md);
+red-team: [`docs/oq-021-red-team-findings.md`](docs/oq-021-red-team-findings.md).
+Qualcomm + Speechmatics are bonus layers that stack on this entry.

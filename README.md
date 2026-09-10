@@ -125,9 +125,18 @@ the boundary between the frontend event surface and real provider work.
 
 ## Documents
 
-- [`ARCHITECTURE.md`](ARCHITECTURE.md) — capability nodes, graph compilation, placement
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — the layered stack: perception swarm → ontology → OMNI-Q → execution; contracts, engine loop, the planner/observer decorator stacks
 - [`DEMO.md`](DEMO.md) — the one reproducible behavior and how to run it
 - [`docs/ui.md`](docs/ui.md) — judge-facing UI runbook, controls, and scope boundary
+- **Reasoning spine** —
+  [`docs/scheduler.md`](docs/scheduler.md) (bimanual scheduling, barriers, flourishes, dance-in-slack) ·
+  [`docs/rewrite.md`](docs/rewrite.md) (SLIDE/NUDGE optimization, spoken spin/nudge as graph edits) ·
+  [`docs/actions.md`](docs/actions.md) (84-op vocabulary + metadata + routines) ·
+  [`docs/runtime-mutation.md`](docs/runtime-mutation.md) (`RuntimeMutator` — live spoken changes) ·
+  [`docs/ontology.md`](docs/ontology.md) (Claims → fusion authority → deltas → reactive halt/resume)
+- **Deployment** —
+  [`docs/providers.md`](docs/providers.md) (Intel + Qualcomm as one Omni graph) ·
+  [`docs/datasets.md`](docs/datasets.md) (YOLO real-image haul + synthetic depth; Omni policy/planner data)
 - [`docs/strategy-notes.md`](docs/strategy-notes.md) — track analysis and rubric strategy
 - [`docs/prior-art.md`](docs/prior-art.md) — patterns borrowed from sibling THC repos (SOCOM_REACT, Open-World-Model-Harness, FALCON-DARPA, VIGIL)
 - [`docs/challenge-briefs/intel-online-physical-ai-challenge.md`](docs/challenge-briefs/intel-online-physical-ai-challenge.md) —
@@ -136,6 +145,8 @@ the boundary between the frontend event surface and real provider work.
   host reference links (MuJoCo, SO-101 assets, LeRobot, Physical AI Studio, OpenVINO) mapped to what's done/pending in this repo
 - [`docs/oq-004-requirements-audit.md`](docs/oq-004-requirements-audit.md) —
   independent PASS/GAP audit against the brief + 100-pt rubric: task completion and OpenVINO optimization are the two biggest current point risks
+- [`docs/oq-021-red-team-findings.md`](docs/oq-021-red-team-findings.md) —
+  deliberate-breakage findings: latent perception false-positive, graph-level vs real-time concurrency, clean passes on unknown-zone / adversarial NL
 
 ## License
 
