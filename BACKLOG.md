@@ -44,7 +44,7 @@ Status legend: ` ` todo · `~` in progress · `x` done.
 |---|----|-------|------|------------|-----------|
 | x | OQ-023 | Gerron/Claude | Natural-language goal parser | OQ-001 | Instructions such as "plates centered, forks left, cups upper-right, show off" become explicit graph constraints — `src/omni_q/nlu.py`, canonical goal + `(kind,value)` constraints + `mutations`, 24 tests |
 |   | OQ-024 | Gerron/GPT | Speechmatics realtime adapter | OQ-023 | Spoken instruction enters same goal parser and can modify an active task |
-| x | OQ-025 | Gerron/Claude | Runtime constraint mutation | OQ-023, OQ-018 | "Don't touch the red cup" / "spin that plate" / "move the fork farther left" modifies current plan safely — `src/omni_q/mutation.py` `RuntimeMutator`; constraint-shaped changes queued + recompiled under the envelope, `spin`/`nudge` parsed + deferred to OQ-011/OQ-014; 10 tests |
+| x | OQ-025 | Gerron/Claude | Runtime constraint mutation | OQ-023, OQ-018 | "Don't touch the red cup" / "spin that plate" / "move the fork farther left" modifies current plan safely — `mutation.py` `RuntimeMutator` (constraint-shaped changes recompiled under the envelope) + `rewrite.py` `RewritingPlanner` (spin/spin_on_place/nudge become graph edits when the manipulator can run the op, else deferred with reason); 25 tests |
 |   | OQ-026 | Gerron/Kimi | Characterize flourish envelope | OQ-003, OQ-014 | Determine safe plate/cup rotation amounts, handoff poses, velocity limits and failure rates |
 |   | OQ-027 | Gerron/GPT | Qualcomm HF model intake | — | Your Hugging Face model can be retrieved/exported into the Qualcomm-supported deployment path |
 |   | OQ-028 | Gerron/GPT | Qualcomm X Elite inference node | OQ-027 | Real on-device inference returns structured detections/results |
@@ -88,12 +88,30 @@ speech → semantic-state-mutation layer.
 | x | OQ-HAND-003 | Gerron/Claude | Orientation / flourish actions (ROTATE_IN_HAND, TWIRL, SPIN, ROLL, FLIP, TURN_HANDLE_TO, PRESENT, ORIENT_*, ALIGN_EDGE, NAPKIN_FLICK) | OQ-001 | in the registry, `style_action` flagged |
 | x | OQ-HAND-004 | Gerron/Claude | Bimanual hand actions (HANDOFF, RECEIVE, PASS_THROUGH, CO_HOLD, CO_ROTATE, CO_ALIGN, CO_STABILIZE, ASSIST_GRASP, TRANSFER_LOAD, REGRASP_WITH_PARTNER, HOLD_WHILE_OTHER_ACTS) | OQ-HAND-001 | category `BIMANUAL` → scheduler gives them both arms in their wave |
 | x | OQ-HAND-005 | Gerron/Claude | Action metadata + preconditions/effects | OQ-HAND-001..004 | `ActionSpec` (category, requires_contact/grasp, supports_bimanual, precision, style_action, blocking, preconditions, effects, args, composes); 84 ops, 17 tests |
-| ~ | OQ-HAND-006 | Gerron/Claude | Planner/scheduler chooses SLIDE/NUDGE vs PICK/PLACE | OQ-HAND-005 | scheduler now reads style/bimanual/grasp/blocking off the registry; planner cost-based op choice still to do |
+| x | OQ-HAND-006 | Gerron/Claude | Planner/scheduler chooses SLIDE/NUDGE vs PICK/PLACE | OQ-HAND-005 | `rewrite.optimize()` collapses a PICK+MOVE chain to SLIDE (same table surface) or NUDGE (same zone), keeps the lift when it's a cross-table move; gated by `can_run(op)`; `RewritingPlanner` runs it every (re)plan. Scheduler also reads style/bimanual/grasp off the registry. 15 tests |
 | ~ | OQ-HAND-007 | Gerron/GPT | Plate spin routine | OQ-HAND-004, OQ-014 | `SPIN_PLATE` / `SPIN_AND_PLACE` routines + `expand()` to primitives; MuJoCo primitive pending |
 | ~ | OQ-HAND-008 | Gerron/GPT | Cup handle orientation | OQ-HAND-003 | `ROTATE_CUP_HANDLE` / `TURN_HANDLE_TO` in spec; sim primitive pending |
 | ~ | OQ-HAND-009 | Gerron/GPT | Utensil alignment micro-actions | OQ-HAND-002 | `TWIRL_UTENSIL`, `ALIGN_PARALLEL`, `STRAIGHTEN`, `NUDGE` in spec; sim primitive pending |
 | ~ | OQ-HAND-010 | Gerron/GPT | Napkin spread / fold-ish routine | OQ-HAND-003 | `NAPKIN_ROUTINE` / `SPREAD` / `NAPKIN_FLICK` in spec; sim primitive pending |
 | ~ | OQ-HAND-011 | Gerron/Claude | Dance-while-working: speech style-mode → scheduler idle-slack flourishes | OQ-HAND-005, OQ-015 | spoken vocab ("fancy", "together", "opposite", "freeze", "back to work") → `style` mode; scheduler fills idle-arm slack with non-blocking IDLE_FLOURISH, never adding a wave or reordering; last STYLE wins; `minimum_time` strips flourishes. Sim primitives pending |
+
+## Ontology layer — living scene graph between perception and OMNI-Q
+
+Cheap specialist detectors emit provenance-carrying **Claims**; the ontology
+reconciles them into authoritative entities + relations that OMNI-Q *reacts* to.
+Spec + fusion authority = Gerron/Claude (`src/omni_q/ontology.py`,
+`docs/ontology.md`); real specialist YOLOs = Gerron/GPT + Gerron/Kimi.
+
+| ✓ | ID | Owner | Task | Depends on | Done when |
+|---|----|-------|------|------------|-----------|
+| x | OQ-ONT-001 | Gerron/Claude | Claim / Entity / Relation / Delta types + IS-A hierarchy | OQ-001 | `mug`/`saucer`/`butter_knife` roll up; `Claim` carries source model, camera, ts, confidence, geometry |
+| x | OQ-ONT-002 | Gerron/Claude | Fusion authority: temporal association, canonical-bucket type vote, preserved disagreement | OQ-ONT-001 | two detectors disagreeing on vocab fuse to one entity; incompatible types on one box → `conflict=True` → `WorldState` FALLBACK (planner won't manipulate); 11 tests |
+| x | OQ-ONT-003 | Gerron/Claude | Relations + workspace-conflict rule + delta stream + `wakes()` attention filter | OQ-ONT-002 | `human` in an `arm` zone raises `workspace.conflict` / `workspace.clear`; `wakes(delta)` gates the expensive reasoner |
+| x | OQ-ONT-004 | Gerron/Claude | `OntologyObserver` (Observe contract) + `stub_swarm` | OQ-ONT-002 | drop-in for `FrameObserver`; runs the engine off a 2-specialist stub swarm |
+| ~ | OQ-ONT-005 | Gerron/GPT + Kimi | Real specialist detectors (objects via `perception/`, human/hand, hazard, affordance, robot-state) | OQ-008 | each emits Claims; ontology fuses without vocab fights |
+|   | OQ-ONT-006 | Gerron/GPT | Run the swarm at MXFP2/MXFP4 on Core Ultra; OMNI-Q wakes only on `wakes()` deltas | OQ-ONT-005, OQ-028 | measured compute saving vs per-frame reasoning |
+|   | OQ-ONT-007 | Gerron/Claude | `reachable_by` / `missing_from` relations from the OQ-006/007 table geometry | OQ-007, OQ-ONT-003 | ontology says "left setting incomplete; left_arm can reach the cup" |
+| ~ | OQ-ONT-008 | Bryan/Codex | UI renders the scene graph: entities, relations, conflicts, workspace flag, which model claimed what | OQ-ONT-003, OQ-005 | `ontology.snapshot()` on screen |
 
 ## Critical path (Intel)
 
