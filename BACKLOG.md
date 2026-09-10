@@ -15,7 +15,7 @@ Status legend: ` ` todo · `~` in progress · `x` done.
 |---|----|-------|------|------------|-----------|
 | x | OQ-001 | Gerron/Claude | Freeze Omni capability contracts: Observe, Plan, Manipulate, Verify, Device, Receipt | — | Interfaces compile and fake capabilities execute end-to-end — `src/omni_q/`, `python -m omni_q.demo`, 6 tests |
 |   | OQ-002 | Gerron/GPT | Build agent-control repo scaffold: five agent dirs, task files, repo maps, coding pointers, active scopes | — | Every agent can bootstrap from repo state without chat history |
-|   | OQ-003 | Gerron/Kimi | Inspect SO-101/MuJoCo implementation and write arm capability map | — | Joint names, limits, gripper range, workspace assumptions, wrist-roll limits, control API, cameras documented |
+| ~ | OQ-003 | Gerron/Kimi | Inspect SO-101/MuJoCo implementation and write arm capability map | — | Joint names, limits, gripper range, workspace assumptions, wrist-roll limits, control API, cameras documented |
 |   | OQ-004 | Damion/Claude | Independently audit Intel challenge requirements against intended design | — | Written PASS/GAP matrix for natural language, camera reasoning, two-arm coordination, multi-step table setting, Intel execution |
 |   | OQ-005 | Bryan/Codex | Build minimal live Omni graph UI shell | OQ-001 | UI can display goal, observations, both arms, graph nodes, current action, verification state |
 |   | OQ-006 | Gerron/GPT | Stand up Intel MuJoCo dual-SO-101 environment | OQ-003 | Two simulated arms boot reliably and accept commanded joint/end-effector actions |
