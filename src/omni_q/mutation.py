@@ -52,7 +52,8 @@ class MutationResult:
             bits.append("rejected " + ", ".join(f"{k} ({r})" for k, _v, r in self.rejected))
         if self.deferred:
             bits.append("deferred " + ", ".join(
-                f"{k}({p.get('object', '?')})" for k, p, _r in self.deferred))
+                f"{k}({p.get('object') or p.get('object_class') or '?'})"
+                for k, p, _r in self.deferred))
         return "; ".join(bits) or "no change"
 
     def as_dict(self) -> dict[str, Any]:
