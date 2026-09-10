@@ -65,6 +65,11 @@ cd OMNI-Q_Weird_Stuff_Machine
 ./demo/run_demo.sh
 ```
 
+## Working the backlog
+
+- [`BACKLOG.md`](BACKLOG.md) — all 48 tasks (OQ-001…OQ-048), owners, dependencies, critical path
+- [`agents/`](agents/) — per-owner filtered task lists; bootstrap here without chat history
+
 ## Documents
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — capability nodes, graph compilation, placement
