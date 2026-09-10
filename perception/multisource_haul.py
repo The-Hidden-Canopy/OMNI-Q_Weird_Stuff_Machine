@@ -479,37 +479,47 @@ def main() -> None:
     deduper = Deduper()
     pool: dict[str, KeptImage] = {}
     dup_stats = {"coco": {"exact": 0, "near": 0}, "open-images": {"exact": 0, "near": 0}}
+    candidates_cocolvis: dict[str, tuple[int, Path]] = {}
     for i in sorted(coco_ids):
-        stem = Path(coco_file.get(i) or lvis_file.get(i, f"{i:012d}.jpg")).stem
-        p = img_dir / f"{stem}.jpg"
-        if not p.exists():
-            continue
+        p = img_dir / coco_file[i]
+        if p.exists():
+            candidates_cocolvis[f"coco:{i:012d}"] = (i, p)
+    for i, p in sorted(lvis_paths.items()):
+        origin = "coco" if i in coco_file else "train"
+        candidates_cocolvis.setdefault(f"{origin}:{i:012d}", (i, p))
+    for key, (i, p) in sorted(candidates_cocolvis.items()):
         sha = sha256_of(p)
         with Image.open(p) as im:
             dh = dhash64(im)
-        dec = deduper.add(f"coco:{stem}", sha, dh)
+        dec = deduper.add(key, sha, dh)
         if dec.status != "unique":
             dup_stats["coco"][dec.status.split("_")[0]] += 1
             continue
         rows = list(coco_rows.get(i, [])) + list(lvis_rows.get(i, []))
-        pool[stem] = KeptImage(key=stem, source="coco+lvis", rows=rows,
-                               src_path=p, sha256=sha, dhash=dh)
+        pool[key] = KeptImage(key=key, source="coco+lvis", rows=rows,
+                              src_path=p, sha256=sha, dhash=dh)
+    n_coco_only = sum(1 for k in pool if k.startswith("coco:"))
     counts = histogram({k: v.rows for k, v in pool.items()})
-    print(f"  {len(pool)} unique COCO+LVIS images; boxes {counts}", flush=True)
+    print(f"  {len(pool)} unique COCO+LVIS images ({n_coco_only} from val2017); "
+          f"boxes {counts}", flush=True)
     manifest["sources"]["coco-2017"] = {
         "status": "ok", "split": "val2017",
         "annotations": "instances_val2017.json (annotations_trainval2017.zip)",
         "val_images_total": len(instances["images"]),
         "images_with_target_boxes": len(coco_rows),
-        "images_kept_unique": sum(1 for v in pool.values() if v.source == "coco+lvis"),
+        "images_kept_unique": n_coco_only,
         "url_images": URL_COCO_VAL_ZIP, "url_annotations": URL_COCO_ANN_ZIP,
     }
     manifest["sources"]["lvis"] = {
         "status": "ok", "version": "v1", "split": "val",
         "url_annotations": URL_LVIS_VAL_ZIP,
         "images_with_target_boxes": len(lvis_rows),
-        "images_matched_to_coco": len(lvis_matched),
-        "images_added_beyond_coco": len(lvis_new),
+        "images_sharing_coco_val_ids": len(lvis_matched),
+        "images_beyond_coco_fetched": n_new,
+        "images_beyond_coco_offered": len(lvis_added),
+        "note": "LVIS v1 val spans COCO val2017 AND COCO train2017; no "
+                "file_name field — names derived from coco_url, train images "
+                "pulled per-image from images.cocodataset.org.",
         "cross_source_dedup_rate": round(len(lvis_matched) / max(len(lvis_rows), 1), 4),
     }
     manifest["sources"]["objects365"] = {

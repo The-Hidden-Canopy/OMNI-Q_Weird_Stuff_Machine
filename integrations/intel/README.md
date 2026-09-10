@@ -269,6 +269,29 @@ alongside the YOLO perception node.
      precision** (real 6-DOF pose-aware IK, jointly solving position and
      full orientation with tighter convergence), not reach, not orientation
      search range. 207/207 tests still green.
+### Legacy table-setting follow-up (2026-09-10)
+
+The legacy `simulation-scripted-manipulation` route now has a bounded,
+object-aware contact primitive in `IntelTableWorld`: it derives a live grasp
+frame from each object's observed yaw, tracks a named fingertip pad with a
+6D damped-least-squares solve, preserves joint-limit margins, and retries only
+from a restored MuJoCo snapshot.  The scene uses explicit pad-only contact
+geometries, a calibrated `cup_1` envelope, table-support collision groups,
+and tableware masks that allow table/pad contact without unrelated objects
+shoving one another.
+
+This is a capability improvement, not a completed table-setting claim.  The
+latest local probes show physically grounded isolated grasps for the calibrated
+cup and some of the other objects, while the full legacy sequence still has
+shared-workspace/order sensitivity and unresolved cutlery/placement failures.
+The engine therefore continues to report failed transitions and replan/hold;
+it does not convert those failures into a success score.  The separate
+`simulation-contact-handoff` path remains the only OQ-010/OQ-011 promotion
+evidence, with its own receipts and 10/10 deterministic gate.
+The fresh [10-seed legacy report](../../evidence/benchmark_results/intel_table_eval_2026-09-10-v4/report.json)
+records 0/10 complete runs (2 grasp failures, 8 placement failures); this is
+exploratory diagnostic evidence, not a promotion score.
+
 ### Contact-handoff evidence boundary
 
 The OQ-010/OQ-011 contact tranche is available through
@@ -278,6 +301,8 @@ pad contacts for one `cup_1` transfer. The deterministic acceptance gate is
 the pinned controller seed `19` (10/10 in the test suite). The
 `run_randomized_contact_handoff_report(root, trials=20)` helper retains every
 seeded receipt and labels the summary exploratory, not a promotion claim.
+The current retained artifacts are the [deterministic gate](../../evidence/benchmark_results/contact_handoff_deterministic_2026-09-10/report.json)
+and the [20-trial randomized report](../../evidence/benchmark_results/contact_handoff_2026-09-10/report.json).
 
 This path never writes the cup free-joint pose, uses weld/equality attachment,
 or changes the existing `simulation-scripted-manipulation` table-setting

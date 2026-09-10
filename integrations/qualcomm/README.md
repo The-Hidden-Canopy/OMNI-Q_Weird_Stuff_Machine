@@ -109,7 +109,8 @@ TMPDIR=$PWD/tmp/pytest-tmp PYTHONPATH=src ./.venv/Scripts/python.exe \
 IDA_TRAIN_V2_ROOT=E:/HiddenCanopy/IDA-TRAIN-V2 ./.venv/Scripts/python.exe \
     -m pytest tests/test_lowbit.py -q
 
-# the CPU evaluation itself (ISR venv: torch + ultralytics)
-E:/HiddenCanopy/Semantically-Aware_ISR/.venv/Scripts/python.exe \
+# the CPU evaluation itself (OMNI-Q venv: torch 2.14.0+cpu + ultralytics;
+# model defaults to the in-repo copy under models/)
+./.venv/Scripts/python.exe \
     integrations/qualcomm/scripts/eval_yolo_2bit_cpu.py
 ```

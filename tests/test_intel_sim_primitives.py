@@ -50,6 +50,17 @@ def test_open_then_close_drawer_moves_its_qpos_both_ways():
     assert world.simulation_summary()["drawer_qpos"] == pytest.approx(DRAWER_CLOSED, abs=1e-6)
 
 
+def test_drawer_fixture_open_does_not_retarget_an_arm():
+    """A passive fixture transition must not disturb the next arm command."""
+    world = IntelTableWorld()
+    before_ctrl = world.data.ctrl.copy()
+
+    _send(world, "OPEN", {"object": "drawer"})
+
+    np.testing.assert_allclose(world.data.ctrl, before_ctrl, atol=0.0)
+    assert world.simulation_summary()["drawer_qpos"] == pytest.approx(DRAWER_OPEN, abs=1e-6)
+
+
 def test_drawer_postcondition_verification_is_physics_backed_and_fail_closed():
     world = IntelTableWorld()
     verifier = IntelTableVerifier(world)
@@ -146,14 +157,18 @@ def test_open_close_rotate_present_execute_individually_and_differ():
 
 
 def test_failed_grasp_reverts_worldstate_instead_of_claiming_success():
-    """The actual point of the OQ-010 rework: a real grasp/placement failure
-    must not leave the scripted WorldState update (ownership/zone) committed
-    -- that would silently claim success the physics never delivered. cup_1
-    is a reliable real-world repro today (SO-101's gripper margin against a
-    64mm-diameter cup is tight, and this adapter has no orientation-aware
-    IK), which makes it a good regression case for the revert path itself,
-    independent of whether/when the grasp geometry improves."""
+    """A real grasp failure must not leave a scripted ownership claim.
+
+    The calibrated cup now succeeds on the nominal scene.  This adversarial
+    fixture disables the named pad contacts, forcing the physical check to
+    fail and exercising the same rollback boundary.
+    """
     world = IntelTableWorld()
+    for geom_id in range(world.model.ngeom):
+        name = world._mujoco.mj_id2name(world.model, world._mujoco.mjtObj.mjOBJ_GEOM, geom_id) or ""
+        if "jaw_pad_" in name:
+            world.model.geom_contype[geom_id] = 0
+    world._mujoco.mj_forward(world.model, world.data)
 
     request = TransitionRequest(
         step_id="t", op="PICK", args={"object": "cup_1"},
@@ -171,13 +186,12 @@ def test_failed_grasp_reverts_worldstate_instead_of_claiming_success():
 
 
 def test_pad_tracked_ik_converges_tighter_than_body_tracked_ik():
-    """Not a grasp-success test (that's still an honest failure -- see
-    test_failed_grasp_reverts_worldstate_instead_of_claiming_success).  This
-    protects the real, measured improvement from generalizing the
-    contact-handoff's fixed-wrist-roll + pad-geom technique: reach error for
-    _do_pick's final approach should land in the ~1-5cm band this technique
-    achieves, not regress back toward the ~5-9cm band the old free-wrist-roll
-    5-joint solve produced for the same target."""
+    """Protect the measured pad-tracking improvement in the legacy path.
+
+    This is not a full table-setting gate: placement and all-object
+    robustness remain separate evidence.  It only prevents the final
+    object-facing approach from regressing to the old body-tracked solve.
+    """
     world = IntelTableWorld()
 
     result = world._do_pick(6, "cup_1")
@@ -185,16 +199,69 @@ def test_pad_tracked_ik_converges_tighter_than_body_tracked_ik():
     assert result["reach_error_m"] < 0.06
 
 
+def test_grasp_frame_reads_object_yaw_without_mutating_freejoint():
+    """The orientation target is derived from observed scene state only."""
+    world = IntelTableWorld()
+    qpos_before = world.data.qpos.copy()
+
+    rotation, roll_hint = world._grasp_frame(6, "cup_1")
+
+    np.testing.assert_allclose(rotation.T @ rotation, np.eye(3), atol=1e-10)
+    assert np.linalg.det(rotation) == pytest.approx(1.0, abs=1e-10)
+    assert -1.65 <= roll_hint <= 1.65
+    np.testing.assert_allclose(world.data.qpos, qpos_before, atol=0.0)
+
+
+def test_oriented_pad_solver_returns_pose_metrics_and_respects_arm_only_scope():
+    world = IntelTableWorld()
+    rotation, roll_hint = world._grasp_frame(6, "cup_1")
+    target = world.data.geom_xpos[world._pad_geom[6]].copy()
+    object_qpos_before = world.data.qpos[world._object_joints["cup_1"][0]:world._object_joints["cup_1"][0] + 7].copy()
+
+    result = world._ik_reach_pad_pose(6, target, rotation, roll_hint=roll_hint, iters=1)
+
+    assert set(result) == {"position_error_m", "orientation_error_rad", "orientation_satisfied"}
+    assert result["position_error_m"] >= 0.0
+    assert result["orientation_error_rad"] >= 0.0
+    assert isinstance(result["orientation_satisfied"], bool)
+    np.testing.assert_allclose(
+        world.data.qpos[world._object_joints["cup_1"][0]:world._object_joints["cup_1"][0] + 7],
+        object_qpos_before,
+        atol=1e-10,
+    )
+
+
+def test_legacy_scene_exposes_named_pad_only_contacts_and_calibrated_cup():
+    world = IntelTableWorld()
+    mujoco = world._mujoco
+    cup_id = mujoco.mj_name2id(world.model, mujoco.mjtObj.mjOBJ_GEOM, "cup_1")
+    pad_id = world._pad_geom[0]
+    assert tuple(world.model.geom_size[cup_id][:2]) == pytest.approx((0.022, 0.050), abs=1e-6)
+    assert tuple(world.model.geom_friction[cup_id]) == pytest.approx((3.0, 0.020, 0.001), abs=1e-6)
+    assert int(world.model.geom_contype[pad_id]) == 4
+    assert int(world.model.geom_conaffinity[pad_id]) == 0
+    for object_id in ("plate_1", "cup_1", "fork_1", "spoon_1", "napkin_1"):
+        geom_id = mujoco.mj_name2id(world.model, mujoco.mjtObj.mjOBJ_GEOM, object_id)
+        assert int(world.model.geom_contype[geom_id]) == 16
+        # Tableware contacts the table (bit 2) and named pads (bit 4), not
+        # unrelated tableware (bit 16), so one placement cannot shove the
+        # next object before its own governed transition.
+        assert int(world.model.geom_conaffinity[geom_id]) == 6
+
+
 def test_failed_grasp_restores_mujoco_state_for_a_clean_retry():
     """A rejected real attempt must roll back physics as well as WorldState.
 
-    The real controller currently fails this cup grasp honestly.  Before the
-    rollback guard, that failure still left the arm/free-body dynamics at the
-    end of its attempted trajectory, so a governed retry was not a retry from
-    the same scene.  Compare all state that the transition advances, not just
-    the ownership label that the MockWorld layer reverted.
+    Disable the named pad contacts to force a physical failure.  Compare all
+    state that the transition advances, not just the ownership label that the
+    MockWorld layer reverts.
     """
     world = IntelTableWorld()
+    for geom_id in range(world.model.ngeom):
+        name = world._mujoco.mj_id2name(world.model, world._mujoco.mjtObj.mjOBJ_GEOM, geom_id) or ""
+        if "jaw_pad_" in name:
+            world.model.geom_contype[geom_id] = 0
+    world._mujoco.mj_forward(world.model, world.data)
     before_qpos = world.data.qpos.copy()
     before_qvel = world.data.qvel.copy()
     before_ctrl = world.data.ctrl.copy()
