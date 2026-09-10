@@ -148,16 +148,20 @@ def test_open_close_rotate_present_execute_individually_and_differ():
 def test_failed_grasp_reverts_worldstate_instead_of_claiming_success():
     """The actual point of the OQ-010 rework: a real grasp/placement failure
     must not leave the scripted WorldState update (ownership/zone) committed
-    -- that would silently claim success the physics never delivered. cup_1
-    is a reliable real-world repro today (SO-101's gripper margin against a
-    64mm-diameter cup is tight, and this adapter has no orientation-aware
-    IK), which makes it a good regression case for the revert path itself,
-    independent of whether/when the grasp geometry improves."""
+    -- that would silently claim success the physics never delivered.
+    plate_1 is a reliable real-world repro today: it's wider than the
+    gripper can ever open (190mm vs a 77mm max opening), so it can only
+    ever be an edge grasp, which this adapter still doesn't land -- a good
+    regression case for the revert path itself, independent of whether/when
+    the grasp geometry improves for other objects. (cup_1 was this
+    repro case until 2026-09-10, when real orientation-aware IK plus fixing
+    its geometry to actually fit the gripper's measured envelope made it a
+    genuine, honest success -- see intel_sim.py's module docstring.)"""
     world = IntelTableWorld()
 
     request = TransitionRequest(
-        step_id="t", op="PICK", args={"object": "cup_1"},
-        expected_revision=world.state().revision, actor="intel.right_arm",
+        step_id="t", op="PICK", args={"object": "plate_1"},
+        expected_revision=world.state().revision, actor="intel.left_arm",
     )
     result = world.apply_transition(request)
 
@@ -167,17 +171,18 @@ def test_failed_grasp_reverts_worldstate_instead_of_claiming_success():
     # this adapter's real-physics grasp check runs; a failed grasp must
     # revert that claim, not leave the object silently "held" by an arm
     # that never actually gripped it.
-    assert world.state().ownership["cup_1"] is None
+    assert world.state().ownership["plate_1"] is None
 
 
 def test_pad_tracked_ik_converges_tighter_than_body_tracked_ik():
-    """Not a grasp-success test (that's still an honest failure -- see
-    test_failed_grasp_reverts_worldstate_instead_of_claiming_success).  This
-    protects the real, measured improvement from generalizing the
-    contact-handoff's fixed-wrist-roll + pad-geom technique: reach error for
-    _do_pick's final approach should land in the ~1-5cm band this technique
-    achieves, not regress back toward the ~5-9cm band the old free-wrist-roll
-    5-joint solve produced for the same target."""
+    """cup_1 is now a genuine grasp success (see intel_sim.py's module
+    docstring) so this doubles as a light success-path check, but its real
+    job is protecting reach *precision* specifically: should land in the
+    ~1-5cm band the pad-geom + orientation-aware technique achieves, not
+    regress back toward the ~5-9cm band the old free-wrist-roll 5-joint
+    solve produced for the same target. plate_1 is the current honest-
+    failure repro case (see test_failed_grasp_reverts_worldstate_instead_
+    of_claiming_success), not this test's concern."""
     world = IntelTableWorld()
 
     result = world._do_pick(6, "cup_1")
@@ -188,10 +193,12 @@ def test_pad_tracked_ik_converges_tighter_than_body_tracked_ik():
 def test_failed_grasp_restores_mujoco_state_for_a_clean_retry():
     """A rejected real attempt must roll back physics as well as WorldState.
 
-    The real controller currently fails this cup grasp honestly.  Before the
-    rollback guard, that failure still left the arm/free-body dynamics at the
-    end of its attempted trajectory, so a governed retry was not a retry from
-    the same scene.  Compare all state that the transition advances, not just
+    The real controller currently fails this plate grasp honestly (see
+    test_failed_grasp_reverts_worldstate_instead_of_claiming_success for why
+    plate_1, not cup_1, is the current repro case). Before the rollback
+    guard, that failure still left the arm/free-body dynamics at the end of
+    its attempted trajectory, so a governed retry was not a retry from the
+    same scene.  Compare all state that the transition advances, not just
     the ownership label that the MockWorld layer reverted.
     """
     world = IntelTableWorld()
@@ -201,7 +208,7 @@ def test_failed_grasp_restores_mujoco_state_for_a_clean_retry():
     before_time = float(world.data.time)
     before_steps = world.simulation_summary()["controller_steps"]
 
-    result = _send(world, "PICK", {"object": "cup_1"}, actor="intel.right_arm")
+    result = _send(world, "PICK", {"object": "plate_1"}, actor="intel.left_arm")
 
     assert result.ok is False
     np.testing.assert_allclose(world.data.qpos, before_qpos, atol=1e-10)
@@ -209,7 +216,7 @@ def test_failed_grasp_restores_mujoco_state_for_a_clean_retry():
     np.testing.assert_allclose(world.data.ctrl, before_ctrl, atol=1e-10)
     assert float(world.data.time) == pytest.approx(before_time, abs=1e-12)
     assert world.simulation_summary()["controller_steps"] == before_steps
-    assert world.state().ownership["cup_1"] is None
+    assert world.state().ownership["plate_1"] is None
 
 
 def test_failed_place_restores_the_pre_attempt_owner():

@@ -66,6 +66,66 @@ the same scrutiny. See `integrations/intel/README.md` for the fuller
 writeup and `docs/oq-021-red-team-findings.md` for how this compounds with
 downstream testability.
 
+**Fourth update: real orientation-aware IK landed (a teammate's independent
+work, merged same day), a real held grasp exists now, and a real bug was
+found and fixed in the same merge.** ``_grasp_frame``/``_ik_reach_pad_pose``
+solve position AND orientation jointly (``mj_jacGeom``'s rotational
+Jacobian, not just position), with a bounded roll-candidate retry verified
+against actual close+lift outcome, not just position error -- exactly the
+"real 6-DOF pose-aware IK" the previous update called for. ``cup_1``
+specifically was also resized to fit the gripper's actually-measured
+envelope (a prior 64mm cup left no real margin against the pad gap) and its
+friction/contact softness tuned to real ceramic/rubber-pad values. Net
+result, honestly measured: ``world._do_pick(6, "cup_1")`` now returns a
+genuine held grasp -- the first reliable success this investigation has
+produced, achieved through real control improvement + a real geometry
+correction, not through weakened physics.
+
+**The bug**: the same merged commit also added ``contype``/``conaffinity``
+overrides setting every non-fingertip-pad arm geom to ``0``/``0``. Under
+MuJoCo's collision rule (contact requires ``(contype1 & conaffinity2) or
+(contype2 & conaffinity1)`` nonzero), a geom with both at zero can never
+collide with *anything* -- the entire arm mesh except the two pads could
+pass through the table, the drawer, and every object with zero contact
+resistance. That's not a control improvement, it's the simulation no
+longer simulating the arm's own body, which is exactly the category of
+change the no-simulation-cheating rule rules out. Found, flagged, and
+reverted (see the comment at the per-arm geom loop below) before this
+lands anywhere near a demo or a rubric claim -- the fix was verified not to
+regress the new orientation-aware grasp: ``cup_1`` still holds with real
+collision fully restored, because the underlying orientation-aware control
++ correctly-sized geometry was doing the real work, not the no-clip
+exemption. ``plate_1``/``fork_1``/``spoon_1``/``napkin_1`` still don't
+hold. Removing the exemption also cost real wall-clock time (more contact
+resolution, more retry attempts on the objects that still fail) -- full
+suite runtime moved from ~95s to ~6 minutes; an honest, accepted cost, not
+something to optimize away by re-introducing the exemption.
+
+Two ``cup_1``-specific tests (``test_failed_grasp_reverts_worldstate_
+instead_of_claiming_success``, ``test_failed_grasp_restores_mujoco_state_
+for_a_clean_retry``) were rewritten to use ``plate_1``, the new honest
+still-failing repro case, since ``cup_1`` is no longer a failure at all.
+
+**The win is bigger than the aggregate 10-seed number shows.** Re-ran
+``run_intel_table_evaluation_report`` after both fixes
+(``evidence/benchmark_results/intel_table_eval_2026-09-10-v6/``): still
+10/10 ``grasp_failure`` in the summary table, but reading a trial's raw
+receipt directly shows ``pick_cup_1`` *and* ``move_cup_1`` both succeeding
+-- a full, real pick-and-place, not a near-miss -- before the plan reaches
+``fork_1``, which still doesn't converge and exhausts its retries. The
+per-trial outcome field is a single first-blocking-failure label, so a
+trial that completes one whole object's pick-and-place looks identical in
+the summary to one that never succeeds at anything. Read the receipts, not
+just the summary, when auditing partial progress -- that's exactly how
+this was found.
+
+Not addressed this pass: the *separate*, pre-existing, already-documented
+``_ContactHandoffController`` scene (see "Contact-handoff evidence
+boundary" below) has used a similar contype/conaffinity scheme since
+before this session -- it predates this merge and stays a deliberately
+bounded, separate evidence track, not folded into the main route either
+way. Worth the team's attention on its own terms, just out of scope here.
+
 This is still a proxy, not hardware evidence -- no vision-guided grasp point,
 no force control. The separate OQ-010/OQ-011 contact adapter uses only MuJoCo
 contact dynamics for a bounded ``cup_1`` handoff. It is a SO-ARM100
@@ -225,7 +285,6 @@ def _drawer(pos: str) -> ET.Element:
     ET.SubElement(body, "geom", {
         "name": "drawer", "type": "box", "size": ".12 .045 .015",
         "rgba": ".30 .19 .11 1", "mass": ".2", "friction": "1.20 .006 .0002",
-        "contype": "8", "conaffinity": "16",
     })
     return body
 
@@ -257,12 +316,10 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     ET.SubElement(worldbody, "light", {"name": "key", "pos": "0 -0.3 1.3", "dir": "0 0 -1", "directional": "true"})
     ET.SubElement(worldbody, "geom", {
         "name": "floor", "type": "plane", "size": "0 0 .05", "rgba": ".08 .12 .12 1",
-        "contype": "2", "conaffinity": "16",
     })
     ET.SubElement(worldbody, "geom", {
         "name": "table", "type": "box", "pos": "0 -0.10 -0.055", "size": ".42 .36 .05",
         "rgba": ".23 .14 .08 1", "friction": "1 .005 .0001",
-        "contype": "2", "conaffinity": "16",
     })
     ET.SubElement(worldbody, "camera", {"name": "third_person", "pos": "0 -1.15 .85", "euler": "1.05 0 0"})
     ET.SubElement(worldbody, "camera", {"name": "table_overhead", "pos": "0 -.10 1.20", "euler": "0 0 0"})
@@ -286,17 +343,25 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     for arm, pos in (("left", "-.26 .20 .0"), ("right", ".26 .20 .0")):
         arm_body = _prefixed(base, arm)
         arm_body.set("pos", pos)
+        # Real friction/contact-softness tuning for the fingertip pads only
+        # (a rubber-ish pad genuinely does grip harder than bare mesh) --
+        # NOT contype/conaffinity masking. An earlier version of this
+        # function set contype=0/conaffinity=0 on every non-pad arm geom,
+        # which under MuJoCo's collision rule ((c1&a2)|(c2&a1)) makes a geom
+        # unable to collide with ANYTHING regardless of what else is in the
+        # scene -- the whole arm except the two pads could pass through the
+        # table, the drawer, and every object with zero contact resistance.
+        # That's not a control improvement, it's the simulation not
+        # simulating the arm's own body -- reverted per the no-cheating
+        # rule: only the pads get a friction override, nothing gets a
+        # collision exemption, and no contype/conaffinity is set anywhere
+        # in this scene (plain MuJoCo defaults collide with everything).
         for geom in arm_body.iter("geom"):
             name = geom.attrib.get("name", "")
             if "jaw_pad_" in name:
-                geom.set("contype", "4")
-                geom.set("conaffinity", "0")
                 geom.set("friction", "3.00 0.020 0.001")
                 geom.set("solref", ".050 1")
                 geom.set("solimp", ".80 .95 .010")
-            else:
-                geom.set("contype", "0")
-                geom.set("conaffinity", "0")
         worldbody.append(arm_body)
         for exclude in source_excludes:
             ET.SubElement(contact, "exclude", {
@@ -335,7 +400,6 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
         _body("plate_1", plate_pos, {
             "type": "cylinder", "size": ".095 .016", "rgba": ".93 .93 .91 1",
             "mass": ".18", "friction": "1.20 .006 .0002",  # ceramic
-            "contype": "16", "conaffinity": "20",
         }, euler=plate_euler),
         _body("cup_1", cup_pos, {
             # Calibrated to the measured SO-101 pad envelope: the previous
@@ -344,24 +408,24 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
             "type": "cylinder", "size": ".022 .050", "rgba": ".22 .58 .78 1",
             "mass": ".08", "friction": "3.00 .020 .001",
             "solref": ".050 1", "solimp": ".80 .95 .010",
-            "contype": "16", "conaffinity": "20",
         }, euler=cup_euler),
         # fork/spoon start inside the drawer -- retrieval is gated on OPEN, matching
         # the brief's scenario ("open the top drawer, retrieve spoons and forks").
         _body("fork_1", fork_pos, {
             "type": "box", "size": ".012 .075 .004", "rgba": ".72 .73 .75 1",
             "mass": ".04", "friction": "1.20 .006 .0002",
-            "contype": "16", "conaffinity": "20",  # metal cutlery, small grasp footprint
         }, euler=fork_euler),
         _body("spoon_1", spoon_pos, {
             "type": "box", "size": ".013 .07 .004", "rgba": ".72 .73 .75 1",
             "mass": ".04", "friction": "1.20 .006 .0002",
-            "contype": "16", "conaffinity": "20",
         }, euler=spoon_euler),
         _body("napkin_1", napkin_pos, {
             "type": "box", "size": ".07 .05 .003", "rgba": ".90 .40 .38 1",
-            "mass": ".02", "friction": "1.20 .006 .0002",
-            "contype": "16", "conaffinity": "20",  # cloth
+            # Cloth genuinely grips more than metal cutlery or glazed
+            # ceramic (higher real sliding-friction coefficient) -- a
+            # uniform 1.20 across every material lost that distinction;
+            # restoring it, not inventing it.
+            "mass": ".02", "friction": "1.60 .006 .0002",
         }, euler=napkin_euler),
     ])
 

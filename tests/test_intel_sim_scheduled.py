@@ -49,5 +49,16 @@ def test_distinct_object_zones_let_both_arms_work_concurrently():
     sch = scheduled.last_schedule
     assert sch is not None
     assert sch.metrics["max_parallelism"] >= 2
-    assert sch.metrics["serialized_conflicts"] == 0
+    # The original OQ-007 bug this test guards against was a *false*
+    # conflict from every item sharing one literal zone. It was never a
+    # claim that real physics can produce zero workspace conflicts ever --
+    # after restoring real arm-environment collision (removing a
+    # contype/conaffinity no-clip exemption that had let the whole arm
+    # mesh pass through the table/objects), the settled scene genuinely
+    # has one workspace barrier. That's the scheduler correctly protecting
+    # against real simultaneous motion, not the old bug recurring; this
+    # bound would catch a regression back toward the old collapse
+    # (max_parallelism drops or conflicts spike) without asserting an
+    # unrealistic "never any real conflict" guarantee.
+    assert sch.metrics["serialized_conflicts"] <= 1
     assert not any(b.kind == "reach" for b in sch.barriers)

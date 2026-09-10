@@ -81,10 +81,49 @@ controller's own position precision (~0.05m best case) is. Full writeup:
 `integrations/intel/README.md`, `src/omni_q/intel_sim.py` module docstring,
 `docs/oq-004-requirements-audit.md` third addendum. 207/207 tests green.
 
+## Extra, continued: a teammate's real fix landed, plus a real bug caught in the same merge
+
+Was mid-way through my own grasp-controller experiments (multi-start IK to
+escape a confirmed local minimum, plus a target-geometry bug fix) when a
+teammate independently landed real orientation-aware IK
+(`_grasp_frame`/`_ik_reach_pad_pose`, jacr-based, verified against actual
+close+lift) plus a resized `cup_1` that actually fits the gripper's real
+envelope — more complete than what I had in progress, and it genuinely
+works: `world._do_pick(6, "cup_1")` now returns a real held grasp, the
+first reliable success this whole investigation has produced. Didn't force
+my own parallel rewrite on top of a working, more sophisticated
+implementation — abandoned mine, kept the insights (documented in
+`intel_sim.py`'s module docstring for whoever touches this next).
+
+**But the same merge also introduced a real problem**: `contype`/
+`conaffinity` set to 0/0 on every non-pad arm geom, which under MuJoCo's
+collision rule makes the whole arm mesh except the two fingertip pads
+unable to collide with *anything* — table, drawer, every object. That's a
+no-clip exemption, not a control improvement, and directly the category of
+change flagged earlier this session (see `feedback_no_simulation_cheating`
+memory). Found it, flagged it to the user before touching anything, got
+explicit direction to fix it while keeping real-world realism. Removed the
+exemption entirely (reverted to plain MuJoCo defaults, everything collides
+with everything) and verified the real orientation-aware grasp still holds
+with full collision restored — it does, because the underlying control +
+geometry fix was doing the real work, not the exemption. Cost: real,
+accepted, not hidden — full suite runtime ~95s → ~6min once physics is
+honest again. Reconciled 4 tests whose premises assumed `cup_1` always
+fails (switched to `plate_1`, the new honest repro case) or that real
+physics produces zero workspace conflicts ever (it doesn't have to).
+294/294 tests green. Full writeup: `integrations/intel/README.md`,
+`intel_sim.py` module docstring, `docs/oq-004-requirements-audit.md`
+fifth addendum.
+
+Flagged, not fixed: the *separate*, pre-existing `_ContactHandoffController`
+scene has used a similar contype/conaffinity scheme since before this
+session — predates this merge, stays its own deliberately-bounded evidence
+track, worth the team's attention on its own terms but out of scope here.
+
 ## Next up: OQ-033 (blocked on OQ-031) / OQ-048 (blocked on demo-critical tasks)
 
 Both still gated on other people's work landing first. No open P0/P1 task
 right now — check back once OQ-031 (Qualcomm) or the demo-critical queue
-moves. The real 6-DOF pose-aware IK fix needed to actually close the grasp
-gap is a bigger build, not audit work — flagged for whoever owns OQ-010
-next, or worth picking up directly if nothing else unblocks first.
+moves. `plate_1`/`fork_1`/`spoon_1`/`napkin_1` still don't hold — worth
+picking up directly if nothing else unblocks first, now with a working
+orientation-aware base to extend rather than starting from scratch.
