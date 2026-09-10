@@ -1,7 +1,7 @@
 # Bimanual task scheduler (`omni_q.scheduler`)
 
 > OQ-012 (scheduler) · OQ-013 (collision / resource barriers) · OQ-044
-> (dynamic arm-role assignment). Design authority:
+> (dynamic arm-role assignment) · OQ-015 (style flourishes). Design authority:
 > [`../integrations/intel/so101_capability_map.md`](../integrations/intel/so101_capability_map.md).
 
 `schedule(graph, world)` takes a planner `PlanGraph` plus a `WorldState` and
@@ -30,14 +30,16 @@ dual-arm executor reads `Schedule.waves` directly.
 | **Arm choice** (OQ-044) | 1) explicit `Step.arm`; 2) a `prefer_arm` constraint that reaches; 3) the reaching arm with the lower projected load. A pick/move pair stays on one arm. A chain containing a `HANDOFF` splits: giver keeps the pre-steps, the named `to_actor` takes the rest. Role is chosen, never fixed L/R. |
 | **Gripper occupancy** | One step per arm per wave, and a `PICK` needs that arm's hand free (its prior object already moved / handed off). |
 | **Waves** | Greedy layering: each wave takes ready steps (deps met, arm free, region clear), ≤1 per arm. `observe` / `verify` steps quiesce both arms → solo wave. |
-| **Barriers** (OQ-013) | Two steps conflict if their regions are equal or within `overlap` **and** they would share a wave; the later one is pushed to a new wave and a `Barrier(kind="workspace")` is recorded. Also `kind ∈ {gripper, verify, reach}`. Invariant: no wave holds two manipulate steps in conflicting regions. |
+| **Barriers** (OQ-013) | Two steps conflict if their regions are equal or within `overlap` **and** they would share a wave; the later one is pushed to a new wave and a `Barrier(kind="workspace")` is recorded. Also `kind ∈ {gripper, verify, reach, flourish}`. Invariant: no wave holds two manipulate steps in conflicting regions. |
+| **Flourishes** (OQ-015) | Steps with `op ∈ {PRESENT, FLOURISH, SHOWCASE, SPIN_SHOW}` are showmanship. They're scheduled *after* the mandatory plan: slotted into an existing slack wave if one fits, else one single flourish wave is inserted before `verify` (`allow_flourish_wave=True`), else dropped with a `Barrier(kind="flourish")`. A flourish never blocks another step (`annotate()` excludes it from previous-wave deps) and is never a dependency of `verify` — the goal path is unchanged. Metrics: `flourishes_scheduled`, `flourishes_dropped`, `flourish_waves_added`. Without a `style=show_off` constraint the planner emits none. |
 
 ## `Schedule`
 
-- `waves: list[Wave]` — `Wave.index`, `Wave.steps: list[ScheduledStep]` (`step_id`, `arm`, `region_id`, `wave`).
+- `waves: list[Wave]` — `Wave.index`, `Wave.steps: list[ScheduledStep]` (`step_id`, `arm`, `region_id`, `flourish`).
 - `barriers: list[Barrier]` — `between`, `kind`, `reason`.
 - `arm_timeline: dict[str, list[str]]` — ordered step ids per arm (feeds OQ-020 viz).
-- `metrics` — `waves`, `max_parallelism`, `handoffs`, `serialized_conflicts`.
+- `dropped: list[str]` — flourishes omitted for lack of slack.
+- `metrics` — `waves`, `max_parallelism`, `handoffs`, `serialized_conflicts`, `flourishes_scheduled`, `flourishes_dropped`, `flourish_waves_added`.
 - `assignment` / `regions` — per-step arm and region id.
 - `annotate(graph)` / `to_dict()`.
 
@@ -51,8 +53,6 @@ PYTHONPATH=src python -m pytest -q tests/test_scheduler.py
 ## Not yet
 
 - Wiring `schedule()` into `RulePlanner` (kept out while the core is churning).
-- Style-aware flourish scheduling (OQ-015) — keep `present_*` steps but place
-  them only in slack waves.
 - Real object poses instead of zone→region (needs OQ-006/OQ-008 data).
 - Auto-inserting `HANDOFF` when a chain spans both arms (today it flags a
   `reach` barrier).

@@ -227,6 +227,101 @@ def test_annotated_graph_runs_through_the_engine():
 
 
 # ---------------------------------------------------------------------------
+# style constraints / flourishes (OQ-015)
+# ---------------------------------------------------------------------------
+
+
+def _present(oid: str) -> Step:
+    return Step(f"present_{oid}", "manipulate", "PRESENT",
+               args={"object": oid}, deps=(f"move_{oid}",))
+
+
+def test_no_style_means_no_flourish_and_no_extra_wave():
+    _TARGET.update(x="bin", y="setting_1")
+    world = _world([
+        Detection("x", "connector", zone="A", target_zone="bin"),
+        Detection("y", "plate", zone="tray", target_zone="setting_1"),
+    ])
+    sch = schedule(_graph(_chain("x"), _chain("y")), world)
+    assert sch.metrics["flourishes_scheduled"] == 0
+    assert sch.metrics["flourish_waves_added"] == 0
+
+
+def test_show_off_adds_one_flourish_wave_before_verify():
+    _TARGET.update(x="bin", y="setting_1")
+    world = _world([
+        Detection("x", "connector", zone="A", target_zone="bin"),
+        Detection("y", "plate", zone="tray", target_zone="setting_1"),
+    ])
+    g = _graph(_chain("x") + [_present("x")], _chain("y") + [_present("y")])
+    sch = schedule(g, world)
+
+    assert sch.metrics["flourishes_scheduled"] == 2
+    assert sch.metrics["flourishes_dropped"] == 0
+    assert sch.metrics["flourish_waves_added"] == 1
+    assert sch.metrics["max_parallelism"] == 2          # goal path unchanged
+    assert [ss.step_id for ss in sch.waves[-1].steps] == ["verify_final"]
+    flourish_wave = sch.waves[-2]
+    assert all(ss.flourish for ss in flourish_wave.steps)
+
+
+def test_flourish_is_never_a_dependency_of_verify():
+    _TARGET.update(x="bin")
+    world = _world([Detection("x", "connector", zone="A", target_zone="bin")])
+    g = _graph(_chain("x") + [_present("x")])
+    annotated = schedule(g, world).annotate(g)
+    verify = annotated.by_id("verify_final")
+    assert not any(d.startswith("present_") for d in verify.deps)
+
+
+def test_flourish_keeps_its_object_chain_arm():
+    _TARGET.update(x="bin")
+    world = _world([Detection("x", "connector", zone="A", target_zone="bin")])  # right
+    g = _graph(_chain("x") + [_present("x")])
+    sch = schedule(g, world)
+    assert sch.assignment["present_x"] == sch.assignment["move_x"] == "right"
+
+
+def test_flourish_dropped_when_no_slack_and_wave_disallowed():
+    _TARGET.update(x="bin", y="setting_1")
+    world = _world([
+        Detection("x", "connector", zone="A", target_zone="bin"),
+        Detection("y", "plate", zone="tray", target_zone="setting_1"),
+    ])
+    g = _graph(_chain("x") + [_present("x")], _chain("y") + [_present("y")])
+    sch = schedule(g, world, allow_flourish_wave=False)
+
+    assert sch.metrics["flourishes_dropped"] == 2
+    assert set(sch.dropped) == {"present_x", "present_y"}
+    assert any(b.kind == "flourish" for b in sch.barriers)
+    annotated = sch.annotate(g)
+    assert not any(s.id.startswith("present_") for s in annotated.steps)
+
+
+def test_flourish_slots_into_an_existing_slack_wave():
+    # y's pick waits on x's move, so the wave that runs pick_y leaves the other
+    # arm idle -> present_x fills it, no new wave.
+    _TARGET.update(x="bin", y="tray")
+    world = _world([
+        Detection("x", "connector", zone="A", target_zone="bin"),   # right side
+        Detection("y", "plate", zone="B", target_zone="tray"),       # left side
+    ])
+    g = PlanGraph(goal="tidy")
+    g.steps = [
+        Step("pick_x", "manipulate", "PICK", args={"object": "x"}),
+        Step("move_x", "manipulate", "MOVE", args={"object": "x", "to": "bin"}, deps=("pick_x",)),
+        Step("present_x", "manipulate", "PRESENT", args={"object": "x"}, deps=("move_x",)),
+        Step("pick_y", "manipulate", "PICK", args={"object": "y"}, deps=("move_x",)),
+        Step("move_y", "manipulate", "MOVE", args={"object": "y", "to": "tray"}, deps=("pick_y",)),
+        Step("verify_final", "verify", "VERIFY", deps=("move_x", "move_y")),
+    ]
+    sch = schedule(g, world)
+    assert sch.metrics["flourish_waves_added"] == 0
+    assert sch.metrics["flourishes_scheduled"] == 1
+    assert _wave_of(sch, "present_x") == _wave_of(sch, "pick_y")
+
+
+# ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
 
