@@ -8,9 +8,12 @@ from omni_q.fleet import (
     CapabilityLease,
     FleetConflict,
     FleetError,
+    FleetFault,
+    FleetReallocation,
     FleetUnavailable,
     ManipulationFleet,
     ManipulatorSpec,
+    ReallocationRequest,
     WorkspaceReservation,
 )
 
@@ -160,3 +163,108 @@ def test_invalid_workspace_owner_and_unknown_resource_fail_closed():
     wrong_owner = WorkspaceReservation("space-2", "other-step", ("north",), 0, 100)
     with pytest.raises(FleetError, match="owner"):
         fleet.reserve(valid, wrong_owner)
+
+
+def test_fault_reallocation_preserves_authority_and_uses_a_surviving_pair():
+    fleet = ManipulationFleet.from_specs(
+        [
+            ManipulatorSpec("arm_1", CAPS, frozenset({"north"})),
+            ManipulatorSpec("arm_2", CAPS, frozenset({"north"})),
+            ManipulatorSpec("arm_3", CAPS, frozenset({"south"})),
+            ManipulatorSpec("arm_4", CAPS, frozenset({"south"})),
+            ManipulatorSpec("arm_5", CAPS, frozenset({"north"})),
+        ],
+        preferred_pairs=(("arm_1", "arm_2"), ("arm_3", "arm_4")),
+    )
+    lease = CapabilityLease(
+        "lease-1", "task:place-plate", ("arm_1", "arm_2"), 0, 100,
+        purpose="place plate in north",
+    )
+    space = WorkspaceReservation("space-1", "task:place-plate", ("north",), 0, 100)
+    reserved = fleet.reserve(lease, space)
+
+    degraded, evidence = reserved.reallocate(
+        FleetFault("fault-1", ("arm_1",), "motor health unavailable", 25),
+        requests=(ReallocationRequest("lease-1", "CO_ROTATE", "north"),),
+    )
+
+    assert isinstance(evidence, FleetReallocation)
+    assert degraded.spec("arm_1").online is False
+    assert [item.lease_id for item in degraded.leases] == ["lease-1:replan:fault-1"]
+    replacement = degraded.leases[0]
+    assert replacement.resources == ("arm_2", "arm_5")
+    assert replacement.owner == lease.owner
+    assert replacement.purpose == lease.purpose
+    assert degraded.reservations[0].lease_id == replacement.lease_id
+    assert evidence.invalidated_lease_ids == ("lease-1",)
+    assert evidence.affected_owners == ("task:place-plate",)
+    assert evidence.observed_ms == 25
+    assert evidence.replacements == (
+        ("lease-1", "lease-1:replan:fault-1", ("arm_2", "arm_5")),
+    )
+    assert evidence.unresolved_lease_ids == ()
+    assert evidence.as_dict()["kind"] == "fleet.reallocation"
+    assert evidence.as_dict()["requires_replan"] is True
+    assert reserved.spec("arm_1").online is True
+    assert reserved.leases == (lease,)
+
+
+def test_fault_without_capability_context_fails_closed_and_reports_unresolved_lease():
+    fleet = _fleet()
+    lease = CapabilityLease("lease-1", "task-1", ("arm_1", "arm_2"), 0, 100)
+    reserved = fleet.reserve(
+        lease,
+        WorkspaceReservation("space-1", "task-1", ("north",), 0, 100),
+    )
+
+    degraded, evidence = reserved.reallocate(
+        FleetFault("fault-1", ("arm_1",), "fault signal", 50),
+    )
+
+    assert degraded.spec("arm_1").online is False
+    assert degraded.leases == ()
+    assert degraded.reservations == ()
+    assert evidence.invalidated_lease_ids == ("lease-1",)
+    assert evidence.unresolved_lease_ids == ("lease-1",)
+    assert evidence.replacements == ()
+
+
+def test_reallocation_request_rejects_an_invalid_region_before_planning():
+    with pytest.raises(FleetError, match="region"):
+        ReallocationRequest("lease-1", "PICK", "")
+
+
+def test_fault_preserves_unrelated_leases_and_does_not_reuse_busy_resources():
+    fleet = ManipulationFleet.from_specs(
+        [
+            ManipulatorSpec("arm_1", CAPS, frozenset({"north"})),
+            ManipulatorSpec("arm_2", CAPS, frozenset({"north"})),
+            ManipulatorSpec("arm_3", CAPS, frozenset({"north"})),
+            ManipulatorSpec("arm_4", CAPS, frozenset({"north"})),
+        ],
+        preferred_pairs=(("arm_1", "arm_2"), ("arm_3", "arm_4")),
+    )
+    affected = CapabilityLease("lease-1", "task-1", ("arm_1", "arm_2"), 0, 100)
+    unrelated = CapabilityLease("lease-2", "task-2", ("arm_3", "arm_4"), 0, 100)
+    reserved = fleet.reserve(affected).reserve(unrelated)
+
+    degraded, evidence = reserved.reallocate(
+        FleetFault("fault-1", ("arm_1",), "joint fault", 10),
+        requests=(ReallocationRequest("lease-1", "CO_ROTATE", "north"),),
+    )
+
+    assert [lease.lease_id for lease in degraded.leases] == ["lease-2"]
+    assert evidence.unresolved_lease_ids == ("lease-1",)
+    assert evidence.replacements == ()
+    assert degraded.spec("arm_3").online is True
+    assert degraded.spec("arm_4").online is True
+
+
+def test_reallocation_rejects_a_request_for_a_lease_not_touched_by_the_fault():
+    fleet = _fleet()
+
+    with pytest.raises(FleetError, match="not for an invalidated lease"):
+        fleet.reallocate(
+            FleetFault("fault-1", ("arm_1",), "joint fault", 10),
+            requests=(ReallocationRequest("unknown-lease", "PICK", "north"),),
+        )

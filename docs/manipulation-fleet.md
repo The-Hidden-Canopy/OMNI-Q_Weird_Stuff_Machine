@@ -20,9 +20,13 @@ return new snapshots. It does not write `WorldState`, execute a motor command,
 or claim that multiple arms are moving simultaneously.
 
 An offline transition fails closed when the arm still has an active lease. The
-fault/replan path must first call `invalidate_resources()`, record the affected
-lease ids in the evidence stream, and then apply `with_online(..., False)` to
-the resulting snapshot.
+fault/replan path can call `reallocate(FleetFault, requests=...)`, which returns
+a degraded snapshot plus event-ready `FleetReallocation` evidence. It first
+invalidates affected leases and marks failed resources offline, then recreates
+only the leases whose explicit capability context has an eligible replacement.
+The caller still owns publication to `EventBus` and the governed plan/world
+transition. Calling `invalidate_resources()` followed by
+`with_online(..., False)` remains available when no reallocation is wanted.
 
 Preferred pairs are only a selection ranking. If `arm_2` and `arm_3` are both
 online and capable, `biarm:arm_2+arm_3` is available even when their normal
@@ -50,13 +54,15 @@ manipulator ids and capability/region declarations, chooses a preferred or
 dynamic pair, and exposes all participants in `Schedule.resource_assignment`
 and `ScheduledStep.participants`. It does not yet acquire
 `CapabilityLease`/`WorkspaceReservation` objects or drive a real-time N-arm
-executor. Lease acquisition, fault reallocation, and physical concurrency are
+executor. The pure fault reallocation seam exists, but lease-aware scheduler
+acquisition, governed engine integration, and physical concurrency are
 separate backlog gates and are not implied by this planning slice.
 
 ## Evidence boundary
 
 The tests prove data-model invariants, dynamic pairing, fail-closed capability
-selection, and resource/workspace conflict detection. They do not prove:
+selection, resource/workspace conflict detection, and pure fault reallocation
+selection. They do not prove:
 
 - real-time concurrent execution;
 - multi-arm collision avoidance in MuJoCo;

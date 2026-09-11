@@ -22,6 +22,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from itertools import combinations
+import hashlib
+import json
 from typing import Any, Iterable
 
 
@@ -35,6 +37,94 @@ class FleetUnavailable(FleetError):
 
 class FleetConflict(FleetError):
     """A lease or workspace reservation overlaps an active reservation."""
+
+
+@dataclass(frozen=True)
+class FleetFault:
+    """A bounded resource-health observation that requires reallocation."""
+
+    fault_id: str
+    resource_ids: tuple[str, ...]
+    reason: str
+    observed_ms: int
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.fault_id, str)
+            or not self.fault_id
+            or not isinstance(self.reason, str)
+            or not self.reason.strip()
+        ):
+            raise FleetError("fault_id and reason must be non-empty")
+        _unique_ids(self.resource_ids, field_name="fault resources")
+        if self.observed_ms < 0:
+            raise FleetError("fault observed_ms must be non-negative")
+
+
+@dataclass(frozen=True)
+class ReallocationRequest:
+    """The capability context needed to safely retry one invalidated lease."""
+
+    lease_id: str
+    capability: str
+    region: str | None = None
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.lease_id, str)
+            or not self.lease_id
+            or not isinstance(self.capability, str)
+            or not self.capability
+        ):
+            raise FleetError("reallocation lease_id and capability must be non-empty")
+        if self.region is not None and (
+            not isinstance(self.region, str) or not self.region
+        ):
+            raise FleetError("reallocation region must be a non-empty string")
+
+
+@dataclass(frozen=True)
+class FleetReallocation:
+    """Event-ready evidence for a fault-driven fleet snapshot change.
+
+    This is deliberately a value object rather than an EventBus side effect.
+    The governed runtime owns publication and any WorldState/plan transition.
+    """
+
+    fault_id: str
+    reason: str
+    observed_ms: int
+    failed_resources: tuple[str, ...]
+    invalidated_lease_ids: tuple[str, ...]
+    affected_owners: tuple[str, ...]
+    replacements: tuple[tuple[str, str, tuple[str, ...]], ...]
+    unresolved_lease_ids: tuple[str, ...]
+    prior_fleet_digest: str
+    resulting_fleet_digest: str
+    requires_replan: bool = True
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "kind": "fleet.reallocation",
+            "fault_id": self.fault_id,
+            "reason": self.reason,
+            "observed_ms": self.observed_ms,
+            "failed_resources": list(self.failed_resources),
+            "invalidated_lease_ids": list(self.invalidated_lease_ids),
+            "affected_owners": list(self.affected_owners),
+            "replacements": [
+                {
+                    "old_lease_id": old_id,
+                    "new_lease_id": new_id,
+                    "resources": list(resources),
+                }
+                for old_id, new_id, resources in self.replacements
+            ],
+            "unresolved_lease_ids": list(self.unresolved_lease_ids),
+            "prior_fleet_digest": self.prior_fleet_digest,
+            "resulting_fleet_digest": self.resulting_fleet_digest,
+            "requires_replan": self.requires_replan,
+        }
 
 
 def _unique_ids(values: Iterable[str], *, field_name: str) -> tuple[str, ...]:
@@ -53,6 +143,13 @@ def _intervals_overlap(
     other_end_ms: int,
 ) -> bool:
     return start_ms < other_end_ms and other_start_ms < end_ms
+
+
+def _fleet_digest(fleet: "ManipulationFleet") -> str:
+    encoded = json.dumps(
+        fleet.as_dict(), sort_keys=True, separators=(",", ":")
+    ).encode()
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -430,6 +527,171 @@ class ManipulationFleet:
                 if reservation.lease_id not in invalidated
             ),
         )
+
+    def reallocate(
+        self,
+        fault: FleetFault,
+        *,
+        requests: Iterable[ReallocationRequest] = (),
+    ) -> tuple["ManipulationFleet", FleetReallocation]:
+        """Return a degraded snapshot and event-ready reallocation evidence.
+
+        The method is intentionally a pure resource transition.  It first
+        invalidates every lease touching a failed resource, marks those
+        resources offline in the returned snapshot, then attempts to recreate
+        each affected one- or two-resource lease using the explicitly supplied
+        capability context.  Missing capability context, occupied resources,
+        workspace conflicts, or an unavailable replacement leave that lease
+        unresolved instead of guessing.
+
+        Lease owners and purposes are copied exactly.  A replacement receives
+        a new id so evidence can distinguish the invalidated authority from
+        the replacement authority.  The caller must publish the returned
+        :class:`FleetReallocation` and request the governed plan/world
+        transition; this method performs neither side effect.
+        """
+        failed = set(_unique_ids(fault.resource_ids, field_name="fault resources"))
+        known = set(self.manipulator_ids)
+        if not failed <= known:
+            raise FleetError(f"unknown failed resources: {sorted(failed - known)}")
+
+        affected = tuple(
+            lease for lease in self.leases if failed & set(lease.resources)
+        )
+        request_list = tuple(requests)
+        request_ids = _unique_ids(
+            (request.lease_id for request in request_list),
+            field_name="reallocation requests",
+        ) if request_list else ()
+        affected_ids = {lease.lease_id for lease in affected}
+        unknown_requests = set(request_ids) - affected_ids
+        if unknown_requests:
+            raise FleetError(
+                f"reallocation request is not for an invalidated lease: "
+                f"{sorted(unknown_requests)}"
+            )
+        request_by_lease = {request.lease_id: request for request in request_list}
+
+        prior_digest = _fleet_digest(self)
+        working = self.invalidate_resources(fault.resource_ids)
+        for resource_id in sorted(failed):
+            working = working.with_online(resource_id, False)
+
+        replacements: list[tuple[str, str, tuple[str, ...]]] = []
+        unresolved: list[str] = []
+
+        for lease in affected:
+            request = request_by_lease.get(lease.lease_id)
+            if request is None or len(lease.resources) not in {1, 2}:
+                unresolved.append(lease.lease_id)
+                continue
+
+            workspaces = tuple(
+                reservation for reservation in self.reservations
+                if reservation.lease_id == lease.lease_id
+            )
+            # The public reserve seam currently accepts one workspace
+            # reservation per lease.  Refuse to collapse multiple regions.
+            if len(workspaces) > 1:
+                unresolved.append(lease.lease_id)
+                continue
+
+            required_regions: tuple[str, ...] = (
+                tuple(workspaces[0].regions) if workspaces else ()
+            )
+            if request.region is not None and request.region not in required_regions:
+                required_regions += (request.region,)
+
+            busy = {
+                resource
+                for active in working.leases
+                if _intervals_overlap(
+                    lease.start_ms, lease.end_ms, active.start_ms, active.end_ms
+                )
+                for resource in active.resources
+            }
+            exclude = frozenset(failed | busy)
+
+            def supports(resources: tuple[str, ...]) -> bool:
+                return all(
+                    working.spec(resource).supports(request.capability, region)
+                    for resource in resources
+                    for region in required_regions
+                )
+
+            if len(lease.resources) == 2:
+                candidates = tuple(
+                    unit for unit in working.units()
+                    if not (set(unit.members) & set(exclude))
+                    and supports(unit.members)
+                )
+                unit = min(
+                    candidates,
+                    key=lambda candidate: (
+                        -len(set(candidate.members) & set(lease.resources)),
+                        -int(candidate.preferred),
+                        candidate.id,
+                    ),
+                    default=None,
+                )
+                replacement_resources = unit.members if unit is not None else None
+            else:
+                candidates = tuple(
+                    spec for spec in working.manipulators
+                    if spec.id not in exclude
+                    and spec.supports(request.capability, None)
+                    and all(spec.supports(request.capability, region)
+                            for region in required_regions)
+                )
+                spec = min(
+                    candidates,
+                    key=lambda candidate: (
+                        -int(candidate.id in lease.resources), candidate.id
+                    ),
+                    default=None,
+                )
+                replacement_resources = (spec.id,) if spec is not None else None
+
+            if replacement_resources is None:
+                unresolved.append(lease.lease_id)
+                continue
+
+            new_lease_id = f"{lease.lease_id}:replan:{fault.fault_id}"
+            replacement_lease = CapabilityLease(
+                lease_id=new_lease_id,
+                owner=lease.owner,
+                resources=replacement_resources,
+                start_ms=lease.start_ms,
+                end_ms=lease.end_ms,
+                purpose=lease.purpose,
+            )
+            workspace = None
+            if workspaces:
+                workspace = replace(
+                    workspaces[0],
+                    reservation_id=f"{workspaces[0].reservation_id}:replan:{fault.fault_id}",
+                    lease_id=new_lease_id,
+                )
+            try:
+                working = working.reserve(replacement_lease, workspace)
+            except FleetError:
+                unresolved.append(lease.lease_id)
+                continue
+            replacements.append((lease.lease_id, new_lease_id, replacement_resources))
+
+        evidence = FleetReallocation(
+            fault_id=fault.fault_id,
+            reason=fault.reason,
+            observed_ms=fault.observed_ms,
+            failed_resources=tuple(fault.resource_ids),
+            invalidated_lease_ids=tuple(lease.lease_id for lease in affected),
+            affected_owners=tuple(dict.fromkeys(lease.owner for lease in affected)),
+            replacements=tuple(replacements),
+            unresolved_lease_ids=tuple(unresolved),
+            prior_fleet_digest=prior_digest,
+            resulting_fleet_digest=_fleet_digest(working),
+        )
+        return working, evidence
 
     def as_dict(self) -> dict[str, Any]:
         return {
