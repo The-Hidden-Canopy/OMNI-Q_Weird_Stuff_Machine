@@ -1,0 +1,60 @@
+{
+  "available_bytes": 3221225472,
+  "body_params": 6000000000,
+  "decision": {
+    "autonomy": "NOMINAL",
+    "body_params": 6000000000,
+    "capability_retained": true,
+    "format": "mxfp4",
+    "graph_revision": 4,
+    "placement": "LOCAL",
+    "reason": "envelope 3221225472 B fits mxfp4 body residency (3187500000 B): body recompiled to mxfp4",
+    "resident_bytes": 3187500000,
+    "state": "MXFP4"
+  },
+  "graph_revision": 4,
+  "labels": {
+    "born_compressed": "the model never resides in FP32/BF16; BF16 is plumbing only (accumulators, norms)",
+    "capability_retained": "the same body/capability stays resident across all MX tiers; only the format changes",
+    "core_only_semantics": "below the MXFP2 envelope the neural reasoner is evicted; OMNI-Q core remains and novel tasks HOLD",
+    "software_dequantize_only": "no native low-precision hardware exercised"
+  },
+  "schema_version": "1.0.0",
+  "transitions": [
+    {
+      "envelope_bytes": 3221225472,
+      "from_state": "MXFP8",
+      "timestamp": "2026-09-11T00:23:01.752996+00:00",
+      "to_state": "MXFP4",
+      "trigger": "memory_change"
+    },
+    {
+      "envelope_bytes": 1932735283,
+      "from_state": "MXFP4",
+      "timestamp": "2026-09-11T00:23:01.752996+00:00",
+      "to_state": "MXFP2",
+      "trigger": "memory_change"
+    },
+    {
+      "envelope_bytes": 1288490188,
+      "from_state": "MXFP2",
+      "timestamp": "2026-09-11T00:23:01.752996+00:00",
+      "to_state": "CORE_ONLY",
+      "trigger": "memory_change"
+    },
+    {
+      "envelope_bytes": 1288490188,
+      "from_state": "CORE_ONLY",
+      "timestamp": "2026-09-11T00:23:01.752996+00:00",
+      "to_state": "CORE_ONLY",
+      "trigger": "novel_task"
+    },
+    {
+      "envelope_bytes": 3221225472,
+      "from_state": "CORE_ONLY",
+      "timestamp": "2026-09-11T00:23:01.752996+00:00",
+      "to_state": "MXFP4",
+      "trigger": "memory_change"
+    }
+  ]
+}

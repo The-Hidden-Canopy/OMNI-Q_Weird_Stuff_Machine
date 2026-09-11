@@ -4,8 +4,9 @@ Public API:
     quantize_tensor(values, fmt) / dequantize_tensor(packed)  -- tensor level
     pack_codes / unpack_codes                                 -- 4x2-bit storage
 
-Formats: "mxfp4" (4-bit ladder reference), "nvint2", "mxfp2" — evaluated
-symmetrically; no preassigned verdicts. Provenance: vendor/SOURCE.md.
+Formats: "mxfp8" (E4M3 × UE8M0 resident top tier), "mxfp4" (4-bit ladder
+reference), "nvint2", "mxfp2" — evaluated symmetrically; no preassigned
+verdicts. Provenance: vendor/SOURCE.md.
 """
 
 from .lowbit_formats import (
