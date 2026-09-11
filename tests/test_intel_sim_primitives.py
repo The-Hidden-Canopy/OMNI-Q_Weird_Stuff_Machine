@@ -393,10 +393,11 @@ def test_failed_place_restores_the_pre_attempt_owner():
 
 
 def test_full_run_opens_the_drawer_before_retrieving_cutlery():
-    """Not asserting resolved is True: full-run grasp success needs
-    orientation-aware IK this adapter doesn't have yet (see
-    test_intel_sim.py). OPEN is independent of the grasp/place IK path, so
-    it stays reliable regardless -- that's what this test actually covers."""
+    """Not asserting resolved is True: real orientation-aware IK exists
+    (see intel_sim.py's module docstring) but only cup_1 reliably holds
+    today, so a full "set the table" run still doesn't resolve. OPEN is
+    independent of the grasp/place IK path, so it stays reliable
+    regardless -- that's what this test actually covers."""
     engine = build_intel_sim_engine()
 
     receipt = engine.run("set the table")
@@ -405,3 +406,32 @@ def test_full_run_opens_the_drawer_before_retrieving_cutlery():
     assert ops_in_order[0] == "OPEN"
     assert ops_in_order.index("OPEN") < ops_in_order.index("PICK")
     assert engine.world.simulation_summary()["drawer_qpos"] == pytest.approx(DRAWER_OPEN, abs=1e-6)
+
+
+def test_a_persistently_failing_object_does_not_exhaust_the_whole_run_alone():
+    """A found and fixed real problem, not a hypothetical: before this fix,
+    once the first still-misplaced object in _OBJECT_ORDER failed to grasp,
+    the engine's replan-on-any-failure loop kept regenerating the exact
+    same graph with that object still first, so it alone consumed the
+    entire max_revisions budget -- napkin_1 (the first object after cup_1
+    reliably succeeds) was measured failing 6 times in a row while
+    plate_1/fork_1/spoon_1 never got a single real attempt. This doesn't
+    change whether the run resolves (every object still has to actually
+    succeed for that), but it means the revision budget gets spent trying
+    different objects instead of hammering whichever one happens to be
+    stuck first -- both for real evidence richness and for what a live
+    demo actually looks like."""
+    engine = build_intel_sim_engine()
+
+    engine.run("set the table")
+
+    pick_objects = [
+        action["result"].get("grasped") or action.get("step", "").removeprefix("pick_")
+        for action in engine._actions
+        if action["op"] == "PICK"
+    ]
+    distinct_objects_attempted = {obj for obj in pick_objects if obj}
+    # cup_1 succeeds and drops out immediately; among the objects that keep
+    # failing, more than one should have been genuinely attempted within
+    # the same run, not just the first one in priority order.
+    assert len(distinct_objects_attempted - {"cup_1"}) > 1

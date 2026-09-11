@@ -185,3 +185,36 @@ nothing else unblocks first. Otherwise, continuing to audit newly-landed
 code opportunistically (residency/evidence this round) is a reasonable
 default use of idle time given the auditor role, even without a formally
 unblocked ticket.
+
+**Note: user says ~6 days left to submission (2026-09-11).** Weighing
+further self-directed work by rubric-point impact, not just technical
+interest, from here on.
+
+## Extra: scheduler fix — one failing object no longer eats the whole run's retry budget
+
+Found and fixed a real, separate bug while re-examining the grasp
+sequence: `IntelTablePlanner` always regenerated every misplaced object
+into each replanned graph in the same priority order, but `engine.py`
+only ever executes the single first-ready step before any failure
+triggers a full replan — so the first still-failing object after
+`cup_1` (`napkin_1`) was measured consuming the *entire* `max_revisions`
+budget alone (failed 6 times straight), and `plate_1`/`fork_1`/`spoon_1`
+never got a single real attempt in a full run. Fixed: tracks real
+per-object attempt counts (only the object actually executed, not every
+object merely present in the graph — a first draft got this wrong, which
+meant all objects crossed the deprioritize threshold in lockstep and the
+order never changed) and deprioritizes an object after
+`_MAX_ATTEMPTS_BEFORE_DEPRIORITIZE` failures. Verified: a full run now
+cycles `napkin_1`→`plate_1`→`fork_1`→`spoon_1`→`napkin_1`→... instead of
+hammering one object for the whole budget. Regression test added.
+
+Honest about impact: this does **not** move the 10-seed harness's
+aggregate outcome label (still 10/10 `grasp_failure`, confirmed by
+re-running it — `evidence/benchmark_results/intel_table_eval_2026-09-11-v7/`)
+since that classifier scans the whole receipt for any failure, not just
+the terminal one. The real value is richer per-run evidence and a live
+demo that visibly tries different objects instead of looking stuck on
+one — relevant to how judges perceive the demo even though it doesn't
+change the rubric-scored success rate directly. 377/377 tests green.
+Full writeup: `BACKLOG.md` (OQ-010 row), `integrations/intel/README.md`,
+`intel_sim.py`'s module docstring ("Sixth update").

@@ -335,6 +335,28 @@ alongside the YOLO perception node.
   scheduler could let a persistently-failing object stop blocking attempts
   on the rest of the plan, since that's the only reason `cup_1`'s real
   success doesn't already show up here.
+- [x] **Follow-up (2) done, 2026-09-11: the scheduler no longer lets one
+  object block the rest.** `IntelTablePlanner` always regenerated every
+  misplaced object into each replanned graph in the same priority order,
+  but the engine only ever executes the single first-ready step before
+  any failure triggers a full replan -- so the first still-failing object
+  after `cup_1` (usually `napkin_1`) was measured consuming the *entire*
+  revision budget alone, failing 6 times in a row while `plate_1`/
+  `fork_1`/`spoon_1` never got a single real attempt. Fixed: tracks real
+  per-object attempt counts (only the object genuinely executed, not
+  every object merely present in the graph -- that distinction mattered:
+  a first draft counted every present object identically each replan, so
+  they all crossed the deprioritize threshold in lockstep and the order
+  never actually changed) and deprioritizes an object after repeated
+  failures instead of leaving it first forever. **Does not change
+  whether a run resolves** or the 10-seed harness's aggregate label
+  (`evidence/benchmark_results/intel_table_eval_2026-09-11-v7/`, still
+  10/10 `grasp_failure` -- expected, that classifier scans the whole
+  receipt for any failure) -- what it changes is that the same budget now
+  produces a genuinely richer attempt record, and a live demo visibly
+  tries different objects instead of appearing stuck on one. Follow-up
+  (1), a finer-grained per-object outcome tally in the report generator,
+  is still open.
 - [ ] **Tried the local-minimum escape on the new orientation-aware
   solver too -- confirmed it still works, but not worth wiring in yet.**
   After real orientation-aware IK landed independently (see below), all

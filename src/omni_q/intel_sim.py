@@ -181,6 +181,32 @@ via forward kinematics before committing to one, the way a real motion
 planner would), not a smoother numerical schedule on top of the same
 single starting point.
 
+**Sixth update: a real, separate bug fix -- the revision budget was being
+spent entirely on whichever object failed first, never reaching the
+others.** ``IntelTablePlanner`` always regenerated every misplaced object
+into each replanned graph in the same ``_OBJECT_ORDER`` priority, but
+``engine.py`` only ever executes the single first-ready step before any
+failure triggers another full replan -- so the first still-failing object
+after ``cup_1`` (usually ``napkin_1``) consumed the entire
+``max_revisions`` budget by itself, measured failing 6 times in a row
+while ``plate_1``/``fork_1``/``spoon_1`` never got a single real attempt.
+Fixed: ``IntelTablePlanner`` now tracks how many times each object has
+actually been attempted (via a ``replan`` override identifying the one
+object that was genuinely tried, not every object merely present in the
+graph -- an earlier draft of this fix counted every present object
+identically each time, which meant they all crossed the deprioritize
+threshold in lockstep and the relative order never actually changed);
+once an object exceeds ``_MAX_ATTEMPTS_BEFORE_DEPRIORITIZE``, it's pushed
+after objects with fewer attempts, not dropped. **This does not change
+whether a run resolves** -- every object still has to actually succeed
+for that, and the 10-seed harness's aggregate outcome label is unchanged
+(``evidence/benchmark_results/intel_table_eval_2026-09-11-v7/``, still
+10/10 ``grasp_failure`` -- expected and checked, since that classifier
+scans the whole receipt for any failure). What it does change: the same
+budget now produces a genuinely richer, more representative attempt
+record per run, and a live demo visibly tries different objects instead
+of appearing to get stuck repeating the identical failed motion.
+
 This is still a proxy, not hardware evidence -- no vision-guided grasp point,
 no force control. The separate OQ-010/OQ-011 contact adapter uses only MuJoCo
 contact dynamics for a bounded ``cup_1`` handoff. It is a SO-ARM100
@@ -1386,6 +1412,25 @@ class IntelTablePlanner(RulePlanner):
     # PICK depends on an OPEN step first, matching the brief's literal
     # scenario ("open the top drawer, retrieve spoons and forks").
     _DRAWER_OBJECTS = {"fork_1", "spoon_1"}
+    # A persistently-failing object used to exhaust the engine's whole
+    # max_revisions budget by itself: the engine replans on ANY failure,
+    # always re-plans every misplaced object, and this planner always put
+    # them back in the same _OBJECT_ORDER -- so the first object that
+    # can't grasp blocks every object behind it from ever being attempted
+    # at all, even ones that would have succeeded. Track how many replans
+    # each object has already appeared in; once one exceeds
+    # _MAX_ATTEMPTS_BEFORE_DEPRIORITIZE, push it after objects with fewer
+    # attempts (still eventually retried if the budget allows, just not
+    # blocking). This doesn't change whether a run resolves -- every
+    # object still needs to actually succeed for that -- but it means the
+    # objects that CAN succeed actually get a real attempt within the same
+    # budget, instead of the budget being spent entirely on whichever
+    # object happens to be stuck first.
+    _MAX_ATTEMPTS_BEFORE_DEPRIORITIZE = 3
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._attempt_counts: dict[str, int] = {}
 
     def plan(self, goal, world):
         graph = super().plan(goal, world)
@@ -1424,8 +1469,17 @@ class IntelTablePlanner(RulePlanner):
             step for step in graph.steps
             if step.args.get("object") not in tracked
         ]
+        def sort_key(object_id: str) -> tuple[bool, int, int]:
+            attempts = self._attempt_counts.get(object_id, 0)
+            return (
+                attempts > self._MAX_ATTEMPTS_BEFORE_DEPRIORITIZE,
+                attempts,
+                self._OBJECT_ORDER.index(object_id),
+            )
+
+        priority_order = sorted(self._OBJECT_ORDER, key=sort_key)
         ordered_tableware = []
-        for object_id in self._OBJECT_ORDER:
+        for object_id in priority_order:
             ordered_tableware.extend(
                 step for step in tableware_steps
                 if step.args.get("object") == object_id
@@ -1434,6 +1488,35 @@ class IntelTablePlanner(RulePlanner):
         terminal = [step for step in other_steps if step.op == "VERIFY"]
         graph.steps = leading + ordered_tableware + terminal
         return graph
+
+    def replan(self, current, world, reason):
+        """Count the one object that was actually just attempted, before
+        generating the fresh plan _MAX_ATTEMPTS_BEFORE_DEPRIORITIZE reads.
+
+        Every object still misplaced appears in every generated graph
+        (RulePlanner.plan includes all of them), but the engine only ever
+        executes the single first-ready step before a failure triggers
+        another replan (engine.py's _next_step + immediate recompile on
+        any failure) -- so incrementing every present object's count
+        (an earlier version of this method did, via plan() itself) counts
+        objects that were never actually tried, and since every misplaced
+        object's count then rises in lockstep, the relative order (and
+        thus which object gets deprioritized first) never actually
+        changes. The one that was genuinely attempted is the first
+        tableware PICK in `current`'s own order that's still misplaced in
+        the fresh `world` -- steps ahead of it in that same prior graph
+        either already succeeded (no longer misplaced) or were never
+        reached at all."""
+        tracked = set(self._OBJECT_ORDER)
+        still_misplaced = {det.object_id for det in world.misplaced()}
+        for step in current.steps:
+            if step.op != "PICK":
+                continue
+            object_id = step.args.get("object")
+            if object_id in tracked and object_id in still_misplaced:
+                self._attempt_counts[object_id] = self._attempt_counts.get(object_id, 0) + 1
+                break
+        return super().replan(current, world, reason)
 
 
 class IntelTableObserver(FakeObserver):
