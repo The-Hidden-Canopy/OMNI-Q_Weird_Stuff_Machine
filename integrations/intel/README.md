@@ -335,6 +335,24 @@ alongside the YOLO perception node.
   scheduler could let a persistently-failing object stop blocking attempts
   on the rest of the plan, since that's the only reason `cup_1`'s real
   success doesn't already show up here.
+- [ ] **Tried the local-minimum escape on the new orientation-aware
+  solver too -- confirmed it still works, but not worth wiring in yet.**
+  After real orientation-aware IK landed independently (see below), all
+  four still-failing objects plateau at the same ~0.05-0.06m "pinch"
+  position error the old solver hit -- the same local-minimum signature.
+  Perturbing the pre-descent Elbow/Wrist_Pitch seed (same technique as
+  before) escapes it here too: a dense 81-point seed grid found a real
+  held grasp for `plate_1` (0.0211m lift, just over the 0.02m threshold).
+  But a bounded, cheap 17-seed grid (the same list that worked for the
+  old solver) only reached 0.0169m -- short. The margin is thin (0.0211m
+  barely clears the bar) and the sweet spot needs the dense grid's
+  resolution, which is too expensive to run on every attempt for a likely
+  fragile win. Not wired in -- a judgment call, not abandonment: the
+  underlying diagnosis (local minima, not a hard reach/orientation limit)
+  still stands and generalizes across solver versions. The real fix
+  remains what was already known: coarse-to-fine or better-seeded
+  convergence, not denser random grids. See `intel_sim.py`'s module
+  docstring, "Fifth update".
 
 ### Legacy table-setting follow-up (2026-09-10)
 

@@ -103,8 +103,12 @@ something to optimize away by re-introducing the exemption.
 
 Two ``cup_1``-specific tests (``test_failed_grasp_reverts_worldstate_
 instead_of_claiming_success``, ``test_failed_grasp_restores_mujoco_state_
-for_a_clean_retry``) were rewritten to use ``plate_1``, the new honest
-still-failing repro case, since ``cup_1`` is no longer a failure at all.
+for_a_clean_retry``) now use an adversarial fixture (see
+``_disable_gripper_collision`` in ``tests/test_intel_sim_primitives.py``)
+that disables one arm's whole gripper body, forcing a real failure on
+demand regardless of which object currently succeeds -- more robust than
+switching to a specific object, since it stays correct even as more
+objects start holding.
 
 **The win is bigger than the aggregate 10-seed number shows.** Re-ran
 ``run_intel_table_evaluation_report`` after both fixes
@@ -125,6 +129,38 @@ boundary" below) has used a similar contype/conaffinity scheme since
 before this session -- it predates this merge and stays a deliberately
 bounded, separate evidence track, not folded into the main route either
 way. Worth the team's attention on its own terms, just out of scope here.
+
+**Fifth update: real orientation-aware IK landed (independent, further
+work by the team) -- confirmed the local-minimum escape technique from
+the "Third update" above still applies, but the payoff is too fragile to
+wire in.** All four still-failing objects (``plate_1``/``napkin_1``/
+``fork_1``/``spoon_1``) plateau at the same ~0.05-0.06m "pinch" position
+error under the new ``_grasp_frame``/``_ik_reach_pad_pose`` solver --
+the same signature as the pre-orientation-aware local-minimum trap.
+Confirmed it's the same failure mode: perturbing the pre-descent Elbow/
+Wrist_Pitch seed (same technique, same injection point -- after
+``_move_to``'s transit, before the precision descent) also escapes it
+here. A dense 81-point seed grid found a genuine held grasp for
+``plate_1`` (0.0211m lift, just over the 0.02m threshold). But: (1) the
+sweet spot is narrow -- a bounded, cheap 17-seed grid (the same list that
+reliably found ``plate_1``'s hold under the old solver) only reached
+0.0169m, short of the threshold; the winning point needed the dense
+grid's finer resolution. (2) 0.0211m is barely over the line, not a
+comfortable margin -- likely fragile to the same kind of small
+perturbation (scene jitter, a different seed's RNG draw) that would be
+present in the 10-seed randomized harness. (3) A dense-enough search to
+find it reliably is expensive per attempt, multiplied across every
+object on every retry. Given the cost (denser search, more wall-clock
+time on top of the current ~6-minute suite) against a marginal, likely
+non-robust payoff, **not wired into** ``_do_pick`` **this pass** -- a
+judgment call, not a dead end: the underlying diagnosis (differential IK
+local minima, not a hard reach/orientation limit) still stands and still
+generalizes across solver versions, which is useful for whoever picks
+this up next. The honest way to actually close this gap remains what the
+"Third update" already said: real, non-gradient-trapped convergence
+(multi-resolution/coarse-to-fine search, or a smarter initial guess than
+a fixed HOME-derived transit configuration), not incrementally denser
+random seed grids.
 
 This is still a proxy, not hardware evidence -- no vision-guided grasp point,
 no force control. The separate OQ-010/OQ-011 contact adapter uses only MuJoCo

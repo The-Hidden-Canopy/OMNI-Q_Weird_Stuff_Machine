@@ -120,10 +120,40 @@ scene has used a similar contype/conaffinity scheme since before this
 session — predates this merge, stays its own deliberately-bounded evidence
 track, worth the team's attention on its own terms but out of scope here.
 
+## Extra, continued: 4 more pulls landed while away — verified, then one more grasp probe
+
+Came back to 4 new commits: real safety-gating (`_workspace_safety` — joint
+-limit margin, contact-force bound, shared-workspace entry check, all
+measured from real `model`/`data`, not cosmetic — spot-checked directly),
+a settle-and-verify check for placed objects, `docs/prior-art.md` (a real,
+well-organized lift of patterns from sibling repos: receipt chaining,
+evidence bundles, evaluator-only secrets), object-pick reordering in
+`IntelTablePlanner`, and OQ-HAND-011's flourish gestures landing as real
+sim primitives. Reassuring detail: the very next commit after "Do you
+believe in magic?" corrected a stale docstring that had assumed arm links
+were still non-colliding — confirms my no-clip fix from before the break
+held and the team built on top of real collision, not around it. Full
+suite still 337/337 green.
+
+Picked the grasp thread back up: does the local-minimum-escape technique
+(pre-descent seed perturbation) that worked on the old solver still work
+on the new orientation-aware one? Yes — all 4 still-failing objects hit
+the same ~0.05-0.06m "pinch" error plateau, and a dense 81-seed grid found
+a real hold for `plate_1` (0.0211m lift). But a bounded, cheap 17-seed
+version only reached 0.0169m — short — and even the dense grid's win is a
+thin margin (barely over the 0.02m threshold), likely fragile to scene
+jitter. Judgment call: **not wired into `_do_pick`** given the cost
+(dense search) vs a fragile, marginal payoff. Documented in
+`intel_sim.py`'s module docstring ("Fifth update") and
+`integrations/intel/README.md` for whoever picks this up — the real fix
+is still coarse-to-fine/better-seeded convergence, not denser random
+grids. No regressions: `cup_1` unaffected, still holds immediately.
+
 ## Next up: OQ-033 (blocked on OQ-031) / OQ-048 (blocked on demo-critical tasks)
 
 Both still gated on other people's work landing first. No open P0/P1 task
 right now — check back once OQ-031 (Qualcomm) or the demo-critical queue
-moves. `plate_1`/`fork_1`/`spoon_1`/`napkin_1` still don't hold — worth
-picking up directly if nothing else unblocks first, now with a working
-orientation-aware base to extend rather than starting from scratch.
+moves. `plate_1`/`fork_1`/`spoon_1`/`napkin_1` still don't hold — the real
+fix needs coarse-to-fine or better-seeded IK convergence, not more random
+seed grids (see "Fifth update" above) — worth picking up directly if
+nothing else unblocks first.

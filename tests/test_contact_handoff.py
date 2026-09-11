@@ -4,12 +4,45 @@ from __future__ import annotations
 
 import inspect
 import json
+import os
 import shutil
+import subprocess
+import time
 from dataclasses import replace
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
+
+
+def _rmtree_with_retry(path: Path, *, attempts: int = 5, delay_s: float = 0.2) -> None:
+    """Windows (this repo lives under a OneDrive-synced checkout) can make
+    Python's own os.unlink/os.rmdir on a just-written file fail with
+    PermissionError even when nothing in-process still holds it open --
+    measured directly: retrying shutil.rmtree itself doesn't clear it
+    (still fails after 15 attempts / 7.5s), but shelling out to `rmdir /s
+    /q` succeeds immediately on the very next call. Whatever's holding the
+    handle (antivirus real-time scan is the leading suspect, tied to
+    python.exe specifically) releases it for a fresh process, not for
+    continued attempts from the same one. Retry shutil.rmtree briefly
+    first (cheap, sometimes enough), then fall back to the OS command
+    rather than looping indefinitely on a call that's been measured not
+    to work."""
+    for attempt in range(attempts):
+        try:
+            shutil.rmtree(path)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                break
+            time.sleep(delay_s)
+    if os.name == "nt":
+        subprocess.run(
+            ["cmd", "/c", "rmdir", "/s", "/q", str(path)],
+            check=True, capture_output=True,
+        )
+    else:
+        shutil.rmtree(path)
 
 
 mujoco = pytest.importorskip("mujoco")
@@ -267,7 +300,7 @@ def test_receipt_writer_refuses_to_overwrite_existing_evidence():
             write_contact_handoff_receipt(receipt, path)
         assert path.read_text(encoding="utf-8") == "operator-preserved-evidence\n"
     finally:
-        shutil.rmtree(root)
+        _rmtree_with_retry(root)
 
 
 def test_randomized_report_retains_all_twenty_receipts():
@@ -286,4 +319,4 @@ def test_randomized_report_retains_all_twenty_receipts():
             persisted = json.loads(path.read_text(encoding="utf-8"))
             verify_contact_handoff_receipt(persisted)
     finally:
-        shutil.rmtree(root)
+        _rmtree_with_retry(root)
