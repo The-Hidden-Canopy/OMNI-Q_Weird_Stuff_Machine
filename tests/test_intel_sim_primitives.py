@@ -285,6 +285,67 @@ def test_legacy_scene_exposes_calibrated_cup_and_no_collision_exemptions():
     assert world.model.nexclude >= 10
 
 
+def test_legacy_cup_place_uses_observed_carry_offset_and_settles():
+    """Placement is admitted only after measured release stability."""
+    world = IntelTableWorld()
+
+    pick = world._do_pick(6, "cup_1")
+    assert pick["held"] is True
+
+    place = world._do_place(6, "cup_1", "upper_right")
+
+    assert place["placed"] is True
+    assert place["placement_error_m"] < 0.06
+    assert place["settle"]["table_supported"] is True
+    assert place["settle"]["settled"] is True
+    assert place["safety"]["before"]["relative_object_pad_distance_m"] < 0.10
+
+
+def test_legacy_workspace_guard_fails_closed_for_limit_and_shared_entry():
+    """A controller proposal cannot enter a proven unsafe boundary."""
+    world = IntelTableWorld()
+    world.data.qpos[0] = world.model.jnt_range[0, 1] - 0.005
+    world._mujoco.mj_forward(world.model, world.data)
+    limit_guard = world._workspace_safety(0, obj="cup_1")
+    assert limit_guard["safe"] is False
+    assert limit_guard["reason"] == "joint-limit proximity"
+
+    world = IntelTableWorld()
+    other_pad = world.data.geom_xpos[world._pad_geom[6]].copy()
+    shared_guard = world._workspace_safety(0, target_xy=other_pad)
+    assert shared_guard["safe"] is False
+    assert shared_guard["reason"] == "unsafe shared-workspace entry"
+
+
+def test_legacy_pick_stops_before_motion_when_shared_entry_is_unsafe():
+    world = IntelTableWorld()
+    before_time = float(world.data.time)
+
+    world._workspace_safety = lambda *args, **kwargs: {
+        "safe": False,
+        "reason": "unsafe shared-workspace entry",
+    }
+    result = world._do_pick(6, "cup_1")
+
+    assert result["held"] is False
+    assert result["reason"] == "unsafe shared-workspace entry"
+    assert float(world.data.time) == pytest.approx(before_time)
+
+
+def test_legacy_planner_reserves_napkin_before_cutlery_retrieval():
+    """The shared workspace order is explicit and remains governed."""
+    engine = build_intel_sim_engine()
+    graph = engine.planner.plan("set the table", engine.world.state())
+    pick_ids = {
+        step.args.get("object"): index
+        for index, step in enumerate(graph.steps)
+        if step.op == "PICK"
+    }
+
+    assert pick_ids["napkin_1"] < pick_ids["fork_1"]
+    assert pick_ids["napkin_1"] < pick_ids["spoon_1"]
+
+
 def test_failed_grasp_restores_mujoco_state_for_a_clean_retry():
     """A rejected real attempt must roll back physics as well as WorldState.
 

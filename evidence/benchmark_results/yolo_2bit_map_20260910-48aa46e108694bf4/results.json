@@ -1,0 +1,269 @@
+{
+  "arms": {
+    "fp32": {
+      "fp32_weight_bytes": 12006400,
+      "map50": 0.057615,
+      "map50_95": 0.032013,
+      "packed_bytes": 12006400,
+      "packed_ratio": 1.0,
+      "per_class": {
+        "cup": {
+          "instances": 354,
+          "mAP50": 0.08373,
+          "mAP50-95": 0.04588
+        },
+        "drawer": {
+          "instances": 203,
+          "mAP50": 0.24768,
+          "mAP50-95": 0.14846
+        },
+        "fork": {
+          "instances": 108,
+          "mAP50": 0.00666,
+          "mAP50-95": 0.0026
+        },
+        "knife": {
+          "instances": 80,
+          "mAP50": 0.00137,
+          "mAP50-95": 0.00057
+        },
+        "napkin": {
+          "instances": 89,
+          "mAP50": 0.00395,
+          "mAP50-95": 0.00208
+        },
+        "plate": {
+          "instances": 133,
+          "mAP50": 0.05376,
+          "mAP50-95": 0.02152
+        },
+        "spoon": {
+          "instances": 95,
+          "mAP50": 0.00617,
+          "mAP50-95": 0.00299
+        }
+      },
+      "precision": 0.693398,
+      "recall": 0.066902
+    },
+    "mxfp2": {
+      "fp32_weight_bytes": 12006400,
+      "map50": 1e-06,
+      "map50_95": 0.0,
+      "packed_bytes": 844201,
+      "packed_ratio": 0.0703,
+      "per_class": {
+        "cup": {
+          "instances": 354,
+          "mAP50": 0.0,
+          "mAP50-95": 0.0
+        },
+        "drawer": {
+          "instances": 203,
+          "mAP50": 0.0,
+          "mAP50-95": 0.0
+        },
+        "fork": {
+          "instances": 108,
+          "mAP50": 0.0,
+          "mAP50-95": 0.0
+        },
+        "knife": {
+          "instances": 80,
+          "mAP50": 0.0,
+          "mAP50-95": 0.0
+        },
+        "napkin": {
+          "instances": 89,
+          "mAP50": 0.0,
+          "mAP50-95": 0.0
+        },
+        "plate": {
+          "instances": 133,
+          "mAP50": 0.0,
+          "mAP50-95": 0.0
+        },
+        "spoon": {
+          "instances": 95,
+          "mAP50": 0.0,
+          "mAP50-95": 0.0
+        }
+      },
+      "precision": 1.7e-05,
+      "recall": 0.003632,
+      "weight_cosine_mean": 0.677519,
+      "weight_cosine_min": 0.521059
+    },
+    "mxfp4": {
+      "fp32_weight_bytes": 12006400,
+      "map50": 0.006223,
+      "map50_95": 0.001961,
+      "packed_bytes": 1594601,
+      "packed_ratio": 0.1328,
+      "per_class": {
+        "cup": {
+          "instances": 354,
+          "mAP50": 0.01174,
+          "mAP50-95": 0.00289
+        },
+        "drawer": {
+          "instances": 203,
+          "mAP50": 0.01669,
+          "mAP50-95": 0.0047
+        },
+        "fork": {
+          "instances": 108,
+          "mAP50": 0.00169,
+          "mAP50-95": 0.00069
+        },
+        "knife": {
+          "instances": 80,
+          "mAP50": 0.00055,
+          "mAP50-95": 0.00015
+        },
+        "napkin": {
+          "instances": 89,
+          "mAP50": 0.00031,
+          "mAP50-95": 9e-05
+        },
+        "plate": {
+          "instances": 133,
+          "mAP50": 0.01242,
+          "mAP50-95": 0.00512
+        },
+        "spoon": {
+          "instances": 95,
+          "mAP50": 0.00015,
+          "mAP50-95": 9e-05
+        }
+      },
+      "precision": 0.451694,
+      "recall": 0.024161,
+      "weight_cosine_mean": 0.992088,
+      "weight_cosine_min": 0.988115
+    },
+    "nvint2": {
+      "fp32_weight_bytes": 12006400,
+      "map50": 4e-06,
+      "map50_95": 0.0,
+      "packed_bytes": 938256,
+      "packed_ratio": 0.0781,
+      "per_class": {
+        "cup": {
+          "instances": 354,
+          "mAP50": 0.0,
+          "mAP50-95": 0.0
+        },
+        "drawer": {
+          "instances": 203,
+          "mAP50": 0.0,
+          "mAP50-95": 0.0
+        },
+        "fork": {
+          "instances": 108,
+          "mAP50": 2e-05,
+          "mAP50-95": 0.0
+        },
+        "knife": {
+          "instances": 80,
+          "mAP50": 0.0,
+          "mAP50-95": 0.0
+        },
+        "napkin": {
+          "instances": 89,
+          "mAP50": 0.0,
+          "mAP50-95": 0.0
+        },
+        "plate": {
+          "instances": 133,
+          "mAP50": 1e-05,
+          "mAP50-95": 0.0
+        },
+        "spoon": {
+          "instances": 95,
+          "mAP50": 0.0,
+          "mAP50-95": 0.0
+        }
+      },
+      "precision": 0.000423,
+      "recall": 0.001323,
+      "weight_cosine_mean": 0.911925,
+      "weight_cosine_min": 0.831908
+    }
+  },
+  "attribution": "Portions derived from *The Hidden Canopy LLC* - [IDA-TRAIN-V2](https://github.com/The-Hidden-Canopy/IDA-TRAIN-V2), [Semantically-Aware_ISR](https://github.com/The-Hidden-Canopy/Semantically-Aware_ISR), and [open_world_model_harness](https://github.com/The-Hidden-Canopy/open_world_model_harness). Used with permission.",
+  "codec": {
+    "formats": {
+      "mxfp2": {
+        "block_size": 32,
+        "code_bits": 2
+      },
+      "mxfp4": {
+        "block_size": 32,
+        "code_bits": 4
+      },
+      "nvint2": {
+        "block_size": 16,
+        "code_bits": 2
+      }
+    },
+    "module": "integrations.qualcomm.lowbit"
+  },
+  "created_utc": "2026-09-10T23:21:37Z",
+  "data": {
+    "classes": [
+      "plate",
+      "cup",
+      "fork",
+      "spoon",
+      "knife",
+      "napkin",
+      "drawer"
+    ],
+    "val_images": 276,
+    "val_instances": 1062,
+    "yaml": "E:\\HiddenCanopy\\OMNI-Q_Weird_Stuff_Machine\\data\\table_yolo\\data.yaml"
+  },
+  "deltas_vs_fp32": {
+    "mxfp2": {
+      "map50_95_delta": -0.032013,
+      "map50_delta": -0.057614
+    },
+    "mxfp4": {
+      "map50_95_delta": -0.030052,
+      "map50_delta": -0.051392
+    },
+    "nvint2": {
+      "map50_95_delta": -0.032013,
+      "map50_delta": -0.057611
+    }
+  },
+  "environment": {
+    "cpu_count": 12,
+    "interpreter": "E:\\HiddenCanopy\\OMNI-Q_Weird_Stuff_Machine\\.venv\\Scripts\\python.exe",
+    "numpy": "2.5.3",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "processor": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
+    "python": "3.12.10",
+    "torch": "2.14.0+cpu"
+  },
+  "finished_utc": "2026-09-10T23:24:13Z",
+  "harness": "integrations/qualcomm/scripts/eval_yolo_2bit_map.py",
+  "labels": {
+    "accuracy_complement": "latency and output agreement are NOT re-measured here; see evidence/benchmark_results/yolo_2bit_cpu_20260910/ (eval_yolo_2bit_cpu.py) for footprint/latency/cosine; the mAP50 row there refers to the HIT-UAV model and stays 'blocked'",
+    "baseline": "fp32 arm is the same 4-CPU-epoch fine-tune measured in training (val mAP50 ~0.058); the baseline is weak and that is reported as-is",
+    "execution": "software dequantize; no native 2-bit hardware \u2014 quantized arms restore weights to fp32 via integrations/qualcomm/lowbit and execute ordinary torch CPU kernels",
+    "standing_note": "a format is a format - all quantized arms are reported symmetrically with measurements only"
+  },
+  "model": {
+    "loader": "ultralytics YOLO",
+    "path": "E:\\HiddenCanopy\\OMNI-Q_Weird_Stuff_Machine\\runs\\detect\\runs\\table_yolo\\ft\\weights\\best.pt"
+  },
+  "protocol": {
+    "arm_construction": "fresh YOLO load per arm; fmt arms run quantize_arm (W-only RNE) then execute the dequantized weights",
+    "device": "cpu",
+    "imgsz": 640,
+    "split": "val"
+  },
+  "question": "What does the weight-only RNE MXFP4 / NVINT2 / MXFP2 round-trip do to the table_yolo YOLOv8n's val mAP50 vs the fp32 baseline?"
+}

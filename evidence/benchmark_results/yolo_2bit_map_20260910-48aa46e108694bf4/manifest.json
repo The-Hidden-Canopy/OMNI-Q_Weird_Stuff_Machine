@@ -1,0 +1,25 @@
+{
+  "artifact_files": [
+    "manifest.json",
+    "results.json",
+    "README.md",
+    "checksums.json"
+  ],
+  "counts": {},
+  "created_at": "2026-09-10T23:24:13.929547+00:00",
+  "metadata": {
+    "arms": [
+      "fp32",
+      "mxfp4",
+      "nvint2",
+      "mxfp2"
+    ],
+    "data": "E:\\HiddenCanopy\\OMNI-Q_Weird_Stuff_Machine\\data\\table_yolo\\data.yaml",
+    "model": "E:\\HiddenCanopy\\OMNI-Q_Weird_Stuff_Machine\\runs\\detect\\runs\\table_yolo\\ft\\weights\\best.pt",
+    "question": "What does the weight-only RNE MXFP4 / NVINT2 / MXFP2 round-trip do to the table_yolo YOLOv8n's val mAP50 vs the fp32 baseline?"
+  },
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python_version": "3.12.10",
+  "run_id": "yolo_2bit_map_20260910",
+  "schema_version": "1.0.0"
+}

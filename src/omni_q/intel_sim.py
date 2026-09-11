@@ -930,8 +930,8 @@ class IntelTableWorld(MockWorld):
     def _workspace_safety(self, arm_offset: int, obj: str | None = None, target_xy=None) -> dict[str, Any]:
         """Return bounded safety observables for a legacy physical primitive.
 
-        The legacy arm meshes are intentionally non-colliding because this
-        position controller has no collision-aware whole-arm planner.  The
+        Full MuJoCo geom collisions remain enabled in the legacy scene; this
+        position controller still has no predictive whole-arm planner.  The
         guard therefore fails closed on the measurable hazards it can prove:
         joint-limit approach, excessive object-to-pad separation, excessive
         contact force, and an arm entering a target occupied by the other pad.
@@ -1097,6 +1097,18 @@ class IntelTableWorld(MockWorld):
         opening_xy = -target_rotation[:2, 0]
         grasp_offset = OBJECT_GRASP_OFFSET.get(obj, 0.0)
         grasp_xy = xy - opening_xy * grasp_offset
+        approach_safety = self._workspace_safety(
+            arm_offset, target_xy=grasp_xy,
+        )
+        if not approach_safety["safe"]:
+            return {
+                "grasp": "contact",
+                "reach_error_m": None,
+                "lift_height_m": 0.0,
+                "held": False,
+                "reason": approach_safety["reason"],
+                "safety": {"approach": approach_safety},
+            }
 
         self._set_gripper(arm_offset, GRIPPER_OPEN)
         self._move_to(arm_offset, (grasp_xy[0], grasp_xy[1], clear_z))
@@ -1199,6 +1211,7 @@ class IntelTableWorld(MockWorld):
                 "lift": {"position_error_m": round(lift_error, 6)},
                 "roll_hint_rad": round(roll_hint, 6),
             },
+            "safety": {"approach": approach_safety},
         }
 
     def _do_place(self, arm_offset: int, obj: str, to_zone: str | None) -> dict[str, Any]:

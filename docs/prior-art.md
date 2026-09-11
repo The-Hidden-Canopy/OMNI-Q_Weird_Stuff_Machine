@@ -226,6 +226,38 @@ collapses to `ALLOW / LIMIT / REQUIRE_APPROVAL / DENY`.
 `PinnedVersions` records which policy / schema / model versions were in force
 for the decision, so a later audit reconstructs the exact ruleset.
 
+## Open-World-Model-Harness (second pass) — evidence integrity + evaluator secrecy
+
+### 18. Re-verifiable evidence bundle (`data_management.py:32-499`)
+
+`RunManifest` + `RunArtifactWriter.write_run` + `validate_run_artifact`
+(`data_management.py:32-245`, `:249-405`): one immutable run directory with
+`manifest.json`, caller artifacts, and `checksums.json` written **last**;
+`_serialize` rejects non-finite floats (`:448-464`), `_sha256` streams
+(`:466-471`), `_safe_name` digest-suffixes the directory (`:474-489`), and
+`_is_safe_artifact_name` guards traversal (`:492-499`). Validation is
+fail-closed: checksum set equality vs the manifest, missing *and* unlisted
+files, per-file digest recompute, and count cross-checks. Vendored
+(generalized from engine-specific turns/episodes to caller-supplied
+metadata + counts) as `omni_q/evidence_bundle.py`
+(`EvidenceBundleWriter`, `validate_evidence_bundle`).
+
+### 19. Evaluator-only secrets + deterministic seeding (`core.py:659-720`, `contracts.py:3032-3046`)
+
+- Per-entity hidden scalars: SHA-256 over `session:player:skill:node`,
+  first digest byte mapped into `[0.65, 1.35)` (`core.py:659-679`).
+  Vendored as `stable_unit_float(domain, *parts)` in
+  `omni_q/eval_secrets.py`.
+- `get_evaluation_snapshot()` (`core.py:681-720`) is evaluator-only ground
+  truth, persisted to its own `final_evaluator_snapshot.json`
+  (`data_management.py:220-223`) and never included in observations.
+  Vendored as `SealedSnapshot` / `PublicSnapshot` — separate dataclasses,
+  so the secret cannot be serialized through the public path.
+- `SensoryCue.reliable` (`contracts.py:3032-3046`, emitted at
+  `core.py:8070-8094`): `False` marks a hallucination-prone channel;
+  consumers must weight accordingly. Vendored as `SensoryCue` with
+  `reliable: bool = True`.
+
 ## What changed in this pass
 
 Additive, low-risk lifts (see the commit):
@@ -239,6 +271,10 @@ Additive, low-risk lifts (see the commit):
   monotonically; finalizes a chained receipt.
 - `fakes.py`: `RulePlanner` records forbidden objects as `rejected`, not silent
   skips.
+- `evidence_bundle.py` (new, from OWMH `data_management.py`): re-verifiable
+  evidence bundles — fail-closed validation, checksums written last.
+- `eval_secrets.py` (new, from OWMH `core.py`): `stable_unit_float`,
+  `SealedSnapshot`/`PublicSnapshot`, `SensoryCue`.
 
 Deferred (documented, not yet built): executive/planner split (#2), world
 transition-request seam (#8), event causal lineage (#9), stale-knowledge
