@@ -15,6 +15,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "perception"))
 
 import classmap as cm  # noqa: E402
+import merge_datasets as md  # noqa: E402
 import multisource_haul as mh  # noqa: E402
 
 
@@ -280,3 +281,172 @@ def test_partition_vs_reference_drops_exact_near_keeps_new():
     kept2, dropped2 = mh.partition_vs_reference(
         [("v2:twin", "sha-twin", 0x0000_00FF_0000_0001)], ref)  # hamming 1 vs v2:new
     assert kept2 == [] and dropped2[0][1] == "v2:new"
+
+
+# ---------------------------------------------------------------------------
+# v3: Open Images TRAIN mode (streamed parser, class resolution, URLs)
+# ---------------------------------------------------------------------------
+
+CHALLENGE_HEADER = (
+    "ImageID,Source,LabelName,Confidence,XMin,XMax,YMin,YMax,"
+    "IsOccluded,IsTruncated,IsGroupOf,IsDepiction,IsInside\n"
+)
+
+
+def test_oi_train_streaming_parser_filters_and_aggregates():
+    # Challenge 2019 layout: the 5 trailing flag columns must be absorbed,
+    # LabelName filtering + per-image aggregation must match the val parser.
+    classes_csv = "LabelName,DisplayName\n/m/a,Plate\n/m/b,Kitchen knife\n/m/c,Knife\n"
+    mid = mh.oi_mid_to_display(classes_csv)
+    snippet = CHALLENGE_HEADER + (
+        "img1,xclick,/m/a,1,0.1,0.3,0.2,0.4,0,0,0,0,0\n"
+        "img1,xclick,/m/b,1,0.0,0.5,0.0,0.5,1,0,0,0,0\n"
+        "img1,machine,/m/c,1,0.0,0.1,0.0,0.1,0,0,0,0,0\n"  # Knife -> dropped
+        "img2,xclick,/m/a,1,0.9,0.1,0.0,0.2,0,0,0,0,0\n"  # degenerate
+        "img3,xclick,/m/zzz,1,0.0,0.1,0.0,0.1,0,0,0,0,0\n"  # unknown MID
+    )
+    import io as _io
+    out = mh.oi_target_rows_stream(_io.StringIO(snippet), mid)
+    assert set(out) == {"img1"}
+    classes = sorted(c for c, *_ in out["img1"])
+    assert classes == [cm.TARGET_INDEX["plate"], cm.TARGET_INDEX["knife"]]
+    c, cx, cy, w, h = out["img1"][0]
+    assert cx == pytest.approx(0.2) and cy == pytest.approx(0.3)
+    # streaming variant must agree with the in-memory val parser
+    assert mh.oi_target_rows(snippet, mid) == out
+
+
+def test_oi_resolve_target_mids_reports_napkin_missing():
+    classes_csv = (
+        "LabelName,DisplayName\n"
+        "/m/050gv4,Plate\n/m/02p5f1q,Coffee cup\n/m/02jvh9,Mug\n"
+        "/m/09tvcd,Wine glass\n/m/0dt3t,Fork\n/m/0cmx8,Spoon\n"
+        "/m/058qzx,Kitchen knife\n/m/0fqfqc,Drawer\n/m/04ctx,Knife\n"
+    )
+    resolved = mh.oi_resolve_target_mids(mh.oi_mid_to_display(classes_csv))
+    assert resolved["plate"] == ["/m/050gv4"]
+    assert resolved["cup"] == ["/m/02jvh9", "/m/02p5f1q", "/m/09tvcd"]
+    assert resolved["drawer"] == ["/m/0fqfqc"]
+    assert [c for c in cm.TARGET_CLASSES if not resolved[c]] == ["napkin"]
+
+
+def test_parse_dedup_vs_flattens_repeatable_and_comma_lists():
+    assert mh.parse_dedup_vs(None) == []
+    assert mh.parse_dedup_vs(["data/a"]) == [Path("data/a")]
+    assert mh.parse_dedup_vs(["data/a,data/b", "data/c"]) == [
+        Path("data/a"), Path("data/b"), Path("data/c")]
+
+
+def test_multi_reference_dedup_attributes_drops_by_prefix():
+    ref = mh.Deduper(tolerance=6)
+    base = 0xFFFF_FF00_0000_0000
+    assert ref.add("table_yolo:a", "sha-a", base).status == "unique"
+    assert ref.add("table_yolo_v2:b", "sha-b",
+                   base ^ 0xFFFF_0000_0000_0000).status == "unique"
+    items = [
+        ("oi3:vs_v1", "sha-x", base ^ 0x3),              # near v1 image
+        ("oi3:vs_v2", "sha-y", (base ^ 0xFFFF_0000_0000_0000) ^ 0x3),  # near v2 image
+        ("oi3:new", "sha-z", 0x0000_00FF_0000_0000),     # far from both
+    ]
+    kept, dropped = mh.partition_vs_reference(items, ref)
+    assert [k for k, *_ in kept] == ["oi3:new"]
+    assert dict(dropped) == {"oi3:vs_v1": "table_yolo:a",
+                             "oi3:vs_v2": "table_yolo_v2:b"}
+
+
+def test_oi_train_image_url_construction():
+    assert mh.URL_OI_TRAIN_IMAGE.format(image_id="8d6dec80235b6fea") == \
+        "https://open-images-dataset.s3.amazonaws.com/train/8d6dec80235b6fea.jpg"
+    assert "{image_id}" not in mh.URL_OI_TRAIN_IMAGE.format(image_id="x")
+    # train prefix differs from the val pattern, same bucket host
+    assert "/train/" in mh.URL_OI_TRAIN_IMAGE
+    assert "/validation/" in mh.URL_OI_IMAGE
+
+
+# ---------------------------------------------------------------------------
+# v3: merge tool on tiny synthetic dataset trees
+# ---------------------------------------------------------------------------
+
+def _write_tiny_dataset(root: Path, images: dict[str, list[mh.YoloRow]],
+                        split: str = "train", seed0: int = 100) -> Path:
+    """One tiny YOLO tree: images/<split>/*.jpg + labels/<split>/*.txt."""
+    for n, (name, rows) in enumerate(sorted(images.items())):
+        img = _img(seed=seed0 + n)
+        (root / "images" / split).mkdir(parents=True, exist_ok=True)
+        (root / "labels" / split).mkdir(parents=True, exist_ok=True)
+        img.save(root / "images" / split / name, "JPEG")
+        mh.write_yolo_label(root / "labels" / split / f"{Path(name).stem}.txt", rows)
+    return root
+
+
+@pytest.fixture
+def _no_evidence_dir(monkeypatch, tmp_path):
+    """chdir away from the repo so the merge receipt's evidence/datasets
+    lookup finds nothing and tests never write into the real evidence dir."""
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    monkeypatch.chdir(scratch)
+
+
+def test_merge_two_trees_counts_split_and_yaml(tmp_path: Path, _no_evidence_dir):
+    from classmap import TARGET_INDEX as TI
+    rows_a = [(TI["plate"], 0.5, 0.5, 0.2, 0.2), (TI["drawer"], 0.1, 0.1, 0.1, 0.1)]
+    rows_b = [(TI["cup"], 0.5, 0.5, 0.3, 0.3)]
+    tree_a = _write_tiny_dataset(tmp_path / "table_yolo_v2",
+                                 {f"a{n}.jpg": rows_a for n in range(6)})
+    tree_b = _write_tiny_dataset(tmp_path / "table_yolo_v3_oi",
+                                 {f"b{n}.jpg": rows_b for n in range(4)},
+                                 seed0=200)
+
+    out1 = tmp_path / "merged1"
+    m1 = md.merge_datasets([tree_a, tree_b], out1, val_frac=0.25, seed=13)
+    assert m1["final_unique_images"] == 10
+    assert m1["split"]["train"] + m1["split"]["val"] == 10
+    assert m1["source_composition"]["table_yolo_v2"]["kept"] == 6
+    assert m1["source_composition"]["table_yolo_v3_oi"]["kept"] == 4
+    assert m1["class_boxes_final"]["plate"] == 6
+    assert m1["class_boxes_final"]["cup"] == 4
+    assert m1["class_boxes_final"]["drawer"] == 6
+    # labels round-trip with the right class indices
+    for split in ("train", "val"):
+        for lbl in sorted((out1 / "labels" / split).glob("*.txt")):
+            parsed = mh.parse_yolo_label(lbl)
+            assert parsed in (rows_a, rows_b)
+    # yaml pins the ABSOLUTE output path
+    yaml_text = (out1 / "data.yaml").read_text(encoding="utf-8")
+    assert f"path: {out1.resolve()}" in yaml_text
+    # sources NOT destroyed
+    assert len(list((tree_a / "images" / "train").glob("*.jpg"))) == 6
+    assert len(list((tree_b / "images" / "train").glob("*.jpg"))) == 4
+
+    # same seed -> identical split; different out dir keeps stems comparable
+    out2 = tmp_path / "merged2"
+    m2 = md.merge_datasets([tree_a, tree_b], out2, val_frac=0.25, seed=13)
+    val1 = sorted(p.name for p in (out1 / "images" / "val").glob("*.jpg"))
+    val2 = sorted(p.name for p in (out2 / "images" / "val").glob("*.jpg"))
+    assert val1 == val2 and m1["split"] == m2["split"]
+    # yaml path re-pins to the NEW out dir
+    assert f"path: {out2.resolve()}" in (out2 / "data.yaml").read_text(encoding="utf-8")
+
+
+def test_merge_dedups_cross_input_identical_image(tmp_path: Path, _no_evidence_dir):
+    from classmap import TARGET_INDEX as TI
+    shared = _img(seed=42)
+    dup_rows = [(TI["fork"], 0.5, 0.5, 0.2, 0.2)]
+    tree_a = tmp_path / "set_a"
+    tree_b = tmp_path / "set_b"
+    for tree, name in ((tree_a, "shared.jpg"), (tree_b, "other.jpg")):
+        (tree / "images" / "train").mkdir(parents=True)
+        (tree / "labels" / "train").mkdir(parents=True)
+    shared.save(tree_a / "images" / "train" / "shared.jpg", "JPEG")
+    mh.write_yolo_label(tree_a / "labels" / "train" / "shared.txt", dup_rows)
+    shared.save(tree_b / "images" / "train" / "other.jpg", "JPEG")  # same bytes
+    mh.write_yolo_label(tree_b / "labels" / "train" / "other.txt", dup_rows)
+
+    m = md.merge_datasets([tree_a, tree_b], tmp_path / "merged", val_frac=0.0, seed=13)
+    assert m["final_unique_images"] == 1
+    assert m["dedup"]["dropped_total"] == 1
+    # the copy from the LATER input lost to the one from the first input
+    assert m["dedup"]["dropped_by_matched_source"] == {"set_a": 1}
+    assert m["source_composition"]["set_a"]["kept"] == 1
+    assert m["source_composition"]["set_b"]["kept"] == 0

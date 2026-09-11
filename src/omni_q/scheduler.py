@@ -26,6 +26,7 @@ from typing import Any
 from . import actions as _actions
 from .contracts import PlanGraph, Step, WorldState
 from .expressive import ExpressiveWindow, ExpressionPlan, generate_expression_plan
+from .fleet import FleetError, ManipulationFleet
 
 ARMS: tuple[str, str] = ("left", "right")
 
@@ -129,6 +130,7 @@ class ScheduledStep:
     op: str = ""             # set for scheduler-invented idle-slack flourishes
     args: dict[str, Any] = field(default_factory=dict)
     expression: bool = False
+    participants: tuple[str, ...] = ()  # all resources consumed by this step
 
 
 @dataclass
@@ -158,6 +160,7 @@ class Schedule:
     dropped: list[str] = field(default_factory=list)   # flourishes with no slack
     style_mode: str = "unset"              # last STYLE constraint, normalised
     expression_plan: ExpressionPlan | None = None
+    resource_assignment: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
     # -- integration seam ------------------------------------------------
     def annotate(
@@ -258,6 +261,9 @@ class Schedule:
             "dropped": list(self.dropped),
             "style_mode": self.style_mode,
             "metrics": dict(self.metrics),
+            "resource_assignment": {
+                k: list(v) for k, v in self.resource_assignment.items()
+            },
             "expression_plan": (
                 self.expression_plan.as_dict() if self.expression_plan is not None else None
             ),
@@ -307,12 +313,19 @@ def _assign_arms(
     graph: PlanGraph,
     world: WorldState,
     layout: dict[str, Region],
-    arms: tuple[str, str],
+    arms: tuple[str, ...],
     overlap: float,
-) -> tuple[dict[str, str | None], dict[str, str | None], list[Barrier]]:
+    fleet: ManipulationFleet | None = None,
+) -> tuple[
+    dict[str, str | None],
+    dict[str, str | None],
+    list[Barrier],
+    dict[str, tuple[str, ...]],
+]:
     assignment: dict[str, str | None] = {}
     region_id: dict[str, str | None] = {}
     barriers: list[Barrier] = []
+    resources: dict[str, tuple[str, ...]] = {}
     load = {a: 0 for a in arms}
     prefer = _prefer_arm(world)
     chains = _object_chains(graph)
@@ -326,23 +339,29 @@ def _assign_arms(
         return [layout.get(region_id[s.id], Region(region_id[s.id] or "center", 0.0))
                 for s in steps]
 
-    def reachable(arm: str, regions: list[Region]) -> bool:
-        return all(arm_reaches(arm, r, overlap) for r in regions)
+    def reachable(arm: str, steps: list[Step]) -> bool:
+        if fleet is not None:
+            return all(
+                fleet.spec(arm).supports(s.op, region_id[s.id])
+                for s in steps
+            )
+        return all(arm_reaches(arm, r, overlap) for r in regions_of(steps))
 
     def other(arm: str) -> str:
-        return arms[1] if arm == arms[0] else arms[0]
+        return next(candidate for candidate in arms if candidate != arm)
 
-    def choose(regions: list[Region], explicit: str | None) -> tuple[str, list[Barrier]]:
+    def choose(steps: list[Step], explicit: str | None) -> tuple[str, list[Barrier]]:
+        regions = regions_of(steps)
         notes: list[Barrier] = []
         if explicit in arms:
-            if not reachable(explicit, regions):
+            if not reachable(explicit, steps):
                 notes.append(Barrier((explicit, explicit), "reach",
                                      f"explicit arm {explicit} cannot reach "
                                      f"{[r.id for r in regions]}"))
             return explicit, notes
-        if prefer in arms and reachable(prefer, regions):
+        if prefer in arms and reachable(prefer, steps):
             return prefer, notes
-        fit = [a for a in arms if reachable(a, regions)]
+        fit = [a for a in arms if reachable(a, steps)]
         if not fit:
             notes.append(Barrier((arms[0], arms[1]), "reach",
                                  f"{[r.id for r in regions]} spans both arms; needs handoff"))
@@ -353,7 +372,7 @@ def _assign_arms(
         hand_idx = next((i for i, s in enumerate(steps) if s.op == "HANDOFF"), None)
         if hand_idx is None:
             explicit = next((s.arm for s in steps if s.arm in arms), None)
-            arm, notes = choose(regions_of(steps), explicit)
+            arm, notes = choose(steps, explicit)
             barriers.extend(notes)
             for s in steps:
                 assignment[s.id] = arm
@@ -364,7 +383,7 @@ def _assign_arms(
         # the named receiver takes everything after it (OQ-044 across arms).
         pre, post = steps[: hand_idx + 1], steps[hand_idx + 1:]
         giver_explicit = next((s.arm for s in pre if s.arm in arms), None)
-        giver, notes = choose(regions_of(pre[:-1]) or regions_of(pre), giver_explicit)
+        giver, notes = choose(pre[:-1] or pre, giver_explicit)
         barriers.extend(notes)
         for s in pre:
             assignment[s.id] = giver
@@ -372,8 +391,8 @@ def _assign_arms(
 
         req = steps[hand_idx].args.get("to_actor") or steps[hand_idx].args.get("to")
         receiver = req if req in arms else other(giver)
-        if post and not reachable(receiver, regions_of(post)):
-            barriers.append(Barrier((giver, receiver), "reach",
+        if post and not reachable(receiver, post):
+                barriers.append(Barrier((giver, receiver), "reach",
                                     f"post-handoff arm {receiver} cannot reach "
                                     f"{[r.id for r in regions_of(post)]}"))
         for s in post:
@@ -386,12 +405,71 @@ def _assign_arms(
             continue
         if s.id in chained_ids:
             continue
-        arm, notes = choose(regions_of([s]), s.arm if s.arm in arms else None)
+        arm, notes = choose([s], s.arm if s.arm in arms else None)
         barriers.extend(notes)
         assignment[s.id] = arm
         load[arm] += 1
 
-    return assignment, region_id, barriers
+    for s in graph.steps:
+        if s.contract != "manipulate":
+            resources[s.id] = ()
+            continue
+        arm = assignment[s.id]
+        if arm is None:
+            raise FleetError(f"manipulate step {s.id} has no assigned resource")
+        region = region_id.get(s.id)
+        if _actions.category_of(s.op) is not _BOTH_ARMS:
+            if fleet is not None and not fleet.spec(arm).supports(s.op, region):
+                raise FleetError(f"{arm} cannot perform {s.op} in {region or 'center'}")
+            resources[s.id] = (arm,)
+            continue
+
+        requested = s.args.get("participants") or s.args.get("arms")
+        if isinstance(requested, str):
+            requested = (requested,)
+        if requested is not None:
+            pair = tuple(requested)
+            if len(pair) != 2:
+                raise FleetError(f"{s.id}: participants must contain two manipulators")
+            unit = fleet.form_unit(pair) if fleet is not None else None
+            members = unit.members if unit is not None else pair
+            if fleet is not None and not all(
+                fleet.spec(member).supports(s.op, region) for member in members
+            ):
+                raise FleetError(f"{s.id}: requested pair cannot perform {s.op} in {region}")
+            if s.arm is not None and s.arm not in members:
+                raise FleetError(f"{s.id}: primary arm {s.arm} is not in requested pair")
+            assignment[s.id] = s.arm if s.arm in members else members[0]
+        elif s.op == "HANDOFF":
+            receiver = s.args.get("to_actor") or s.args.get("to")
+            receiver = receiver if receiver in arms else other(arm)
+            members = (arm, receiver)
+            if fleet is not None and not all(
+                fleet.spec(member).supports(s.op, region) for member in members
+            ):
+                raise FleetError(f"{s.id}: handoff pair cannot perform {s.op} in {region}")
+        elif fleet is not None:
+            candidates = fleet.eligible_units(s.op, region=region)
+            if not candidates:
+                raise FleetError(f"{s.id}: no eligible biarm unit for {s.op} in {region}")
+            preferred_arm = s.arm if s.arm in arms else None
+            unit = (
+                next((candidate for candidate in candidates
+                      if preferred_arm in candidate.members), None)
+                if preferred_arm is not None else candidates[0]
+            )
+            if unit is None:
+                raise FleetError(
+                    f"{s.id}: explicit primary arm {preferred_arm} has no eligible pair"
+                )
+            members = unit.members
+            assignment[s.id] = preferred_arm if preferred_arm in members else members[0]
+        else:
+            members = arms
+
+        resources[s.id] = tuple(members)
+
+    return assignment, region_id, barriers, resources
 
 
 def schedule(
@@ -399,14 +477,30 @@ def schedule(
     world: WorldState,
     *,
     layout: dict[str, Region] | None = None,
-    arms: tuple[str, str] = ARMS,
+    arms: tuple[str, ...] | None = None,
+    fleet: ManipulationFleet | None = None,
     overlap: float = 0.15,
     allow_flourish_wave: bool = True,
     expressive_window: ExpressiveWindow | None = None,
     expression_seed: int = 0,
 ) -> Schedule:
     layout = layout or DEFAULT_LAYOUT
-    assignment, region_id, barriers = _assign_arms(graph, world, layout, arms, overlap)
+    if fleet is not None:
+        active_arms = fleet.online_ids
+        if arms is not None:
+            requested = set(arms)
+            active_arms = tuple(arm for arm in active_arms if arm in requested)
+    else:
+        active_arms = arms or ARMS
+    if not active_arms:
+        raise FleetError("scheduler has no online manipulators")
+    if len(active_arms) < 2 and any(
+        s.contract == "manipulate" and _actions.category_of(s.op) is _BOTH_ARMS
+        for s in graph.steps
+    ):
+        raise FleetError("bimanual schedule requires at least two online manipulators")
+    assignment, region_id, barriers, resource_assignment = _assign_arms(
+        graph, world, layout, active_arms, overlap, fleet)
     region_obj = {
         s.id: (layout.get(region_id[s.id], Region(region_id[s.id] or "center", 0.0)))
         for s in graph.steps if region_id.get(s.id) is not None
@@ -421,7 +515,7 @@ def schedule(
 
     done: set[str] = set()
     waves: list[Wave] = []
-    arm_hold: dict[str, str | None] = {a: None for a in arms}
+    arm_hold: dict[str, str | None] = {a: None for a in active_arms}
     handoffs = 0
     guard = 0
 
@@ -452,23 +546,34 @@ def schedule(
 
         for s in ready:
             arm = assignment[s.id]
+            resources = resource_assignment.get(s.id, (arm,) if arm else ())
             if _actions.category_of(s.op) is _BOTH_ARMS:   # HANDOFF, CO_ROTATE, ...
-                if used_arms:
+                if not resources or used_arms.intersection(resources):
                     continue
                 obj = s.args.get("object")
-                placed.append(ScheduledStep(s.id, arm, region_id.get(s.id)))
-                used_arms.update(arms)
+                reg = region_obj.get(s.id, Region("center", 0.0))
+                clash = next(((r, owner) for (r, owner) in used_regions
+                              if r.conflicts_with(reg, overlap)), None)
+                if clash is not None:
+                    barriers.append(Barrier((clash[1], s.id), "workspace",
+                                            f"{s.id} in {reg.id} conflicts with "
+                                            f"{clash[1]} in {clash[0].id}"))
+                    continue
+                placed.append(ScheduledStep(
+                    s.id, arm, reg.id, participants=resources))
+                used_arms.update(resources)
+                used_regions.append((reg, s.id))
                 if s.op == "HANDOFF":
                     to_actor = s.args.get("to_actor") or s.args.get("to")
                     if obj is not None:
                         arm_hold = {a: (obj if a == to_actor
                                         else (None if arm_hold[a] == obj else arm_hold[a]))
-                                    for a in arms}
+                                    for a in active_arms}
                     handoffs += 1
                 done.add(s.id)
                 continue
 
-            if arm in used_arms:
+            if not resources or used_arms.intersection(resources):
                 continue
             if s.op in _GRABS and arm_hold[arm] is not None:
                 continue  # gripper already occupied
@@ -485,8 +590,8 @@ def schedule(
                                         f"{s.id} in {reg.id} conflicts with {clash[1]} in {clash[0].id}"))
                 continue
 
-            placed.append(ScheduledStep(s.id, arm, reg.id))
-            used_arms.add(arm)
+            placed.append(ScheduledStep(s.id, arm, reg.id, participants=resources))
+            used_arms.update(resources)
             used_regions.append((reg, s.id))
             done.add(s.id)
             if s.op in _GRABS:
@@ -498,7 +603,10 @@ def schedule(
             # every ready manipulate step conflicts with another - force one
             s = ready[0]
             reg = region_obj.get(s.id, Region("center", 0.0))
-            placed.append(ScheduledStep(s.id, assignment[s.id], reg.id))
+            fallback_resources = resource_assignment.get(
+                s.id, (assignment[s.id],) if assignment[s.id] else ())
+            placed.append(ScheduledStep(
+                s.id, assignment[s.id], reg.id, participants=fallback_resources))
             done.add(s.id)
             if s.op in _GRABS:
                 arm_hold[assignment[s.id]] = s.args.get("object")
@@ -516,7 +624,7 @@ def schedule(
     strip_flourishes = expressive_window is not None or mode in {"minimum_time", "freeze"}
     dropped, flourish_waves_added = _place_flourishes(
         waves, [] if strip_flourishes else flourishes,
-        assignment, region_obj, overlap, arms, allow_flourish_wave, barriers)
+        assignment, region_obj, overlap, active_arms, allow_flourish_wave, barriers)
     if strip_flourishes:
         dropped = [s.id for s in flourishes]
 
@@ -529,9 +637,10 @@ def schedule(
         idle_flourishes = 0
     else:
         # -- legacy dance-while-working: fill idle-arm slack -------------
-        idle_flourishes = _fill_idle_slack(waves, arms, mode) if _actions.wants_idle_flourish(mode) else 0
+        idle_flourishes = _fill_idle_slack(
+            waves, active_arms, mode) if _actions.wants_idle_flourish(mode) else 0
 
-    arm_timeline: dict[str, list[str]] = {a: [] for a in arms}
+    arm_timeline: dict[str, list[str]] = {a: [] for a in active_arms}
     for w in waves:
         for ss in w.steps:
             if ss.arm in arm_timeline:
@@ -542,6 +651,13 @@ def schedule(
         "waves": len(waves),
         "max_parallelism": max(
             (sum(1 for ss in w.steps if ss.step_id in mand_manip) for w in waves),
+            default=0,
+        ),
+        "max_resource_parallelism": max(
+            (sum(
+                len(ss.participants or ((ss.arm,) if ss.arm else ()))
+                for ss in w.steps if ss.step_id in mand_manip
+            ) for w in waves),
             default=0,
         ),
         "handoffs": handoffs,
@@ -555,8 +671,11 @@ def schedule(
         "expressions_dropped": len(expression_dropped),
         "expression_span_ms": expression_plan.span_ms if expression_plan is not None else 0,
     }
-    return Schedule(waves, barriers, arm_timeline, metrics, assignment, region_id,
-                    dropped, style_mode=mode, expression_plan=expression_plan)
+    return Schedule(
+        waves, barriers, arm_timeline, metrics, assignment, region_id,
+        dropped, style_mode=mode, expression_plan=expression_plan,
+        resource_assignment=resource_assignment,
+    )
 
 
 def _style_mode(world: WorldState) -> str:
@@ -570,7 +689,7 @@ def _style_mode(world: WorldState) -> str:
     return _actions.style_mode(styles[-1]) if styles else "unset"
 
 
-def _fill_idle_slack(waves: list[Wave], arms: tuple[str, str], mode: str) -> int:
+def _fill_idle_slack(waves: list[Wave], arms: tuple[str, ...], mode: str) -> int:
     """Add non-blocking IDLE_FLOURISH steps to arms that are idle in a wave.
 
     Only touches already-idle arms in already-existing non-final waves, so the
@@ -608,7 +727,7 @@ def _place_flourishes(
     assignment: dict[str, str | None],
     region_obj: dict[str, Region],
     overlap: float,
-    arms: tuple[str, str],
+    arms: tuple[str, ...],
     allow_flourish_wave: bool,
     barriers: list[Barrier],
 ) -> tuple[list[str], int]:

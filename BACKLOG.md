@@ -22,7 +22,7 @@ Status legend: ` ` todo · `~` in progress · `x` done.
 |   | OQ-005 | Bryan/Codex | Build minimal live Omni graph UI shell | OQ-001 | UI can display goal, observations, both arms, graph nodes, current action, verification state |
 | x | OQ-006 | Gerron/GPT | Stand up Intel MuJoCo dual-SO-101 environment | OQ-003 | Two simulated arms boot reliably and accept commanded joint/end-effector actions â€” pinned dual proxy loads (`nu=12`) and controller smoke passes; contact-rich grasping remains OQ-010 |
 |   | OQ-007 | Gerron/GPT | Create table-setting scene/object pack | OQ-006 | Plates, cups, forks, spoons, napkins and target place settings exist with usable mass/friction/collision properties |
-| ~ | OQ-008 | Gerron/GPT | Adapt your YOLO pipeline to tabletop objects | OQ-007 | Detector outputs class, bbox/center, confidence and stable object IDs from simulated camera frames — data + train + export pipeline built in `perception/` (7-class map, Open Images/COCO/LVIS pull, synth top-up, fine-tune from the thermal YOLOv8n, ONNX→OpenVINO/QAIRT); run + train still pending. Export→OpenVINO→benchmark half proven end-to-end using the already-published thermal YOLO as a stand-in: `evidence/benchmark_results/openvino_inference_2026-09-10/` (real Intel CPU+iGPU, FP32 + NNCF INT8). **Real eyes wired in, 2026-09-11:** the v2 fine-tune landed (`models/table_yolo_v2_ft_2026-09-11.pt`, val mAP50 0.324, HF `KissTheHabit/yolov8n-table-yolo`) and is exported for both runtimes (`models/table_yolo_v2_ft_2026-09-11.onnx` + `_openvino_model/`, IR metadata confirms the 7-class order plate…drawer). `yolo_perception.YoloDetector` (ultralytics backend, lazy import) emits the same `RawDetection` contract as the OpenVINO path, and `frame_observer.detector_from_env` gates it behind `OMNIQ_PERCEPTION=stub|yolo` (+ `OMNIQ_YOLO_WEIGHTS`; missing weights → clear error, no silent fallback). Tracker hands out stable ids over YOLO-shaped frames; `demo_yolo_wired.py` prints `{id, class, center, conf}` per frame on CPU; 9 gate/mock/tracker tests in `tests/test_yolo_perception.py` stay green with no weights present |
+| ~ | OQ-008 | Gerron/GPT | Adapt your YOLO pipeline to tabletop objects | OQ-007 | Core pipeline, v2 fine-tune, FP32 weights, ONNX/OpenVINO exports, `YoloDetector`/`RawDetection` wiring, environment gating, stable-id tracking and 9 contract tests are present. Retained v2 validation is mAP50 0.324 on 1,604 images; deployment-domain evaluation, export parity, class/domain improvement and manipulation acceptance remain open. See [`docs/yolo-evaluation.md`](docs/yolo-evaluation.md) and OQ-008-EVAL/DATA/RUNTIME below |
 | x | OQ-009 | Gerron/Claude | Implement world-state representation | OQ-001, OQ-008 | Omni maintains objects, positions, orientations, ownership, goals and constraints across frames — `WorldState` has objects/ownership/constraints/goal/revision across frames; `contracts.Pose` (x/y/z/yaw + distance helpers) on `Detection.pose` (optional, serialises via `asdict`); `IntelTableWorld.state()` stamps every tracked object's live MuJoCo free-joint pose; symbolic camera path leaves it `None` (landed in `2e3f0fd`) |
 |   | OQ-010 | Gerron/GPT | Implement basic arm primitives | OQ-006 | PICK, PLACE, MOVE, OPEN, CLOSE, ROTATE, PRESENT execute individually — real IK + contact grasp exists, all 7 primitives run. As of 2026-09-10: real orientation-aware IK landed (`_grasp_frame`/`_ik_reach_pad_pose`, jointly solving position + orientation, verified against actual close+lift, not just position error), plus a resized `cup_1` fitting the gripper's real measured envelope — `world._do_pick(6,"cup_1")` now returns a genuine held grasp, the first reliable success this whole investigation has produced. `plate_1`/`fork_1`/`spoon_1`/`napkin_1` still fail. **Found and fixed in the same merge** (Damion/Claude): the landing commit also set `contype`/`conaffinity` to 0/0 on every non-pad arm geom, making the whole arm mesh except the two fingertip pads unable to collide with anything (table, drawer, objects) — a no-clip exemption, not a control improvement, reverted per the no-simulation-cheating rule. Verified the real grasp still holds with full collision restored (it does — the orientation-aware control + correct geometry was doing the real work). Cost: full test suite runtime ~95s → ~6min (real physics is slower; accepted, not optimized away). **Scheduler fix 2026-09-11 (Damion/Claude):** the whole revision budget was being spent on whichever object failed first (`napkin_1` measured failing 6 times straight, `plate_1`/`fork_1`/`spoon_1` never attempted) since the engine replans-on-any-failure and the planner always regenerated the same priority order — `IntelTablePlanner` now tracks real per-object attempt counts and deprioritizes a repeatedly-failing object so the budget spreads across objects instead. Doesn't change whether a run resolves or the 10-seed harness's aggregate label (still 10/10 `grasp_failure`, expected) — real value is a richer attempt record per run and a demo that visibly tries different objects instead of looking stuck. **Per-object outcome tally added same day:** the coarse `outcomes` label was hiding real per-object progress (had to read raw receipts by hand to find it) — `per_object_summary` now surfaces it directly. Result across 10 randomized trials: `cup_1` held in **10/10**, genuinely robust to scene jitter — placed in 9/10. `plate_1` held in 1/10 (fragile). 379/379 tests green. See `integrations/intel/README.md` and `intel_sim.py`'s module docstring for the full writeup. |
 |   | OQ-011 | Gerron/GPT | Implement bimanual primitives | OQ-010 | HANDOFF, STABILIZE, REGRASP, COOPERATIVE_ROTATE work between arms |
@@ -37,6 +37,40 @@ Status legend: ` ` todo · `~` in progress · `x` done.
 |   | OQ-020 | Bryan/Codex | Visualize bimanual execution | OQ-012, OQ-005 | UI shows ARM-A/ARM-B actions, parallel intervals, handoffs, barriers and object ownership live |
 | x | OQ-021 | Damion/Claude | Break the Intel demo deliberately | OQ-018 | Test moved objects, failed grasp, unreachable object, collision risk, missing detection, bad instruction; record behavior — see [`docs/oq-021-red-team-findings.md`](docs/oq-021-red-team-findings.md): 2 new latent findings (silent-false-positive perception on zero detections; scheduler "concurrency" is graph-level not real-time), 2 clean passes (unknown-zone, adversarial NL), 1 gap (mid-run perturbation untestable until grasp lands) |
 |   | OQ-022 | Gerron/GPT | Intel hardware/runtime packaging | OQ-016 | Demo can run through required Intel execution path rather than generic local-only code |
+
+### Multi-biarm fleet expansion (resource layer first)
+
+This is an expansion track, not evidence that the current two-arm executor is
+already an N-arm real-time controller. The resource substrate is isolated in
+[`src/omni_q/fleet.py`](src/omni_q/fleet.py) and documented in
+[`docs/manipulation-fleet.md`](docs/manipulation-fleet.md).
+
+| Status | ID | Owner | Task | Depends on | Done when |
+|---|---|---|---|---|---|
+| x | OQ-FLEET-001 | Gerron/GPT | Resource-neutral manipulation fleet | OQ-012 | Immutable manipulator registry, preferred-but-not-binding biarm units, dynamic online pair formation, capability leases, workspace reservations, fail-closed eligibility, and boundary tests exist. |
+| ~ | OQ-FLEET-002 | Gerron/GPT | Fleet-aware scheduler resources | OQ-FLEET-001, OQ-012 | `schedule(..., fleet=...)` assigns single-arm and bimanual steps against online fleet resource ids, permits disjoint biarm units in one planning wave, and exposes participants/resource conflicts; time-lease acquisition and real-time executor integration remain open. |
+|   | OQ-FLEET-003 | Gerron/GPT | Fleet failure reallocation and governed replan | OQ-FLEET-002, OQ-018 | Offline/faulted arm invalidates affected leases, forms an eligible replacement pair when possible, preserves task/object authority, and emits the replan evidence. |
+|   | OQ-FLEET-004 | Damion/Claude | Multi-biarm simulation acceptance | OQ-FLEET-002, OQ-FLEET-003 | Two bimanual teams execute in simulation with measured workspace reservations, collision outcomes, real-time overlap, recovery behavior, and receipts; no graph-level parallelism is reported as physical concurrency. |
+|   | OQ-FLEET-005 | Bryan/Codex | Fleet topology and resource UI | OQ-FLEET-002 | UI shows manipulators, preferred/dynamic pairs, leases, workspace reservations, faults, and reallocation decisions with provenance. |
+
+### OQ-008 current evidence and follow-up gates (2026-09-11)
+
+OQ-008 remains `~`: the v2 dataset, fine-tune, FP32 weights, ONNX/OpenVINO exports, `YoloDetector` wiring, and nine perception tests are present. It is not complete for manipulation because the retained validation evidence is broad web imagery rather than a deploy-camera acceptance slice, and the weak classes are the ones needed for table operations. See [`docs/yolo-evaluation.md`](docs/yolo-evaluation.md).
+
+The current FP32 baseline is mAP50 `0.3241` on `1,604` validation images / `7,937` instances. Per-class mAP50 is: plate `0.2183`, cup `0.5054`, fork `0.2910`, spoon `0.2417`, knife `0.2356`, napkin `0.1843`, drawer `0.5923`. The retained 2-bit numeric rows are much worse — MXFP4 mAP50 `0.0775`, NVINT2 `0.0003`, and MXFP2 `0.0` — but the receipt metadata still describes the model as a 4-CPU-epoch / ~0.058-mAP50 run. Treat that comparison as provisional until the evidence lineage is reconciled or rerun; it is also software dequantization, not native edge-runtime evidence.
+
+| Status | ID | YOLO improvement gate | Done when |
+|---|---|---|---|
+| ~ | OQ-008-EVAL | Deploy-slice evaluation and error taxonomy | A scene-disjoint MuJoCo/recorded-camera holdout reports per-class precision/recall/mAP, class-confusion and occlusion breakdowns, confidence calibration, and a downstream detection-to-placement metric. |
+|   | OQ-008-DATA | Manipulation-class/domain improvement | Labeled deploy-view data and/or controlled synthetic top-up data are split without scene/frame leakage, with explicit sampling for plate, fork, spoon, knife, and napkin; the delta is measured on the frozen deploy slice. |
+|   | OQ-008-RUNTIME | Runtime/export parity and safety gates | FP32 `.pt`, ONNX, and OpenVINO produce equivalent results on the same fixed subset within a recorded tolerance, with per-class thresholds and fail-closed low-confidence/re-observe behavior. |
+
+Decision: do not spend the next iteration on 2-bit quantization. First reconcile the receipt, then improve domain fit, class coverage, and downstream acceptance in FP32; revisit compression only after the deploy slice passes.
+
+### Other status corrections (2026-09-11)
+
+- OQ-024 is `~`: the provider-neutral voice boundary, speaker attribution, partial/final gating, authority boundary, interruption gate, and adversarial tests are present; the live Speechmatics websocket/audio transport remains open.
+- OQ-010 is still open: the recorded randomized trials show only limited object-specific success, so the scheduler/per-object attempt tally is evidence plumbing, not a manipulation acceptance result.
 
 ## P1 — Speechmatics, Qualcomm, unification, submission
 
@@ -119,7 +153,7 @@ Spec + fusion authority = Gerron/Claude (`src/omni_q/ontology.py`,
 Protect this sequence above everything else:
 
 ```
-OQ-003 → OQ-006 → OQ-007 → OQ-010 → OQ-011 → OQ-012 → OQ-014
+OQ-003 → OQ-006 → OQ-007 → OQ-008-EVAL → OQ-010 → OQ-011 → OQ-012 → OQ-014
        → OQ-016 → OQ-017 → OQ-018 → OQ-020 → OQ-021 → OQ-022
 ```
 

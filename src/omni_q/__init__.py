@@ -52,6 +52,16 @@ from .devices import DeviceRouter, default_devices
 from .engine import OmniQ
 from .evidence import EvidenceLedger
 from .events import Event, EventBus, EventValidationError, validate_event_chain
+from .fleet import (
+    BiArmUnit,
+    CapabilityLease,
+    FleetConflict,
+    FleetError,
+    FleetUnavailable,
+    ManipulationFleet,
+    ManipulatorSpec,
+    WorkspaceReservation,
+)
 from .expressive import (
     EXPRESSIVE_PRIMITIVES,
     ExpressiveWindow,
@@ -178,6 +188,14 @@ __all__ = [
     "VoiceRuntime",
     "VoiceScopeError",
     "EvidenceLedger",
+    "BiArmUnit",
+    "CapabilityLease",
+    "FleetConflict",
+    "FleetError",
+    "FleetUnavailable",
+    "ManipulationFleet",
+    "ManipulatorSpec",
+    "WorkspaceReservation",
     "OmniPlanner",
     "MockReasoner",
     "OmniReferenceReasoner",

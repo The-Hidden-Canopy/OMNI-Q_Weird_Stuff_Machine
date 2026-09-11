@@ -8,6 +8,13 @@
 returns a `Schedule`: per-step arm, concurrency waves, and the barriers where a
 shared workspace forced serialisation.
 
+For the N-arm expansion, [`docs/manipulation-fleet.md`](manipulation-fleet.md)
+defines the resource substrate: individual manipulators, dynamic biarm units,
+capability leases, and workspace reservations. The scheduler below remains the
+existing two-arm path until the fleet-aware assignment and real-time execution
+acceptance gates land; its `max_parallelism` metric must not be read as proof of
+physical simultaneity.
+
 The module is **standalone** — it only reads `PlanGraph` / `Step` / `WorldState`
 and never writes to the engine. Integration is one call:
 
@@ -20,6 +27,30 @@ annotated = schedule(graph, world).annotate(graph)   # engine runs this unchange
 and each step additionally depending on the whole previous wave, so the current
 dep-gated `OmniQ` loop executes the waves in order with no engine change. A real
 dual-arm executor reads `Schedule.waves` directly.
+
+With a fleet snapshot, the same seam exposes resource participants for
+multi-biarm planning:
+
+```python
+from omni_q.fleet import ManipulationFleet
+from omni_q.scheduler import schedule
+
+fleet = ManipulationFleet.from_ids(
+    ("arm_1", "arm_2", "arm_3", "arm_4"),
+    capabilities={arm: frozenset({"CO_ROTATE"}) for arm in
+                  ("arm_1", "arm_2", "arm_3", "arm_4")},
+    workspace_regions={arm: frozenset({"table.NW", "table.SE"}) for arm in
+                       ("arm_1", "arm_2", "arm_3", "arm_4")},
+    preferred_pairs=(("arm_1", "arm_2"), ("arm_3", "arm_4")),
+)
+planned = schedule(graph, world, fleet=fleet)
+planned.resource_assignment  # step id -> all participating resource ids
+```
+
+Fleet mode permits disjoint biarm units to occupy one wave. A bimanual step's
+`ScheduledStep.participants` is the authoritative resource set for a future
+fleet executor; `Step.arm` remains the legacy primary-arm field for the
+current single-step engine.
 
 ### Live: `ScheduledPlanner`
 

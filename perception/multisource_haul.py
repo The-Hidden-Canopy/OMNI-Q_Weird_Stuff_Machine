@@ -41,6 +41,26 @@ the big zip, then ONLY the wanted members are extracted (python zipfile),
 then the zip is deleted before hashing.  Projected extract size is estimated
 and refused past --max-extract-bytes.
 
+Open Images train mode (--source-set openimages-train) builds table_yolo_v3_oi:
+Open Images at train scale (the only remaining big source, and the only one
+with Drawer).  The train boxes CSV is ~1-2 GB — it is stream-downloaded to
+the cache dir with resume and parsed with the csv module ONE ROW AT A TIME
+(never a full-text pandas frame).  Dedup is against BOTH prior sets:
+
+    python perception/multisource_haul.py --source-set openimages-train \
+        --out data/table_yolo_v3_oi --dedup-vs data/table_yolo --dedup-vs data/table_yolo_v2 \
+        --cache data/_haul_cache_v3 --min-per-class 4000 --max-image-downloads 40000
+
+Boxes URL note (verified 2026-09-11): the owner-specified v6 train CSV
+(oidv6-train-annotations-bucket.csv) is AUTH-WALLED (403 anonymous) — the same
+wall as the v6/v7 validation CSVs.  The public fallback is the Open Images
+Challenge 2019 train detection CSV (~1.0 GB, first 8 columns identical, extra
+IsOccluded/... flag columns that csv.DictReader absorbs; all 8 target MIDs
+present, Drawer included).  The hauler tries the v6 URL first, then falls
+back automatically and records which one was used.  Napkin has NO boxable
+class in the OIDv7 descriptions csv at all — Open Images can supply only 6 of
+the 7 classes; napkin stays an LVIS source.
+
 Portions derived from *The Hidden Canopy LLC* — [`IDA-TRAIN-V2`](https://github.com/The-Hidden-Canopy/IDA-TRAIN-V2). Used with permission.
 """
 
@@ -79,6 +99,13 @@ URL_LVIS_TRAIN_ZIP = "https://dl.fbaipublicfiles.com/LVIS/lvis_v1_train.json.zip
 URL_OI_BOXES_CSV = "https://storage.googleapis.com/openimages/v5/validation-annotations-bbox.csv"
 URL_OI_CLASSES_CSV = "https://storage.googleapis.com/openimages/v7/oidv7-class-descriptions-boxable.csv"
 URL_OI_IMAGE = "https://open-images-dataset.s3.amazonaws.com/validation/{image_id}.jpg"
+# OIDv6 train boxes (owner-specified): 403 anonymous at verification time.
+URL_OI_TRAIN_BOXES_CSV = ("https://storage.googleapis.com/openimages/v6/"
+                          "oidv6-train-annotations-bucket.csv")
+# Public fallback: Open Images Challenge 2019 train detection boxes (~1.0 GB).
+URL_OI_TRAIN_BOXES_CSV_FALLBACK = ("https://storage.googleapis.com/openimages/"
+                                   "challenge_2019/challenge-2019-train-detection-bbox.csv")
+URL_OI_TRAIN_IMAGE = "https://open-images-dataset.s3.amazonaws.com/train/{image_id}.jpg"
 
 # rough mean JPEG size inside train2017.zip (~18 GB / 118,287 images); used to
 # REFUSE the download before it starts when the projected extract is too big.
@@ -225,6 +252,22 @@ def oi_mid_to_display(classes_csv_text: str) -> dict[str, str]:
             for r in csv.DictReader(io.StringIO(classes_csv_text))}
 
 
+def _oi_target_row(r: Mapping[str, str], mid_to_name: Mapping[str, str]
+                   ) -> tuple[str, YoloRow] | None:
+    """One OID boxes-csv row -> (ImageID, yolo row), or None when dropped."""
+    name = mid_to_name.get(r["LabelName"])
+    if name is None:
+        return None
+    tgt = remap("open-images-v7", name)
+    if tgt is None:
+        return None
+    wh = oi_bbox_to_yolo(float(r["XMin"]), float(r["XMax"]),
+                         float(r["YMin"]), float(r["YMax"]))
+    if wh is None:
+        return None
+    return r["ImageID"], (TARGET_INDEX[tgt], *wh)
+
+
 def oi_target_rows(boxes_csv_text: str, mid_to_name: dict[str, str]
                    ) -> dict[str, list[YoloRow]]:
     """Open Images validation-annotations-bbox.csv -> {ImageID: rows} target-only.
@@ -233,17 +276,52 @@ def oi_target_rows(boxes_csv_text: str, mid_to_name: dict[str, str]
     """
     out: dict[str, list[YoloRow]] = {}
     for r in csv.DictReader(io.StringIO(boxes_csv_text)):
-        name = mid_to_name.get(r["LabelName"])
-        if name is None:
-            continue
+        hit = _oi_target_row(r, mid_to_name)
+        if hit:
+            out.setdefault(hit[0], []).append(hit[1])
+    return out
+
+
+def oi_target_rows_stream(fobj: io.TextIOBase, mid_to_name: Mapping[str, str]
+                          ) -> dict[str, list[YoloRow]]:
+    """STREAMING variant of oi_target_rows for the ~1-2 GB train boxes CSV.
+
+    csv module only, one row at a time, never a full-text frame.  Extra
+    trailing columns (Challenge 2019's IsOccluded/IsTruncated/IsGroupOf/
+    IsDepiction/IsInside) are absorbed by DictReader and ignored.
+    """
+    out: dict[str, list[YoloRow]] = {}
+    for r in csv.DictReader(fobj):
+        hit = _oi_target_row(r, mid_to_name)
+        if hit:
+            out.setdefault(hit[0], []).append(hit[1])
+    return out
+
+
+def oi_resolve_target_mids(mid_to_name: Mapping[str, str]
+                           ) -> dict[str, list[str]]:
+    """{target_class: [LabelName MIDs]} resolvable from a descriptions csv.
+
+    Classes with no boxable OID label (napkin — absent from the oidv7
+    descriptions csv) map to an empty list; the caller reports them.
+    """
+    out: dict[str, list[str]] = {c: [] for c in TARGET_CLASSES}
+    for mid, name in mid_to_name.items():
         tgt = remap("open-images-v7", name)
-        if tgt is None:
-            continue
-        wh = oi_bbox_to_yolo(float(r["XMin"]), float(r["XMax"]),
-                             float(r["YMin"]), float(r["YMax"]))
-        if wh is None:
-            continue
-        out.setdefault(r["ImageID"], []).append((TARGET_INDEX[tgt], *wh))
+        if tgt:
+            out[tgt].append(mid)
+    return {k: sorted(v) for k, v in out.items()}
+
+
+def parse_dedup_vs(values: Iterable[str] | None) -> list[Path]:
+    """Flatten repeatable --dedup-vs flags, each of which may be a comma list.
+
+    ['data/a,data/b', 'data/c'] -> [Path(a), Path(b), Path(c)].  Keeps the
+    original single-flag usage working unchanged.
+    """
+    out: list[Path] = []
+    for v in values or []:
+        out.extend(Path(p.strip()) for p in str(v).split(",") if p.strip())
     return out
 
 
@@ -365,19 +443,37 @@ def partition_vs_reference(items: list[tuple[str, str, int]], ref: Deduper
 # ---------------------------------------------------------------------------
 
 def download(url: str, dest: Path, label: str = "", chunk: int = 1 << 20) -> Path:
+    """Stream ``url`` to ``dest`` via a ``.part`` staging file.
+
+    A partial ``.part`` is RESUMED with a Range request (the ~1 GB OI train
+    boxes CSV benefits); a server that ignores the range restarts instead.
+    ``dest`` only appears on success, so a crashed run never leaves a
+    truncated file that the call sites' ``exists()`` checks would mistake
+    for complete.
+    """
     dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".part")
+    have = tmp.stat().st_size if tmp.exists() else 0
+    headers = {"Range": f"bytes={have}-"} if have else {}
     t0 = time.time()
-    got = 0
-    with requests.get(url, stream=True, timeout=(15, 60)) as r:
+    got = have
+    mode = "ab" if have else "wb"
+    with requests.get(url, stream=True, timeout=(15, 60), headers=headers) as r:
+        if have and r.status_code != 206:
+            have, got, mode = 0, 0, "wb"   # server won't resume: restart
         r.raise_for_status()
         total = int(r.headers.get("content-length") or 0)
-        with dest.open("wb") as f:
+        if mode == "ab":
+            total += have
+        with tmp.open(mode) as f:
             for blk in r.iter_content(chunk):
                 f.write(blk)
                 got += len(blk)
+    tmp.replace(dest)
     dt = time.time() - t0
+    resumed = "resumed, " if mode == "ab" else ""
     if label:
-        print(f"  [{label}] {got / 1e6:.0f} MB in {dt:.0f}s "
+        print(f"  [{label}] {resumed}{got / 1e6:.0f} MB in {dt:.0f}s "
               f"({got / 1e6 / max(dt, 0.1):.1f} MB/s)"
               + (f" of {total / 1e6:.0f} MB" if total else ""), flush=True)
     return dest
@@ -433,14 +529,17 @@ def _fresh_dir(base: Path) -> Path:
 
 
 def _persist(pool: dict[str, KeptImage], args: argparse.Namespace,
-             rng: random.Random, manifest: dict, t_start: float) -> Path:
+             rng: random.Random, manifest: dict, t_start: float,
+             write_receipt: bool = True) -> Path:
     """Write the YOLO tree + data.yaml + manifest.json + evidence receipt.
 
-    Shared by the val (v1) and train (v2) pipelines.  data.yaml pins an
-    ABSOLUTE path (the repo's ultralytics settings point outside it), same
-    convention as the hand-fixed v1 yaml.
+    Shared by the val (v1), train (v2) and openimages-train (v3 OI) pipelines.
+    data.yaml pins an ABSOLUTE path (the repo's ultralytics settings point
+    outside it), same convention as the hand-fixed v1 yaml.  Modes with their
+    own receipt format (v3 OI) pass write_receipt=False.
     """
     out = _fresh_dir(args.out)
+    out.mkdir(parents=True, exist_ok=True)   # an empty pool must still persist
     n_train = n_val = 0
     idx = 0
     per_image: dict[str, dict] = {}
@@ -487,9 +586,9 @@ def _persist(pool: dict[str, KeptImage], args: argparse.Namespace,
     print(f"final class boxes: {manifest['class_boxes_final']}")
     thin = [c for c in TARGET_CLASSES[:-1] if manifest["class_boxes_final"][c] < args.min_per_class]
     if thin:
-        print(f"below the {args.min_per_class}/class target: {thin} — scale-up path is in the receipt")
+        print(f"below the {args.min_per_class}/class target: {thin} -- scale-up path is in the receipt")
 
-    receipt = _write_receipt(out, manifest, args)
+    receipt = _write_receipt(out, manifest, args) if write_receipt else None
     if receipt:
         print(f"receipt at {receipt}", flush=True)
     return out
@@ -524,7 +623,16 @@ def _write_receipt(out: Path, manifest: dict, args: argparse.Namespace) -> Path 
     members = (src.get("coco-2017", {}).get("selective_extract") or {})
     n_members = members.get("members_extracted", split.get("train", 0) + split.get("val", 0))
 
-    cross = dedup.get("cross_set_vs_v1") or {}
+    cross = dedup.get("cross_set") or {}
+    cross_lines = ""
+    if cross:
+        refs_txt = "; ".join(
+            f"{r.get('dir')} (prefix {r.get('prefix')}): {r.get('dropped')} dropped, "
+            f"{r.get('images')} reference images hashed"
+            for r in cross.get("references", [])) or "—"
+        cross_lines = (
+            f"- Cross-set vs existing sets: {cross.get('dropped_total', 0)} "
+            f"of {cross.get('candidates', 0)} candidates dropped.  {refs_txt}.\n")
     md = f"""# {out.name} — train-scale multi-source haul ({stamp})
 
 **Status: haul complete.** Same 7-class vocabulary as v1
@@ -554,9 +662,7 @@ file.
 
 - Exact: sha256 of image bytes.  Near: 64-bit dHash, Hamming <= {NEAR_DUP_TOLERANCE}.
 - Within-source: {dedup.get('within_source', {})}
-- Cross-set vs v1 (--dedup-vs {cross.get('reference_dir', '—')}): {cross.get('dropped', 0)}
-  of {cross.get('candidates', 0)} v2 candidates dropped ({cross.get('reference_images', 0)}
-  v1 reference images hashed).
+{cross_lines}
 
 ## Final numbers
 
@@ -588,28 +694,44 @@ Portions derived from *The Hidden Canopy LLC* — [`IDA-TRAIN-V2`](https://githu
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--source-set", choices=["val", "train"], default="val",
+    ap.add_argument("--source-set", choices=["val", "train", "openimages-train"],
+                    default="val",
                     help="'val' (default) = original v1 haul: COCO/LVIS val + "
                          "Open Images. 'train' = v2: COCO train2017 + LVIS v1 "
-                         "train, selective extraction, optional --dedup-vs.")
+                         "train, selective extraction, optional --dedup-vs. "
+                         "'openimages-train' = v3 OI component: Open Images "
+                         "train-scale boxes + S3 train images, deduped vs "
+                         "--dedup-vs dirs (repeatable).")
     ap.add_argument("--out", type=Path, default=None,
-                    help="default: data/table_yolo_v1 (val) / data/table_yolo_v2 (train)")
+                    help="default: data/table_yolo_v1 (val) / data/table_yolo_v2 "
+                         "(train) / data/table_yolo_v3_oi (openimages-train)")
     ap.add_argument("--cache", type=Path, default=Path("data/_haul_cache"))
     ap.add_argument("--coco-cap", type=int, default=None,
                     help="max COCO val images to keep (default: all with target boxes)")
-    ap.add_argument("--oi-cap", type=int, default=1500,
-                    help="max Open Images val images to download (0 = skip OI)")
+    ap.add_argument("--oi-cap", type=int, default=None,
+                    help="max Open Images images to KEEP (0 = skip OI; default: "
+                         "1500 in val mode, unlimited in openimages-train mode)")
+    ap.add_argument("--oi-boxes-url", default=None,
+                    help="openimages-train: override the train boxes CSV URL "
+                         "(default tries the v6 OID csv, falls back to the "
+                         "public Challenge 2019 train detection csv)")
+    ap.add_argument("--max-image-downloads", type=int, default=None,
+                    help="openimages-train: safety valve — cap ATTEMPTED image "
+                         "downloads (kept-image failures from the S3 bucket are "
+                         "skipped, never fatal)")
     ap.add_argument("--min-per-class", type=int, default=1500,
                     help="greedy coverage target for the 6 tableware classes")
     ap.add_argument("--val-frac", type=float, default=0.10)
     ap.add_argument("--seed", type=int, default=None,
-                    help="default: 7 (val, unchanged) / 13 (train)")
+                    help="default: 7 (val, unchanged) / 13 (train, openimages-train)")
     ap.add_argument("--budget-minutes", type=float, default=22.0,
                     help="wall-clock cap on the whole haul's download phase")
-    # train-scale (v2) options
-    ap.add_argument("--dedup-vs", type=Path, default=None,
-                    help="existing YOLO dataset dir (e.g. data/table_yolo): drop "
-                         "v2 images that exact/near-duplicate it (sha256 + dHash)")
+    # train-scale (v2) + openimages-train (v3) options
+    ap.add_argument("--dedup-vs", action="append", default=None,
+                    help="existing YOLO dataset dir(s): drop new images that "
+                         "exact/near-duplicate them (sha256 + dHash). Repeatable "
+                         "and/or comma-separated — v3 uses: --dedup-vs "
+                         "data/table_yolo --dedup-vs data/table_yolo_v2")
     ap.add_argument("--max-images", type=int, default=None,
                     help="train: cap on the union COCO+LVIS train image selection")
     ap.add_argument("--max-extract-bytes", type=float, default=24e9,
@@ -621,12 +743,19 @@ def main() -> None:
                          "selective extraction either way")
     args = ap.parse_args()
     if args.out is None:
-        args.out = Path("data/table_yolo_v2" if args.source_set == "train"
-                        else "data/table_yolo_v1")
+        args.out = Path({"val": "data/table_yolo_v1",
+                         "train": "data/table_yolo_v2",
+                         "openimages-train": "data/table_yolo_v3_oi"}[args.source_set])
     if args.seed is None:
-        args.seed = 13 if args.source_set == "train" else 7
+        args.seed = 13 if args.source_set != "val" else 7
+    if args.oi_cap is None:
+        # val mode keeps its historical 1500 default; train-scale modes are
+        # uncapped unless the caller says otherwise (0 still means skip OI).
+        args.oi_cap = 1500 if args.source_set == "val" else None
     if args.source_set == "train":
         _main_train(args)
+    elif args.source_set == "openimages-train":
+        _main_oi_train(args)
     else:
         _main_val(args)
 
@@ -960,16 +1089,20 @@ def _main_train(args: argparse.Namespace) -> None:
         print(f"  WARNING: {len(missing)} selected images missing from the zip",
               flush=True)
 
-    # ---- 5. Hash pool, cross-set dedup vs v1, within-v2 dedup -------------
+    # ---- 5. Hash pool, cross-set dedup vs --dedup-vs refs, within-v2 dedup -
     print("== hashing COCO+LVIS train pool", flush=True)
     deduper = Deduper()
-    ref_n = 0
-    if args.dedup_vs:
-        print(f"  seeding reference hashes from {args.dedup_vs}", flush=True)
-        ref_n = seed_deduper_from_dataset(deduper, args.dedup_vs)
-        print(f"  {ref_n} reference images hashed", flush=True)
+    refs = parse_dedup_vs(args.dedup_vs)
+    ref_prefixes = [f"{r.name}:" for r in refs]
+    ref_stats: list[dict] = []
+    for ref, prefix in zip(refs, ref_prefixes):
+        print(f"  seeding reference hashes from {ref} (prefix {prefix})", flush=True)
+        n_ref = seed_deduper_from_dataset(deduper, ref, prefix=prefix)
+        print(f"  {n_ref} reference images hashed", flush=True)
+        ref_stats.append({"dir": str(ref), "prefix": prefix, "images": n_ref,
+                          "dropped": 0})
     pool: dict[str, KeptImage] = {}
-    dropped_vs_v1: list[str] = []
+    dropped_vs_refs: list[str] = []
     within_v2 = {"exact": 0, "near": 0}
     kept_ids = sorted(int(s) for s in order if int(s) not in missing_ids)
     for n, iid in enumerate(kept_ids):
@@ -983,8 +1116,11 @@ def _main_train(args: argparse.Namespace) -> None:
             dh = dhash64(im)
         dec = deduper.add(key, sha, dh)
         if dec.status != "unique":
-            if dec.matched and dec.matched.startswith("v1:"):
-                dropped_vs_v1.append(key)
+            hit_ref = next((s for s in ref_stats
+                            if dec.matched and dec.matched.startswith(s["prefix"])), None)
+            if hit_ref is not None:
+                hit_ref["dropped"] += 1
+                dropped_vs_refs.append(key)
             else:
                 within_v2[dec.status.split("_")[0]] += 1
             continue
@@ -995,7 +1131,7 @@ def _main_train(args: argparse.Namespace) -> None:
                   flush=True)
     counts = histogram({k: v.rows for k, v in pool.items()})
     print(f"  {len(pool)} unique v2 images "
-          f"({len(dropped_vs_v1)} dropped as dups of v1, "
+          f"({len(dropped_vs_refs)} dropped as dups of reference sets, "
           f"{sum(within_v2.values())} within-v2 dups); boxes {counts}", flush=True)
 
     # ---- 6. Manifest + persist --------------------------------------------
@@ -1037,12 +1173,11 @@ def _main_train(args: argparse.Namespace) -> None:
         "method_exact": "sha256 of image bytes",
         "method_near": f"64-bit dHash, Hamming <= {NEAR_DUP_TOLERANCE}",
         "within_source": {"v2": within_v2},
-        "cross_set_vs_v1": {
-            "reference_dir": str(args.dedup_vs) if args.dedup_vs else None,
-            "reference_images": ref_n,
+        "cross_set": {
+            "references": ref_stats,
             "candidates": len(kept_ids),
-            "dropped": len(dropped_vs_v1),
-            "dropped_keys_head": dropped_vs_v1[:20],
+            "dropped_total": len(dropped_vs_refs),
+            "dropped_keys_head": dropped_vs_refs[:20],
         },
         "coco_category_map": coco_catmap,
         "lvis_category_map": lvis_catmap,
@@ -1138,6 +1273,306 @@ def _haul_open_images(args, cache: Path, pool: dict[str, KeptImage],
         "near_dups_vs_existing": near,
         "stopped_by_budget": time.time() - t_start > budget_s and kept < len(order),
     }
+
+
+# ---------------------------------------------------------------------------
+# Open Images train-scale mode (v3 component: table_yolo_v3_oi)
+# ---------------------------------------------------------------------------
+
+def _download_oi_train_boxes(args, cache: Path) -> tuple[Path, dict]:
+    """Fetch the OI train boxes CSV with resume; fall back to the public
+    Challenge 2019 csv when the v6 OID csv is auth-walled (it was, verified
+    2026-09-11 — same wall as the v6/v7 validation CSVs).
+
+    Returns (csv path, provenance dict for the manifest).
+    """
+    urls = [args.oi_boxes_url or URL_OI_TRAIN_BOXES_CSV]
+    if urls[0] != URL_OI_TRAIN_BOXES_CSV_FALLBACK:
+        urls.append(URL_OI_TRAIN_BOXES_CSV_FALLBACK)
+    tried: list[str] = []
+    for url in urls:
+        dest = cache / Path(url.split("?")[0]).name
+        if dest.exists():
+            return dest, {"boxes_csv": url, "fallback_used": url != urls[0],
+                          "auth_wall_urls": tried}
+        print(f"  train boxes csv: {url}", flush=True)
+        try:
+            download(url, dest, "oi-train-boxes")
+            return dest, {"boxes_csv": url, "fallback_used": url != urls[0],
+                          "auth_wall_urls": tried}
+        except requests.HTTPError as e:
+            tried.append(f"{url} -> HTTP {e.response.status_code if e.response else '?'}")
+            print(f"  WARNING: {url} failed ({e}); "
+                  f"{'falling back' if url != urls[-1] else 'no fallback left'}", flush=True)
+            dest.unlink(missing_ok=True)
+    raise SystemExit("no reachable OI train boxes CSV — see URLs above; "
+                     "pass --oi-boxes-url with a mirror if both stay walled")
+
+
+def _main_oi_train(args: argparse.Namespace) -> None:
+    """Open Images train-scale haul (v3 OI component, table_yolo_v3_oi).
+
+    Stream-downloads the ~1-2 GB train boxes CSV (resumable, .part staging)
+    and parses it with the csv module ONE ROW AT A TIME — never a full-text
+    pandas frame.  Images come from the S3 train bucket; individual 403/404
+    /timeout failures are SKIPPED with a printed count (the bucket
+    occasionally rate-limits) — the haul never crashes on them.  Dedup is
+    seeded from EVERY --dedup-vs dir (v1 AND v2 for the real v3 run).
+    """
+    t_start = time.time()
+    rng = random.Random(args.seed)
+    cache = args.cache
+    manifest: dict = {
+        "created_utc": datetime.now(timezone.utc).isoformat(),
+        "seed": args.seed,
+        "args": {k: str(v) for k, v in vars(args).items()},
+        "sources": {},
+        "dedup": {},
+        "license_note": LICENSE_NOTE,
+    }
+
+    # ---- 1. Train boxes csv (streamed, resumable) + class descriptions -----
+    print("== Open Images train-scale boxes", flush=True)
+    boxes_csv, prov = _download_oi_train_boxes(args, cache)
+    classes_csv = cache / "oidv7-class-descriptions-boxable.csv"
+    if not classes_csv.exists():
+        download(URL_OI_CLASSES_CSV, classes_csv, "oi-classes")
+    mid_to_name = oi_mid_to_display(classes_csv.read_text(encoding="utf-8"))
+    resolved = oi_resolve_target_mids(mid_to_name)
+    missing = [c for c in TARGET_CLASSES if not resolved[c]]
+    print(f"  class resolution: {resolved}", flush=True)
+    if missing:
+        print(f"  WARNING: no boxable OID label for {missing} -- Open Images "
+              f"cannot supply {'it' if len(missing) == 1 else 'them'}; "
+              f"napkin stays an LVIS-only class", flush=True)
+
+    # ---- 2. Stream-parse target rows (csv module, one row at a time) -------
+    print("  streaming target rows ...", flush=True)
+    with boxes_csv.open("r", encoding="utf-8", newline="") as f:
+        candidates = oi_target_rows_stream(f, mid_to_name)
+    offered = histogram(candidates)
+    print(f"  {len(candidates)} OI train images carry target boxes; offered {offered}",
+          flush=True)
+
+    # ---- 3. Greedy per-class deficit order ---------------------------------
+    order = order_oi_candidates(candidates, {c: 0 for c in TARGET_CLASSES},
+                                args.min_per_class, args.seed)
+    print(f"  greedy order computed (min-per-class {args.min_per_class}, "
+          f"seed {args.seed}); cap: keep {args.oi_cap or 'no cap'}, "
+          f"attempts {args.max_image_downloads or 'no cap'}", flush=True)
+
+    # ---- 4. Seed cross-set deduper from EVERY --dedup-vs dir ---------------
+    deduper = Deduper()
+    refs = parse_dedup_vs(args.dedup_vs)
+    ref_stats: list[dict] = []
+    for ref in refs:
+        prefix = f"{ref.name}:"
+        print(f"  seeding reference hashes from {ref} (prefix {prefix})", flush=True)
+        n_ref = seed_deduper_from_dataset(deduper, ref, prefix=prefix)
+        print(f"  {n_ref} reference images hashed", flush=True)
+        ref_stats.append({"dir": str(ref), "prefix": prefix, "images": n_ref,
+                          "dropped": 0})
+
+    # ---- 5. Wave-download S3 train images; failures are skips --------------
+    oi_dir = cache / "oi_train_images"
+    oi_dir.mkdir(parents=True, exist_ok=True)
+    pool: dict[str, KeptImage] = {}
+    counts = {c: 0 for c in TARGET_CLASSES}
+    kept = tried = failed = 0
+    within_v3 = {"exact": 0, "near": 0}
+    budget_s = args.budget_minutes * 60
+    skip_oi = args.oi_cap == 0   # val-mode convention: 0 = skip OI entirely
+
+    def _fetch_one(iid: str):
+        dst = oi_dir / f"{iid}.jpg"
+        try:
+            if not dst.exists():
+                r = requests.get(URL_OI_TRAIN_IMAGE.format(image_id=iid),
+                                 timeout=(10, 60))
+                r.raise_for_status()
+                dst.write_bytes(r.content)
+            sha = sha256_of(dst)
+            with Image.open(dst) as im:
+                dh = dhash64(im)
+            return iid, sha, dh
+        except Exception:
+            dst.unlink(missing_ok=True)
+            return iid, None, None
+
+    from concurrent.futures import ThreadPoolExecutor
+    WAVE = 96            # fetch in waves so the caps stay responsive
+    WORKERS = 8
+    pos = 0
+    keep_cap = None if args.oi_cap in (None, 0) else args.oi_cap
+    with ThreadPoolExecutor(WORKERS) as ex:
+        while not skip_oi and pos < len(order) \
+                and (keep_cap is None or kept < keep_cap) \
+                and (args.max_image_downloads is None or tried < args.max_image_downloads) \
+                and time.time() - t_start <= budget_s:
+            wave = order[pos: pos + WAVE]
+            pos += len(wave)
+            for iid, sha, dh in ex.map(_fetch_one, wave):
+                tried += 1
+                if sha is None:
+                    failed += 1
+                    continue
+                dec = deduper.add(f"oi3:{iid}", sha, dh)
+                if dec.status != "unique":
+                    hit_ref = next((s for s in ref_stats
+                                    if dec.matched and dec.matched.startswith(s["prefix"])), None)
+                    if hit_ref is not None:
+                        hit_ref["dropped"] += 1
+                    else:
+                        within_v3[dec.status.split("_")[0]] += 1
+                    (oi_dir / f"{iid}.jpg").unlink()
+                    continue
+                kept += 1
+                pool[iid] = KeptImage(key=iid, source="open-images",
+                                      rows=list(candidates[iid]),
+                                      src_path=oi_dir / f"{iid}.jpg",
+                                      oi_id=iid, sha256=sha, dhash=dh)
+                for c, *_ in candidates[iid]:
+                    counts[TARGET_CLASSES[c]] += 1
+            print(f"  OI train: {kept} kept / {tried} tried / {failed} skipped "
+                  f"({time.time() - t_start:.0f}s elapsed)", flush=True)
+    if failed:
+        print(f"  NOTE: {failed} of {tried} image downloads failed "
+              f"(403/404/rate-limit) — skipped, haul continues", flush=True)
+
+    # ---- 6. Manifest + persist ---------------------------------------------
+    manifest["sources"]["open-images"] = {
+        "status": "ok", "split": "train",
+        **prov,
+        "images_csv": URL_OI_CLASSES_CSV,
+        "image_base": URL_OI_TRAIN_IMAGE,
+        "target_mids_resolved": resolved,
+        "classes_without_oid_label": missing,
+        "candidate_images_with_target_boxes": len(candidates),
+        "class_boxes_offered": offered,
+        "images_requested": tried,
+        "image_download_failures_skipped": failed,
+        "images_kept_unique": kept,
+        "within_v3_dups": within_v3,
+        "min_per_class": args.min_per_class,
+        "oi_cap": args.oi_cap,
+        "max_image_downloads": args.max_image_downloads,
+        "stopped_by_budget": time.time() - t_start > budget_s and pos < len(order),
+        "note": "OIDv6 train CSV tried first (owner-specified); it is auth-walled "
+                "anonymous, so the public Challenge 2019 train detection CSV "
+                "(first 8 columns identical) is the normal source. Napkin has no "
+                "boxable OID label at all — 6 of 7 classes come from OI.",
+    }
+    manifest["sources"]["coco-2017"] = {"status": "skipped",
+                                        "reason": "openimages-train source-set: OI only."}
+    manifest["sources"]["lvis"] = {"status": "skipped",
+                                   "reason": "openimages-train source-set: OI only."}
+    manifest["sources"]["objects365"] = {
+        "status": "skipped",
+        "reason": "v1 requires registration; no public no-auth download URL.",
+    }
+    dropped_total = sum(s["dropped"] for s in ref_stats)
+    manifest["dedup"] = {
+        "method_exact": "sha256 of image bytes",
+        "method_near": f"64-bit dHash, Hamming <= {NEAR_DUP_TOLERANCE}",
+        "within_source": {"v3_oi": within_v3},
+        "cross_set": {
+            "references": ref_stats,
+            "candidates": tried,
+            "dropped_total": dropped_total,
+        },
+    }
+    manifest["class_boxes_offered"] = {"open-images": offered}
+    _persist(pool, args, rng, manifest, t_start, write_receipt=False)
+    _write_receipt_oi_train(args, manifest)
+
+
+def _write_receipt_oi_train(args: argparse.Namespace, manifest: dict) -> Path | None:
+    """Evidence receipt for the v3 OI component (manifest copy + README),
+    same location/format convention as the v1/v2 receipts.  Records the
+    dedup stats vs BOTH prior sets and the per-class kept counts."""
+    ev = Path("evidence/datasets")
+    if not ev.is_dir():
+        return None
+    stamp = datetime.now().strftime("%Y%m%d")
+    out_name = manifest.get("output", "table_yolo_v3_oi")
+    out_name = Path(out_name).name
+    dest = ev / f"{out_name}_{stamp}"
+    n = 1
+    while dest.exists():
+        dest = ev / f"{out_name}_{stamp}_{n}"
+        n += 1
+    dest.mkdir(parents=True)
+    (dest / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    oi = manifest.get("sources", {}).get("open-images", {})
+    dedup = manifest.get("dedup", {})
+    cross = dedup.get("cross_set", {})
+    final = manifest.get("class_boxes_final", {})
+    split = manifest.get("split", {})
+    refs_md = "\n".join(
+        f"- `{r.get('dir')}` (prefix `{r.get('prefix')}`): {r.get('images')} reference "
+        f"images hashed, **{r.get('dropped')} v3 candidates dropped**"
+        for r in cross.get("references", [])) or "- (no --dedup-vs references)"
+
+    md = f"""# {out_name} — Open Images train-scale haul ({stamp})
+
+**Status: haul complete.** Same 7-class vocabulary (`plate cup fork spoon
+knife napkin drawer`), YOLOv5 layout, built by
+`perception/multisource_haul.py --source-set openimages-train` (no FiftyOne,
+no auth — direct HTTP).  This is the v3 Open Images COMPONENT ONLY; merge
+with table_yolo_v2 via `perception/merge_datasets.py` into `data/table_yolo_v3`.
+
+## What was pulled
+
+- Boxes CSV: {oi.get('boxes_csv')}
+  (v6 OID train CSV auth-walled: {bool(oi.get('fallback_used'))}; failed
+  attempts: {oi.get('auth_wall_urls')})
+- Images: `{oi.get('image_base')}` — S3 train bucket.
+- {oi.get('candidate_images_with_target_boxes')} candidate images carry target
+  boxes; offered class boxes {oi.get('class_boxes_offered')}.
+- Classes with NO boxable OID label: {oi.get('classes_without_oid_label')} —
+  Open Images supplies 6 of 7 classes; napkin stays LVIS-only.
+- Downloads: {oi.get('images_requested')} attempted,
+  **{oi.get('image_download_failures_skipped')} failed (403/404/rate-limit) and
+  skipped** — individual image failures never crash the haul.
+- min-per-class {oi.get('min_per_class')} (greedy deficit order, seed
+  {manifest.get('seed')}); kept cap {oi.get('oi_cap')}, attempt cap
+  {oi.get('max_image_downloads')}.
+
+## Dedup (measured, owner requirement)
+
+- Exact: sha256 of image bytes.  Near: 64-bit dHash, Hamming <= {NEAR_DUP_TOLERANCE}.
+- Within-v3: {dedup.get('within_source', {})}
+- Cross-set: **{cross.get('dropped_total', 0)} of {cross.get('candidates', 0)}
+  attempted images dropped** as dups of the reference sets:
+{refs_md}
+
+## Final numbers
+
+- **{manifest.get('final_unique_images')} unique images** — train {split.get('train')}
+  / val {split.get('val')} (val-frac {args.val_frac}, seed {manifest.get('seed')}).
+- Per-class KEPT boxes: {" · ".join(f"{c} {n}" for c, n in final.items())}.
+- Elapsed: {manifest.get('elapsed_seconds')} s.
+
+## Usage
+
+```bash
+python perception/merge_datasets.py --input data/table_yolo_v2 \
+    --input {str(manifest.get('output', 'data/table_yolo_v3_oi')).replace(chr(92), '/')} \
+    --out data/table_yolo_v3 --seed {manifest.get('seed')}
+```
+
+`data/` is gitignored; reproducible by re-running the command in the
+manifest's `args`.
+
+## License
+
+{LICENSE_NOTE}
+
+Portions derived from *The Hidden Canopy LLC* — [`IDA-TRAIN-V2`](https://github.com/The-Hidden-Canopy/IDA-TRAIN-V2). Used with permission.
+"""
+    (dest / "README.md").write_text(md, encoding="utf-8")
+    return dest
 
 
 if __name__ == "__main__":
