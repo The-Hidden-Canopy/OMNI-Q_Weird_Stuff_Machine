@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import replace
-from typing import Any
+from typing import Any, Iterable
 
 from .contracts import (
     ActionAuthorization,
@@ -35,6 +35,13 @@ from .contracts import (
 )
 from .events import EventBus
 from .expressive import ExpressiveWindowRejected, validate_expressive_step
+from .fleet import (
+    FleetError,
+    FleetFault,
+    FleetReallocation,
+    ManipulationFleet,
+    ReallocationRequest,
+)
 from .provenance import run_id_for
 
 
@@ -71,6 +78,8 @@ class OmniQ:
         self._pending_constraints: list[Constraint] = []
         self._actions: list[dict[str, Any]] = []
         self._decisions: list[dict[str, Any]] = []
+        self._pending_fleet_faults: list[tuple[FleetFault, tuple[ReallocationRequest, ...]]] = []
+        self._fleet_fault_ids: set[str] = set()
         self._run_id = ""
 
     # -- external control (Speechmatics / UI feed into these) ----------
@@ -90,6 +99,27 @@ class OmniQ:
         )
         self._pending_constraints.append(constraint)
         self.bus.publish("constraint.queued", **constraint.as_dict())
+
+    def report_fleet_fault(
+        self,
+        fault: FleetFault,
+        requests: Iterable[ReallocationRequest] = (),
+    ) -> None:
+        """Queue a fleet-health observation for the next control boundary.
+
+        Queueing is intentionally side-effect free with respect to the fleet,
+        world, plan, and manipulators.  The run loop owns organization checks,
+        event publication, reallocation, and strict recompilation.
+        """
+        if not isinstance(fault, FleetFault):
+            raise FleetError("fleet fault report requires a FleetFault")
+        try:
+            request_list = tuple(requests)
+        except TypeError as exc:
+            raise FleetError("fleet fault requests must be iterable") from exc
+        if any(not isinstance(request, ReallocationRequest) for request in request_list):
+            raise FleetError("fleet fault requests must be ReallocationRequest values")
+        self._pending_fleet_faults.append((fault, request_list))
 
     def _apply_constraints(self) -> bool:
         if not self._pending_constraints:
@@ -124,6 +154,120 @@ class OmniQ:
         self._capture_decision()
         self._emit_graph("graph.recompiled", reason=reason)
 
+    def _apply_pending_fleet_fault(self) -> str:
+        """Process one queued fault at a control-loop boundary.
+
+        Return ``replanned`` when a new graph was installed, ``rejected`` for
+        a non-authoritative observation, and ``hold`` whenever the fault was
+        accepted but safe fleet-aware replanning could not be completed.
+        """
+        if not self._pending_fleet_faults:
+            return "none"
+        fault, requests = self._pending_fleet_faults.pop(0)
+        state = self.world.state()
+
+        if fault.fault_id in self._fleet_fault_ids:
+            self.bus.publish(
+                "fleet.fault.rejected",
+                fault_id=fault.fault_id,
+                reason="duplicate fault_id within run",
+                state_revision=state.revision,
+                source=fault.source,
+            )
+            return "rejected"
+        self._fleet_fault_ids.add(fault.fault_id)
+
+        if fault.org_id != state.org_id:
+            self.bus.publish(
+                "fleet.fault.rejected",
+                fault_id=fault.fault_id,
+                reason="fault organization does not match current world organization",
+                fault_org_id=fault.org_id,
+                world_org_id=state.org_id,
+                state_revision=state.revision,
+                source=fault.source,
+            )
+            return "rejected"
+
+        fault_data = fault.as_dict()
+        fault_data.pop("source", None)
+        self.bus.publish(
+            "fleet.fault.observed",
+            **fault_data,
+            state_revision=state.revision,
+            source=fault.source,
+        )
+
+        reallocate = getattr(self.planner, "reallocate_fleet", None)
+        strict_replan = getattr(self.planner, "replan_strict", None)
+        if not callable(reallocate) or not callable(strict_replan):
+            self._fleet_fault_failure(
+                fault,
+                "planner does not expose the fleet reallocation and strict replan seams",
+            )
+            return "hold"
+        if self.graph is None:
+            self._fleet_fault_failure(fault, "fleet fault arrived without an active graph")
+            return "hold"
+
+        try:
+            _updated_fleet, evidence = reallocate(fault, requests=requests)
+            if not isinstance(_updated_fleet, ManipulationFleet):
+                raise FleetError("fleet reallocation returned an invalid fleet snapshot")
+            if not isinstance(evidence, FleetReallocation):
+                raise FleetError("fleet reallocation returned invalid evidence")
+        except Exception as exc:  # noqa: BLE001 - a fault must fail closed
+            self._fleet_fault_failure(
+                fault, f"fleet reallocation failed: {type(exc).__name__}: {exc}"
+            )
+            return "hold"
+
+        reallocation = evidence.as_dict()
+        self.bus.publish(
+            "fleet.reallocated",
+            **reallocation,
+            state_revision=state.revision,
+            source=fault.source,
+        )
+        # Keep the exact event payload in the durable decision stream so the
+        # receipt can be compared directly with the causal event.
+        self._decisions.append(reallocation)
+        self._escalate(AutonomyMode.DEGRADED)
+
+        prior_graph = self.graph
+        current_world = self._effective_world()
+        reason = f"fleet fault {fault.fault_id}: {fault.reason}"
+        try:
+            fresh_graph = strict_replan(prior_graph, current_world, reason)
+            if not isinstance(fresh_graph, PlanGraph):
+                raise FleetError("strict fleet replan returned a non-PlanGraph value")
+            if fresh_graph is prior_graph or fresh_graph.revision <= prior_graph.revision:
+                raise FleetError("strict fleet replan did not produce a new graph revision")
+        except Exception as exc:  # noqa: BLE001 - never execute the stale graph
+            self._fleet_fault_failure(
+                fault, f"strict fleet replan failed: {type(exc).__name__}: {exc}"
+            )
+            return "hold"
+
+        self.graph = fresh_graph
+        self._capture_decision()
+        self._emit_graph(
+            "graph.recompiled",
+            reason=reason,
+            state_revision=current_world.revision,
+        )
+        return "replanned"
+
+    def _fleet_fault_failure(self, fault: FleetFault, reason: str) -> None:
+        self.bus.publish(
+            "fleet.replan.failed",
+            fault_id=fault.fault_id,
+            reason=reason,
+            state_revision=self.world.state().revision,
+            source=fault.source,
+        )
+        self._escalate(AutonomyMode.HOLD)
+
     def _effective_world(self) -> WorldState:
         """Return a snapshot with immutable mission authority applied.
 
@@ -151,6 +295,7 @@ class OmniQ:
         self._run_id = run_id
         self._actions = []
         self._decisions = []
+        self._fleet_fault_ids = set()
         self.bus.begin_run(run_id)
         # Queued operator constraints are part of this run's authority.  Apply
         # them before observing or planning so the first graph cannot be
@@ -183,6 +328,15 @@ class OmniQ:
                 revisions += 1
                 self._recompile(self._effective_world(), "constraint change")
                 executed.clear()
+
+            fault_result = self._apply_pending_fleet_fault()
+            if fault_result == "replanned":
+                revisions += 1
+                executed.clear()
+                continue
+            if fault_result == "hold":
+                revisions += 1
+                break
 
             step = self._next_step(executed)
             if step is None:
@@ -297,6 +451,8 @@ class OmniQ:
         return config
 
     def _next_step(self, executed: set[str]) -> Step | None:
+        if self.graph is None or self.mode is AutonomyMode.HOLD:
+            return None
         for step in self.graph.topo_order():
             if step.id in executed:
                 continue

@@ -21,12 +21,18 @@ collisions**, not reach.
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import Any
+from typing import Any, Iterable
 
 from . import actions as _actions
 from .contracts import PlanGraph, Step, WorldState
 from .expressive import ExpressiveWindow, ExpressionPlan, generate_expression_plan
-from .fleet import FleetError, ManipulationFleet
+from .fleet import (
+    FleetError,
+    FleetFault,
+    FleetReallocation,
+    ManipulationFleet,
+    ReallocationRequest,
+)
 
 ARMS: tuple[str, str] = ("left", "right")
 
@@ -874,6 +880,12 @@ class ScheduledPlanner:
         self._execute_expression = execute_expression
         self.last_schedule: Schedule | None = None
         self.last_error: str | None = None
+        self.last_reallocation: FleetReallocation | None = None
+        initial_fleet = self._kwargs.get("fleet")
+        self._initial_fleet_digest = (
+            initial_fleet.digest()
+            if isinstance(initial_fleet, ManipulationFleet) else None
+        )
 
     @property
     def last_decision(self) -> Any:  # the engine reads this off the planner
@@ -884,9 +896,48 @@ class ScheduledPlanner:
         window = self._kwargs.get("expressive_window")
         return window if isinstance(window, ExpressiveWindow) else None
 
+    @property
+    def fleet(self) -> ManipulationFleet | None:
+        """Return the current immutable fleet snapshot used for scheduling."""
+        fleet = self._kwargs.get("fleet")
+        return fleet if isinstance(fleet, ManipulationFleet) else None
+
+    def reallocate_fleet(
+        self,
+        fault: FleetFault,
+        *,
+        requests: Iterable[ReallocationRequest] = (),
+    ) -> tuple[ManipulationFleet, FleetReallocation]:
+        """Apply a pure fleet reallocation and retain its evidence.
+
+        The snapshot is replaced only after ``ManipulationFleet.reallocate``
+        has returned both a valid value and its evidence object.  Publishing,
+        graph recompilation, and execution remain the engine's responsibility.
+        """
+        fleet = self.fleet
+        if fleet is None:
+            raise FleetError("ScheduledPlanner requires a configured ManipulationFleet")
+        if not isinstance(fault, FleetFault):
+            raise FleetError("fleet reallocation requires a FleetFault")
+        updated, evidence = fleet.reallocate(fault, requests=requests)
+        self._kwargs["fleet"] = updated
+        self.last_reallocation = evidence
+        # The previous schedule names the pre-fault resource topology and is
+        # no longer a usable cache, even before the engine compiles its strict
+        # replacement graph.
+        self.last_schedule = None
+        return updated, evidence
+
     def run_context(self) -> dict[str, Any]:
         """Expose planner inputs that must participate in durable run identity."""
         context: dict[str, Any] = {}
+        if self._initial_fleet_digest is not None:
+            context["fleet_digest"] = self._initial_fleet_digest
+            current_fleet = self.fleet
+            if current_fleet is not None:
+                context["current_fleet_digest"] = current_fleet.digest()
+            if self.last_reallocation is not None:
+                context["last_reallocation"] = self.last_reallocation.as_dict()
         window = self.expressive_window
         if window is not None:
             context["expressive_window"] = window.as_dict()
@@ -905,11 +956,46 @@ class ScheduledPlanner:
             self.last_error = f"{type(exc).__name__}: {exc}"
             return graph
 
+    def _apply_strict(self, graph: PlanGraph, world: WorldState) -> PlanGraph:
+        """Schedule a graph without the ordinary planner fallback."""
+        try:
+            planned = schedule(graph, world, **self._kwargs)
+            annotated = planned.annotate(
+                graph, execute_expression=self._execute_expression)
+        except Exception as exc:  # noqa: BLE001 - caller must enter HOLD
+            self.last_schedule = None
+            self.last_error = f"{type(exc).__name__}: {exc}"
+            raise
+        self.last_schedule = planned
+        self.last_error = None
+        return annotated
+
     def plan(self, goal: str, world: WorldState) -> PlanGraph:
         return self._apply(self.inner.plan(goal, world), world)
 
     def replan(self, current: PlanGraph, world: WorldState, reason: str) -> PlanGraph:
         return self._apply(self.inner.replan(current, world, reason), world)
+
+    def replan_strict(self, current: PlanGraph, world: WorldState, reason: str) -> PlanGraph:
+        """Replan and require a new, successfully scheduled graph.
+
+        Fleet faults cannot use ``replan`` because its compatibility fallback
+        intentionally returns the previous inner graph when scheduling fails.
+        That fallback is unsafe once the graph may name an offline resource.
+        """
+        try:
+            fresh = self.inner.replan(current, world, reason)
+            if not isinstance(fresh, PlanGraph):
+                raise FleetError("fleet replan returned a non-PlanGraph value")
+            if fresh is current:
+                raise FleetError("fleet replan returned the stale scheduled graph")
+            if fresh.revision <= current.revision:
+                raise FleetError("fleet replan did not advance graph revision")
+            return self._apply_strict(fresh, world)
+        except Exception as exc:  # noqa: BLE001 - caller must enter HOLD
+            self.last_schedule = None
+            self.last_error = f"{type(exc).__name__}: {exc}"
+            raise
 
 
 # ---------------------------------------------------------------------------

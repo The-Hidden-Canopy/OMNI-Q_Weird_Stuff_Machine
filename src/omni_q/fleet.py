@@ -47,6 +47,8 @@ class FleetFault:
     resource_ids: tuple[str, ...]
     reason: str
     observed_ms: int
+    org_id: str = "local-demo"
+    source: str = "proprioception"
 
     def __post_init__(self) -> None:
         if (
@@ -56,9 +58,31 @@ class FleetFault:
             or not self.reason.strip()
         ):
             raise FleetError("fault_id and reason must be non-empty")
+        if (
+            not isinstance(self.org_id, str)
+            or not self.org_id.strip()
+            or not isinstance(self.source, str)
+            or not self.source.strip()
+        ):
+            raise FleetError("fault org_id and source must be non-empty strings")
         _unique_ids(self.resource_ids, field_name="fault resources")
-        if self.observed_ms < 0:
-            raise FleetError("fault observed_ms must be non-negative")
+        if (
+            not isinstance(self.observed_ms, int)
+            or isinstance(self.observed_ms, bool)
+            or self.observed_ms < 0
+        ):
+            raise FleetError("fault observed_ms must be a non-negative integer")
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "kind": "fleet.fault",
+            "fault_id": self.fault_id,
+            "resource_ids": list(self.resource_ids),
+            "reason": self.reason,
+            "observed_ms": self.observed_ms,
+            "org_id": self.org_id,
+            "source": self.source,
+        }
 
 
 @dataclass(frozen=True)
@@ -373,6 +397,10 @@ class ManipulationFleet:
     def online_ids(self) -> tuple[str, ...]:
         return tuple(manipulator.id for manipulator in self.manipulators if manipulator.online)
 
+    def digest(self) -> str:
+        """Return the stable digest of this immutable fleet snapshot."""
+        return _fleet_digest(self)
+
     def spec(self, manipulator_id: str) -> ManipulatorSpec:
         for manipulator in self.manipulators:
             if manipulator.id == manipulator_id:
@@ -572,7 +600,7 @@ class ManipulationFleet:
             )
         request_by_lease = {request.lease_id: request for request in request_list}
 
-        prior_digest = _fleet_digest(self)
+        prior_digest = self.digest()
         working = self.invalidate_resources(fault.resource_ids)
         for resource_id in sorted(failed):
             working = working.with_online(resource_id, False)
@@ -689,7 +717,7 @@ class ManipulationFleet:
             replacements=tuple(replacements),
             unresolved_lease_ids=tuple(unresolved),
             prior_fleet_digest=prior_digest,
-            resulting_fleet_digest=_fleet_digest(working),
+            resulting_fleet_digest=working.digest(),
         )
         return working, evidence
 
