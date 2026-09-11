@@ -141,6 +141,32 @@ def test_randomized_legacy_report_retains_hashed_receipts(tmp_path):
     assert (tmp_path / "report.json").exists()
 
 
+def test_randomized_legacy_report_surfaces_per_object_success_the_coarse_label_hides(tmp_path):
+    """A found gap, not a hypothetical: the coarse `outcomes` label records
+    only the first failure type found anywhere in a receipt, so a trial
+    where cup_1 genuinely completes a real pick-and-place and a later
+    object then fails classified identically to a trial where nothing
+    ever succeeded -- real progress was invisible in the aggregate report
+    even though it was always present in the raw per-trial receipts (see
+    evidence/benchmark_results/intel_table_eval_2026-09-10-v6/README.md).
+    `per_object_summary` and each receipt's `per_object` field surface it
+    directly instead of requiring someone to read receipts by hand."""
+    report = run_intel_table_evaluation_report(tmp_path, trials=3, seed=701)
+
+    assert "per_object_summary" in report
+    held = report["per_object_summary"]["held_in_trials"]
+    placed = report["per_object_summary"]["placed_in_trials"]
+    # cup_1 reliably holds and places every trial -- the real signal this
+    # was built to surface.
+    assert held.get("cup_1") == 3
+    assert placed.get("cup_1") == 3
+    for entry in report["receipts"]:
+        assert "per_object" in entry
+        assert "cup_1" in entry["per_object"]
+        assert entry["per_object"]["cup_1"]["held"] is True
+        assert entry["per_object"]["cup_1"]["placed"] is True
+
+
 def test_randomized_legacy_report_rejects_empty_trial_count(tmp_path):
     with pytest.raises(ValueError, match="trials must be positive"):
         run_intel_table_evaluation_report(tmp_path, trials=0)

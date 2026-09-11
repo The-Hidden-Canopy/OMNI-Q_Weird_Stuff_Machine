@@ -89,6 +89,34 @@
 > module docstring for the full writeup. Task completion (30 pts) risk has
 > shifted from "grasping doesn't work at all" to "grasping works for one
 > object class, real physics confirmed, four to go."
+>
+> **Fifth addendum, 2026-09-11 (~6 days to submission):** two scheduling/
+> reporting fixes, no new grasp-physics work — the grasp-controller thread
+> hit clear diminishing returns this session (two negative results: a
+> bounded local-minimum-escape retry too fragile to ship, an annealed
+> damping schedule showing zero improvement across all 4 failing
+> objects — see `intel_sim.py`'s "Fifth"/"Sixth" updates). (1) Fixed a
+> real scheduler bug: one persistently-failing object was consuming the
+> *entire* revision budget alone (`napkin_1` measured failing 6 times
+> straight, `plate_1`/`fork_1`/`spoon_1` never attempted in a full run) —
+> `IntelTablePlanner` now deprioritizes an object after repeated failures
+> so the budget spreads across objects instead. Doesn't change whether a
+> run resolves, but real demo-visible value: the arm now tries different
+> objects instead of looking stuck. (2) Added a per-object outcome tally
+> to the 10-seed evaluation report (previously the coarse pass/fail label
+> hid real per-object progress — required reading raw receipts by hand to
+> find it). Result, honestly measured across 10 randomized trials
+> (`evidence/benchmark_results/intel_table_eval_2026-09-11-v8/`): `cup_1`
+> held in **10/10** trials — genuinely robust to scene jitter, not a
+> one-off — placed in 9/10. `plate_1` held in 1/10 (fragile, not
+> reliable). This is a real, demonstrable robustness data point for one
+> object that was previously invisible in any report. Task completion (30
+> pts) and robustness (15 pts) risk assessment: still the two biggest
+> categories with the most room to move before submission — a genuinely
+> reliable, demo-ready single-object pick-and-place exists now (`cup_1`),
+> but the brief's multi-step table-setting scenario needs the other four
+> objects, or a scoped-down demo narrative built around what's actually
+> proven. Worth a team decision soon given the timeline, not left implicit.
 
 ## Method
 

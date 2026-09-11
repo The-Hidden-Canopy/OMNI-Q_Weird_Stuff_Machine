@@ -354,9 +354,21 @@ alongside the YOLO perception node.
   10/10 `grasp_failure` -- expected, that classifier scans the whole
   receipt for any failure) -- what it changes is that the same budget now
   produces a genuinely richer attempt record, and a live demo visibly
-  tries different objects instead of appearing stuck on one. Follow-up
-  (1), a finer-grained per-object outcome tally in the report generator,
-  is still open.
+  tries different objects instead of appearing stuck on one.
+- [x] **Follow-up (1) done, 2026-09-11: per-object outcome tally in the
+  report generator.** `run_intel_table_evaluation_report` now computes
+  `per_object_summary` (`schema_version` 2) -- how many of the trials
+  each object ever achieved a held grasp / a placed result -- instead of
+  requiring anyone to read raw receipts by hand to find real progress the
+  coarse label hides. Real result, honestly measured
+  (`evidence/benchmark_results/intel_table_eval_2026-09-11-v8/`): `cup_1`
+  held in **10/10** trials -- genuinely robust across the harness's own
+  randomized scene jitter, not a one-off -- and placed in 9/10 (one
+  trial's release didn't settle within tolerance, a real, minor, not yet
+  investigated gap). `plate_1` held in 1/10, consistent with its earlier-
+  documented narrow/fragile margin. The coarse `outcomes` table is
+  unchanged (still 10/10 `grasp_failure`, expected, unrelated to this
+  change).
 - [ ] **Tried the local-minimum escape on the new orientation-aware
   solver too -- confirmed it still works, but not worth wiring in yet.**
   After real orientation-aware IK landed independently (see below), all

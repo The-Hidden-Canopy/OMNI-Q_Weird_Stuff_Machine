@@ -215,6 +215,38 @@ since that classifier scans the whole receipt for any failure, not just
 the terminal one. The real value is richer per-run evidence and a live
 demo that visibly tries different objects instead of looking stuck on
 one — relevant to how judges perceive the demo even though it doesn't
-change the rubric-scored success rate directly. 377/377 tests green.
+change the rubric-scored success rate directly. 378/378 tests green.
 Full writeup: `BACKLOG.md` (OQ-010 row), `integrations/intel/README.md`,
 `intel_sim.py`'s module docstring ("Sixth update").
+
+## Extra, continued: per-object outcome tally — a real, demonstrable robustness number
+
+Closed the other follow-up from the same investigation: the 10-seed
+evaluation report's coarse pass/fail label was hiding real per-object
+progress (found this originally by reading raw receipts by hand — not
+something judges or teammates should have to do). Added
+`_per_object_pick_place_outcomes` + a `per_object_summary` field to
+`run_intel_table_evaluation_report` (`schema_version` 2): how many of the
+10 randomized trials each object ever achieved a held grasp / placed
+result, plus the same breakdown on every individual receipt.
+
+**Real result, honestly measured**
+(`evidence/benchmark_results/intel_table_eval_2026-09-11-v8/`): `cup_1`
+held in **10/10** trials — genuinely robust across the harness's own
+randomized scene jitter, not a one-off — and placed in 9/10 (one trial's
+release didn't settle within tolerance, flagged, not investigated
+further this pass). `plate_1` held in 1/10, consistent with its earlier-
+documented fragile margin. This is a real, demo-ready, evidence-backed
+robustness claim for one object, now visible in the report's own JSON
+instead of buried in raw receipts. 379/379 tests green. Full writeup:
+`BACKLOG.md` (OQ-010 row), `integrations/intel/README.md`,
+`docs/oq-004-requirements-audit.md` (fifth addendum), `intel_sim.py`'s
+module docstring ("Seventh update").
+
+**Given ~6 days to submission**, flagged a strategic point in the audit
+doc worth the team deciding on soon: `cup_1` is genuinely demo-ready
+(10/10 robust pick-and-place), but the brief's full table-setting scenario
+needs all 5 objects, and the grasp-controller thread has hit real,
+evidenced diminishing returns this session. Worth deciding explicitly
+whether to keep pushing all 5 objects or scope the demo narrative around
+what's actually proven, rather than leaving it implicit.

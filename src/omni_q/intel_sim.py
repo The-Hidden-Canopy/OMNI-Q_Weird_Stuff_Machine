@@ -207,6 +207,27 @@ budget now produces a genuinely richer, more representative attempt
 record per run, and a live demo visibly tries different objects instead
 of appearing to get stuck repeating the identical failed motion.
 
+**Seventh update: surfaced the real per-object signal the coarse outcome
+label was hiding, instead of leaving it as a "read the receipts by hand"
+finding.** ``run_intel_table_evaluation_report`` now also computes
+``_per_object_pick_place_outcomes`` per trial and aggregates a
+``per_object_summary`` (``schema_version`` 2) -- how many of the 10
+trials each object ever achieved a held grasp / a placed result, plus
+the same breakdown on every individual receipt entry. Real result,
+honestly measured (``evidence/benchmark_results/intel_table_eval_2026-
+09-11-v8/``): ``cup_1`` held in **10/10** trials -- genuinely robust
+across the harness's own ±3mm/±0.08rad randomized scene jitter, not a
+one-off -- and placed in 9/10 (one trial's carry-and-release didn't
+settle within tolerance, a real, minor, not-yet-investigated gap).
+``plate_1`` held in 1/10, consistent with the "Fifth update" finding of
+a narrow, fragile margin -- present, just not reliable. The coarse
+``outcomes`` table itself is unchanged (still 10/10 ``grasp_failure``,
+expected, unrelated to this change) -- ``_classify_intel_table_receipt``
+scans the whole receipt for the first failure anywhere in it, so this
+was never going to move it; what changed is that the real per-object
+story is now in the report's own JSON, not something that requires
+reading raw receipts to find.
+
 This is still a proxy, not hardware evidence -- no vision-guided grasp point,
 no force control. The separate OQ-010/OQ-011 contact adapter uses only MuJoCo
 contact dynamics for a bounded ``cup_1`` handoff. It is a SO-ARM100
@@ -1627,6 +1648,40 @@ def _classify_intel_table_receipt(receipt: Any) -> str:
     return "unresolved"
 
 
+def _per_object_pick_place_outcomes(receipt: Any) -> dict[str, dict[str, bool]]:
+    """Per-object real outcome within one run, independent of the coarse
+    receipt-wide classification.
+
+    ``_classify_intel_table_receipt`` records only the first failure type
+    found anywhere in the whole receipt, so a trial where cup_1 genuinely
+    completes a real pick-and-place and a later object then fails still
+    classifies identically to a trial where nothing ever succeeds --
+    real progress was invisible in the aggregate report even though it was
+    always present in the raw per-trial receipts (see
+    evidence/benchmark_results/intel_table_eval_2026-09-10-v6/README.md,
+    where this was first found by reading a receipt directly). This walks
+    every PICK/MOVE action and records, per object, whether *any* attempt
+    at it this run ever achieved a held grasp / a placed result -- object
+    identity comes from the step id (``pick_<object>``/``move_<object>``,
+    set by RulePlanner.plan), not the result payload, since a rejected or
+    early-failed attempt may not carry object-specific result fields."""
+    outcomes: dict[str, dict[str, bool]] = {}
+    for action in receipt.actions:
+        step_id = action.get("step", "")
+        result = action.get("result") or {}
+        if action.get("op") == "PICK" and step_id.startswith("pick_"):
+            object_id = step_id.removeprefix("pick_")
+            entry = outcomes.setdefault(object_id, {"held": False, "placed": False})
+            if result.get("held") is True:
+                entry["held"] = True
+        elif action.get("op") == "MOVE" and step_id.startswith("move_"):
+            object_id = step_id.removeprefix("move_")
+            entry = outcomes.setdefault(object_id, {"held": False, "placed": False})
+            if result.get("placed") is True:
+                entry["placed"] = True
+    return outcomes
+
+
 def run_intel_table_evaluation_report(
     root: str | Path,
     *,
@@ -1652,6 +1707,8 @@ def run_intel_table_evaluation_report(
         "transition_failure": 0,
         "unresolved": 0,
     }
+    per_object_holds: dict[str, int] = {}
+    per_object_places: dict[str, int] = {}
     entries: list[dict[str, Any]] = []
     for index in range(trials):
         trial_seed = seed + index
@@ -1661,6 +1718,12 @@ def run_intel_table_evaluation_report(
             raise RuntimeError(f"receipt hash mismatch for trial seed {trial_seed}")
         outcome = _classify_intel_table_receipt(receipt)
         outcomes[outcome] += 1
+        per_object = _per_object_pick_place_outcomes(receipt)
+        for object_id, result in per_object.items():
+            if result["held"]:
+                per_object_holds[object_id] = per_object_holds.get(object_id, 0) + 1
+            if result["placed"]:
+                per_object_places[object_id] = per_object_places.get(object_id, 0) + 1
         receipt_name = f"trial-{index:02d}-seed-{trial_seed}.json"
         _write_json_once(root_path / receipt_name, receipt.as_dict())
         entries.append({
@@ -1669,17 +1732,26 @@ def run_intel_table_evaluation_report(
             "scene": scene_config.as_dict(),
             "outcome": outcome,
             "resolved": bool(receipt.metrics.get("resolved")),
+            "per_object": per_object,
             "run_id": receipt.run_id,
             "content_hash": receipt.content_hash,
             "receipt": receipt_name,
         })
     report = {
-        "schema_version": 1,
+        "schema_version": 2,
         "mode": IntelTableWorld.mode,
         "kind": "exploratory randomized legacy table-setting report; not a promotion claim",
         "trials": trials,
         "seed_start": seed,
         "outcomes": outcomes,
+        # Real per-object signal the coarse `outcomes` label above can't
+        # show: how many of these `trials` had at least one held grasp /
+        # placed result for each object, regardless of what else failed in
+        # the same run. See _per_object_pick_place_outcomes.
+        "per_object_summary": {
+            "held_in_trials": per_object_holds,
+            "placed_in_trials": per_object_places,
+        },
         "receipts": entries,
     }
     _write_json_once(root_path / "report.json", report)

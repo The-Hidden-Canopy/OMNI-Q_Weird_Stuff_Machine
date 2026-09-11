@@ -1,0 +1,397 @@
+{
+  "kind": "exploratory randomized legacy table-setting report; not a promotion claim",
+  "mode": "simulation-scripted-manipulation",
+  "outcomes": {
+    "collision": 0,
+    "grasp_failure": 10,
+    "placement_failure": 0,
+    "success": 0,
+    "timeout": 0,
+    "transition_failure": 0,
+    "unresolved": 0
+  },
+  "per_object_summary": {
+    "held_in_trials": {
+      "cup_1": 10,
+      "plate_1": 1
+    },
+    "placed_in_trials": {
+      "cup_1": 9
+    }
+  },
+  "receipts": [
+    {
+      "content_hash": "sha256:1b692a63e43abead10948a622769677979b394d94002e0f4b2dbbc990d6e890e",
+      "outcome": "grasp_failure",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": false,
+          "placed": false
+        },
+        "napkin_1": {
+          "held": false,
+          "placed": false
+        },
+        "plate_1": {
+          "held": false,
+          "placed": false
+        },
+        "spoon_1": {
+          "held": false,
+          "placed": false
+        }
+      },
+      "receipt": "trial-00-seed-701.json",
+      "resolved": false,
+      "run_id": "835985af9006",
+      "scene": {
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 701,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 701,
+      "trial": 0
+    },
+    {
+      "content_hash": "sha256:dc974263449075e409c5a7a1f41321b9f8e1fad92555f0491745e897736badd6",
+      "outcome": "grasp_failure",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": false,
+          "placed": false
+        },
+        "napkin_1": {
+          "held": false,
+          "placed": false
+        },
+        "plate_1": {
+          "held": true,
+          "placed": false
+        },
+        "spoon_1": {
+          "held": false,
+          "placed": false
+        }
+      },
+      "receipt": "trial-01-seed-702.json",
+      "resolved": false,
+      "run_id": "8ae1f926321d",
+      "scene": {
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 702,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 702,
+      "trial": 1
+    },
+    {
+      "content_hash": "sha256:97e720f65866da8ee9d2e53fdbba5fc42012857b399fca8ef33f76f4f67780dd",
+      "outcome": "grasp_failure",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": false,
+          "placed": false
+        },
+        "napkin_1": {
+          "held": false,
+          "placed": false
+        },
+        "plate_1": {
+          "held": false,
+          "placed": false
+        },
+        "spoon_1": {
+          "held": false,
+          "placed": false
+        }
+      },
+      "receipt": "trial-02-seed-703.json",
+      "resolved": false,
+      "run_id": "7cc6a46c641c",
+      "scene": {
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 703,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 703,
+      "trial": 2
+    },
+    {
+      "content_hash": "sha256:a2007af567e5fc70b56521fed579ea8e67ad31cda457c233766840e5ebaab86f",
+      "outcome": "grasp_failure",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": false,
+          "placed": false
+        },
+        "napkin_1": {
+          "held": false,
+          "placed": false
+        },
+        "plate_1": {
+          "held": false,
+          "placed": false
+        },
+        "spoon_1": {
+          "held": false,
+          "placed": false
+        }
+      },
+      "receipt": "trial-03-seed-704.json",
+      "resolved": false,
+      "run_id": "ea103eba956b",
+      "scene": {
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 704,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 704,
+      "trial": 3
+    },
+    {
+      "content_hash": "sha256:4ff06f126059816f338e4e3a4668cb9fc6c39e40359f627ed961777585f01c0c",
+      "outcome": "grasp_failure",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": false,
+          "placed": false
+        },
+        "napkin_1": {
+          "held": false,
+          "placed": false
+        },
+        "plate_1": {
+          "held": false,
+          "placed": false
+        },
+        "spoon_1": {
+          "held": false,
+          "placed": false
+        }
+      },
+      "receipt": "trial-04-seed-705.json",
+      "resolved": false,
+      "run_id": "c767c78b36bc",
+      "scene": {
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 705,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 705,
+      "trial": 4
+    },
+    {
+      "content_hash": "sha256:0aef0d747f2306763dc941011aab23d522dd39c88b118a6f9020b251a31e9fcd",
+      "outcome": "grasp_failure",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": false,
+          "placed": false
+        },
+        "napkin_1": {
+          "held": false,
+          "placed": false
+        },
+        "plate_1": {
+          "held": false,
+          "placed": false
+        },
+        "spoon_1": {
+          "held": false,
+          "placed": false
+        }
+      },
+      "receipt": "trial-05-seed-706.json",
+      "resolved": false,
+      "run_id": "5c5a9e157c6b",
+      "scene": {
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 706,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 706,
+      "trial": 5
+    },
+    {
+      "content_hash": "sha256:b808ed63e19fa8c51132984725b9f582d4dbd154b17f9b6f02b10997fef05711",
+      "outcome": "grasp_failure",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": false
+        },
+        "fork_1": {
+          "held": false,
+          "placed": false
+        },
+        "napkin_1": {
+          "held": false,
+          "placed": false
+        },
+        "plate_1": {
+          "held": false,
+          "placed": false
+        },
+        "spoon_1": {
+          "held": false,
+          "placed": false
+        }
+      },
+      "receipt": "trial-06-seed-707.json",
+      "resolved": false,
+      "run_id": "f43231732a34",
+      "scene": {
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 707,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 707,
+      "trial": 6
+    },
+    {
+      "content_hash": "sha256:4675f726d5c18bedfc4ecb4df0fd2b6c89294235987709958f23e2572b762468",
+      "outcome": "grasp_failure",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": false,
+          "placed": false
+        },
+        "napkin_1": {
+          "held": false,
+          "placed": false
+        },
+        "plate_1": {
+          "held": false,
+          "placed": false
+        },
+        "spoon_1": {
+          "held": false,
+          "placed": false
+        }
+      },
+      "receipt": "trial-07-seed-708.json",
+      "resolved": false,
+      "run_id": "c691580b78f0",
+      "scene": {
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 708,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 708,
+      "trial": 7
+    },
+    {
+      "content_hash": "sha256:6c240df7b16215bf33c485ac5de79e13c04be4007c840fd001e981a74c348305",
+      "outcome": "grasp_failure",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": false,
+          "placed": false
+        },
+        "napkin_1": {
+          "held": false,
+          "placed": false
+        },
+        "plate_1": {
+          "held": false,
+          "placed": false
+        },
+        "spoon_1": {
+          "held": false,
+          "placed": false
+        }
+      },
+      "receipt": "trial-08-seed-709.json",
+      "resolved": false,
+      "run_id": "68006e0bff62",
+      "scene": {
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 709,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 709,
+      "trial": 8
+    },
+    {
+      "content_hash": "sha256:dccf7e0f0ba211c1eeb587acc9f81e9a78d2c0a0915d83af4a93af3a0b3dc355",
+      "outcome": "grasp_failure",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": false,
+          "placed": false
+        },
+        "napkin_1": {
+          "held": false,
+          "placed": false
+        },
+        "plate_1": {
+          "held": false,
+          "placed": false
+        },
+        "spoon_1": {
+          "held": false,
+          "placed": false
+        }
+      },
+      "receipt": "trial-09-seed-710.json",
+      "resolved": false,
+      "run_id": "3263589e5bca",
+      "scene": {
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 710,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 710,
+      "trial": 9
+    }
+  ],
+  "schema_version": 2,
+  "seed_start": 701,
+  "trials": 10
+}
