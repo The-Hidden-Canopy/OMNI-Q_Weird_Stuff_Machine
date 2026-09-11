@@ -140,6 +140,25 @@ identity-gated harness at
 [`integrations/intel/vendor/omni_reference/`](integrations/intel/vendor/omni_reference/)
 — select with `OMNIQ_OMNI_REASONER=mock|omni` (+ checkpoint/receipt paths).
 
+## Residency slider (born-compressed OMNI)
+
+OMNI is **born compressed**: the model never lives in FP32/BF16 as a residency
+state — BF16 appears only as plumbing (accumulators, norms) inside kernels.
+One slider, selected by available memory:
+
+```
+MXFP8 -- MXFP4 -- MXFP2 -- CORE_ONLY
+```
+
+MXFP8 is the high-fidelity compressed master (~1 byte/weight), MXFP4 the same
+body recompiled lower, MXFP2 extreme residency — through all three MX tiers the
+*same* body/capability stays resident; only the format changes. Below the MXFP2
+envelope the neural reasoner is evicted: OMNI-Q core remains, autonomy is
+DEGRADED, and a novel task produces **HOLD** (queued, never degraded-executed).
+`src/omni_q/residency.py` (envelope math, hysteresis, graph-revision lineage,
+evidence-bundle receipts) · `demo/residency_slider.py` (walks 8 → 6 → 3 →
+1.8 → 1.2 GB and back, writes a validated receipt bundle).
+
 ## Documents
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — the layered stack: perception swarm → ontology → OMNI-Q → execution; contracts, engine loop, the planner/observer decorator stacks

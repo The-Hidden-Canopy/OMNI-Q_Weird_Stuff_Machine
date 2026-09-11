@@ -28,6 +28,7 @@ temp/
 __pycache__/
 *.py[cod]
 .venv/
+.venv-*/
 venv/
 env/
 .pytest_cache/
