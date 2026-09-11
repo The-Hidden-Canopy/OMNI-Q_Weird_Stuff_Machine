@@ -147,7 +147,10 @@ PYTHONPATH=src python -m omni_q.server
 # open http://127.0.0.1:8770
 ```
 
-The UI is deliberately labelled **MOCK MODE — NOT HARDWARE**. See
+The UI is deliberately labelled **MOCK / NO HARDWARE**. It renders runtime
+metadata, current table-setting observations, planner decisions, dependency-
+aware graph steps, reconnectable event streams, and the full receipt summary.
+See
 [`docs/ui.md`](docs/ui.md) for the screen map, live constraint behavior, and
 the boundary between the frontend event surface and real provider work.
 

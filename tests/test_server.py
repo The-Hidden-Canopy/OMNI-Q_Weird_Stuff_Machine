@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from http.server import ThreadingHTTPServer
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -29,7 +30,7 @@ def test_server_serves_the_mock_labelled_ui_and_scoped_session_api():
         status, body, headers = _request(base + "/")
         assert status == 200
         assert headers["Content-Type"].startswith("text/html")
-        assert b"MOCK MODE" in body
+        assert b"MOCK / NO HARDWARE" in body
 
         status, body, _ = _request(base + "/sessions", payload={
             "goal": "set the table",
@@ -44,10 +45,26 @@ def test_server_serves_the_mock_labelled_ui_and_scoped_session_api():
         assert session["session_id"]
         assert session["mode"] == "mock"
         assert session["instruction"]["goal"] == "set the table"
+        assert session["runtime"]["execution"] == "simulated"
+        assert session["runtime"]["capabilities"]
 
         status, body, _ = _request(base + f"/sessions/{session['session_id']}")
         assert status == 200
-        assert json.loads(body)["mode"] == "mock"
+        summary = json.loads(body)
+        assert summary["mode"] == "mock"
+        assert summary["receipt_ready"] is False
+
+        deadline = time.time() + 2
+        while time.time() < deadline:
+            _, body, _ = _request(base + f"/sessions/{session['session_id']}")
+            if json.loads(body)["receipt_ready"]:
+                break
+            time.sleep(0.02)
+        status, body, _ = _request(base + f"/sessions/{session['session_id']}/receipt")
+        receipt = json.loads(body)
+        assert status == 200
+        assert receipt["content_hash"]
+        assert receipt["metrics"]["resolved"] is True
 
         try:
             _request(base + "/sessions", payload={

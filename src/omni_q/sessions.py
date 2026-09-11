@@ -90,13 +90,16 @@ class SessionManager:
 
     def summary(self, session_id: str) -> dict[str, object]:
         session = self.get(session_id)
+        receipt = session.receipt
         return {
             "session_id": session.session_id,
             "status": session.status,
             "mode": getattr(session.engine.world, "mode", "mock"),
-            "run_id": session.receipt.run_id if session.receipt else None,
-            "content_hash": session.receipt.content_hash if session.receipt else None,
+            "run_id": receipt.run_id if receipt else None,
+            "content_hash": receipt.content_hash if receipt else None,
             "error": session.error,
+            "runtime": runtime_metadata(session.engine),
+            "receipt_ready": receipt is not None,
         }
 
     @staticmethod
@@ -110,3 +113,92 @@ class SessionManager:
             session.status = "finished"
         finally:
             session.done.set()
+
+
+def _device_label(name: str) -> tuple[str, str | None]:
+    """Turn an internal placement name into a judge-facing capability label."""
+    lowered = name.lower()
+    if "left" in lowered:
+        return "Left SO-101", "left"
+    if "right" in lowered:
+        return "Right SO-101", "right"
+    return name.replace(".", " / "), None
+
+
+def runtime_metadata(engine: OmniQ) -> dict[str, object]:
+    """Expose truthful, provider-neutral metadata to the judge UI.
+
+    This is deliberately introspection-only. It does not initialize hardware or
+    claim that an optional provider is live; the UI can therefore show the
+    configured seams without inventing a route that the session did not use.
+    """
+    world_mode = str(getattr(engine.world, "mode", "mock"))
+    simulated = world_mode == "mock"
+    observer = getattr(engine, "observer", None)
+    planner = getattr(engine, "planner", None)
+    reasoner = getattr(planner, "reasoner", None)
+    reasoner_name = getattr(reasoner, "backend", None)
+    planner_name = reasoner_name or type(planner).__name__
+    device_router = getattr(engine, "device", None)
+    specs = list(device_router.devices()) if hasattr(device_router, "devices") else []
+
+    capabilities: list[dict[str, object]] = [
+        {
+            "id": "perception",
+            "kind": "perception",
+            "name": "Perception",
+            "detail": f"{type(observer).__name__} · structured state",
+            "available": True,
+            "local": True,
+        },
+        {
+            "id": "reasoning",
+            "kind": "reasoning",
+            "name": "OMNI reasoning",
+            "detail": f"{planner_name} · local process",
+            "available": True,
+            "local": True,
+        },
+    ]
+    for spec in specs:
+        if "arm" not in spec.kinds:
+            continue
+        name, arm = _device_label(spec.name)
+        capabilities.append({
+            "id": spec.name,
+            "device": spec.name,
+            "kind": "arm",
+            "arm": arm,
+            "name": name,
+            "detail": f"{spec.name} · {'local' if spec.local else 'remote'} placement",
+            "available": spec.online,
+            "online": spec.online,
+            "local": spec.local,
+        })
+
+    placement_devices = [
+        {
+            "name": spec.name,
+            "kinds": list(spec.kinds),
+            "available": spec.online,
+            "online": spec.online,
+            "local": spec.local,
+        }
+        for spec in specs
+    ]
+    return {
+        "mode": world_mode,
+        "environment": "mock session · no hardware" if simulated else world_mode,
+        "execution": "simulated" if simulated else "configured",
+        "observer": type(observer).__name__,
+        "planner": type(planner).__name__,
+        "reasoner": reasoner_name,
+        "safety": "Mission envelope ready",
+        "capabilities": capabilities,
+        "placement_devices": placement_devices,
+        "voice": {
+            "status": "standby",
+            "provider": "Speechmatics adapter",
+            "wired": False,
+        },
+    }

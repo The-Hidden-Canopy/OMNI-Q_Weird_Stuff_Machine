@@ -3,7 +3,8 @@
 ``POST /sessions`` starts one explicit mock session. Constraints are scoped to
 that session and require an operator justification. ``GET /sessions/<id>/events``
 replays causal events after a numeric cursor so a browser can reconnect without
-silently dropping or duplicating state.
+silently dropping or duplicating state. ``GET /sessions/<id>/receipt`` returns
+the full parent-chained receipt once the run is terminal.
 """
 
 from __future__ import annotations
@@ -69,6 +70,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, _sessions.summary(segments[1]))
             except SessionError as exc:
                 return self._json(404, {"error": str(exc)})
+        if len(segments) == 3 and segments[0] == "sessions" and segments[2] == "receipt":
+            try:
+                session = _sessions.get(segments[1])
+            except SessionError as exc:
+                return self._json(404, {"error": str(exc)})
+            if session.receipt is None:
+                return self._json(409, {"error": "receipt is not ready"})
+            return self._json(200, session.receipt.as_dict())
         if len(segments) == 3 and segments[0] == "sessions" and segments[2] == "events":
             query = parse_qs(parsed.query)
             try:

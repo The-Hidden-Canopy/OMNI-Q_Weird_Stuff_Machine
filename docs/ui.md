@@ -1,13 +1,13 @@
 # Judge-facing UI
 
-The Omni Q UI is the operator-facing proof surface for the governed execution
-loop. It makes the core story visible in one screen:
+The OMNI-Q UI is the operator-facing proof surface for the governed execution
+loop. It keeps the hackathon story visible in one screen:
 
 ```
 objective → observation → graph → placement → action → verification → receipt
 ```
 
-The UI is intentionally thin. It does not invent state or call hardware
+The page is intentionally thin. It does not invent state or call hardware
 directly; it renders the causal event stream emitted by the active session in
 `src/omni_q/server.py`.
 
@@ -33,20 +33,32 @@ The UI has no separate build step. `ui/index.html`, `ui/styles.css`, and
 
 ## What the screen shows
 
-- **Mission composer** — submits a natural-language objective and an optional
-  operator constraint with a required justification.
-- **Workspace view** — renders compact structured observations, object zones,
-  target zones, confidence boundaries, and whether the workspace still needs
-  action.
-- **Mission pulse** — tracks Observe, Plan, Act, and Verify as the session
-  advances.
-- **Execution graph** — shows the compiled steps, current state, arm/device
-  placement, and graph revision after a replan.
-- **Capability nodes** — makes the separation between function and placement
-  visible across perception, reasoning, and the two simulated SO-101 arms.
-- **Why Omni did that** — presents authorization, constraint, replan,
-  verification, and failure events in causal order.
-- **Run receipt** — displays final metrics and the receipt content hash.
+- **Mission composer** — submits a natural-language tabletop objective and an
+  optional operator constraint with a required justification. The default
+  presentation objective is `Set the table.`.
+- **Workspace view** — renders the structured observation, object class,
+  object ID, zone, target zone, confidence, data status, frame, state revision,
+  and observer source. An empty detection list is shown as **NO OBJECT SIGNAL**;
+  it is never presented as confirmed clearance.
+- **Mission pulse** — tracks `Observe → Plan → Act → Verify` and reports
+  completion against the current graph revision.
+- **Execution graph** — shows compiled steps, explicit dependencies,
+  current state, arm/device placement, and graph revision after a replan. The
+  graph is not drawn as a fake linear chain when the contract supplies deps.
+- **Planner decision evidence** — shows candidates considered, candidates
+  feasible, selected operations, rejected proposals, constraints, autonomy
+  mode, and whether the decision used a labeled fallback.
+- **Capability nodes** — renders runtime metadata returned by the session:
+  observer, reasoner, simulated SO-101 arms, and available placement devices.
+  It does not claim live hardware when the session is synthetic.
+- **Why OMNI-Q did that** — presents authorization, constraint, replan,
+  verification, world-change, voice, residency, and failure events in causal
+  order. The stream guard rejects duplicate, out-of-order, or parent-invalid
+  events.
+- **Run receipt** — displays resolution, revisions, actions, duration,
+  rejected decisions, autonomy mode, run ID, parent hash, provenance, and the
+  content hash. The full receipt is available from
+  `GET /sessions/<session_id>/receipt` after the run is terminal.
 
 ## Live constraints
 
@@ -60,31 +72,40 @@ Supported UI examples:
 
 - `keep_local` — keep inference on-device and raise autonomy mode to
   `LOCAL_ONLY`.
-- `forbid_object=connector_2` — prevent manipulation of the named object.
+- `forbid_object=<observed object ID>` — prevent manipulation of the selected
+  object. The object field is populated from the latest observation and also
+  accepts a typed ID for an initial constraint.
 - `prefer_arm=left` — express a preference without overriding reachability or
   safety checks.
 
 Every operator constraint needs a non-empty justification. Constraints are
 scoped to the current session and close when the session reaches a terminal
-state.
+state. Active constraints remain visible below the composer.
 
-## Scope boundary
+## Current runtime and real-eyes relationship
 
-The current server launches `build_mock_engine`, so the UI is explicitly
-labelled **MOCK MODE — NOT HARDWARE**. It demonstrates the event contract,
-graph compilation, governed authorization, replan behavior, and receipt
-surface. It is not evidence of a live camera, physical SO-101 hardware,
-Qualcomm inference, or Speechmatics streaming.
+The current judge server launches `build_mock_engine`, so the page is explicitly
+labelled **MOCK / NO HARDWARE**. The mock session proves the event contract,
+graph compilation, governed authorization, replan behavior, causal stream
+recovery, and receipt surface.
 
-The frontend can be reused when those providers are wired in because it reads
-the shared event shapes rather than provider-specific APIs.
+The repository also contains an opt-in real perception seam. `OMNIQ_PERCEPTION=yolo`
+uses the table fine-tune, and the Intel/OpenVINO integration is documented in
+[`docs/oq-omni-vision-integration-2026-09-11.md`](oq-omni-vision-integration-2026-09-11.md).
+Those paths are not silently presented as live by this server. A future real
+session adapter can reuse the page by emitting the same event shapes plus
+camera/frame metadata and provider capability metadata.
+
+Voice and residency are supported as event vocabulary and contract seams, but
+the current server keeps Speechmatics transport and residency control visibly
+outside the active mock session.
 
 ## UI files and checks
 
 ```text
 ui/index.html   page structure and accessible labels
 ui/styles.css   responsive dark workcell-control-plane styling
-ui/app.js       SSE event validation and rendering
+ui/app.js       SSE validation, reconnect, and rendering
 ```
 
 Useful checks:

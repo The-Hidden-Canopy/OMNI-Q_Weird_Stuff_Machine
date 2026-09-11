@@ -62,14 +62,15 @@ PYTHONPATH=src python -m omni_q.server
 # POST /sessions -> GET /sessions/<id>/events?cursor=<seq>
 ```
 
-The judge-facing dashboard is deliberately labelled **MOCK MODE — NOT
-HARDWARE**. It renders the causal event stream supplied by the active session:
+The judge-facing dashboard is deliberately labelled **MOCK / NO HARDWARE**. It
+renders the causal event stream supplied by the active session:
 
 - mission objective and structured workspace observation
 - Observe → Plan → Act → Verify phase state
 - compiled graph steps, graph revisions, and arm/device placement
 - authorization decisions, constraints, replans, and capability failures
-- verification results, autonomy mode, final metrics, and receipt hash
+- planner candidates, dependencies, verification results, autonomy mode,
+  final metrics, and receipt hash
 
 The **Apply live constraint** control exercises the same session-scoped path as
 Speechmatics: the operator supplies a justified `keep_local`, `forbid_object`,
@@ -86,8 +87,11 @@ PYTHONPATH=src .venv/Scripts/python -m pytest tests/test_intel_sim.py -q
 
 This is a real MuJoCo dual-arm/controller step using the pinned SO-ARM100
 mechanical proxy, but tableware placement remains an explicitly labelled
-scripted transition. _TODO: camera perception (OQ-008), contact-rich grasping,
-screen recording, VLA/OpenVINO, and hardware evidence._
+scripted transition. The camera/perception seam is now available as an opt-in
+YOLO/OpenVINO integration and is documented in
+[`docs/oq-omni-vision-integration-2026-09-11.md`](docs/oq-omni-vision-integration-2026-09-11.md).
+The remaining boundary is the complete live-camera-to-full-table-setting
+benchmark, contact-rich grasping, screen recording, and hardware evidence.
 
 ## Presentation timing (≤ 5 min)
 
@@ -102,13 +106,13 @@ screen recording, VLA/OpenVINO, and hardware evidence._
 ```
 ┌──────────────┬─────────────────────┬────────────────┐
 │ CAMERA       │ OMNI EXECUTION      │ DEVICE STATE   │
-│ live scene   │ GRAPH               │ Intel arm A ✓  │
-│              │ SEE → PLAN → ACT    │ Intel arm B ✓  │
+│ structured   │ GRAPH               │ Intel arm A ✓  │
+│ scene/frame  │ SEE → PLAN → ACT    │ Intel arm B ✓  │
 │              │      → VERIFY       │ Speech (bonus) │
 └──────────────┴─────────────────────┴────────────────┘
 
 GOAL:           "Set the table."
 CURRENT ACTION: PICK(plate) → ARM_A
 WHY:            Required before PLACE(plate, table)
-EXECUTING ON:   Dual SO-101 (MuJoCo)
+EXECUTING ON:   Dual SO-101 (MuJoCo simulation)
 ```
