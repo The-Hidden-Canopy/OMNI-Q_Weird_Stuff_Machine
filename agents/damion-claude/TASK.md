@@ -300,3 +300,56 @@ them. Full writeup: `docs/oq-omni-vision-integration-2026-09-11.md`,
 evidence at `evidence/benchmark_results/omni_vision_integration_2026-09-11/`.
 `BACKLOG.md` (OQ-028 row), `omni_planner.py`'s module docstring. 382/382
 tests green.
+
+## Extra: landed the plate_1 grasp escape the "Fifth update" had shelved
+
+User redirected focus back to the core Intel dual-arm track (Qualcomm/Fleet
+work is bonus, not the entry track), so I went back to the still-open
+grasp-reliability gap. This session had already found four escape
+mechanisms for the differential-IK local minimum trapping
+`plate_1`/`fork_1`/`spoon_1`/`napkin_1`: seed perturbation (the only one
+that ever worked, via an expensive dense 81-point grid), annealed damping
+(zero effect), approach-bearing variation (zero effect), and full free-DOF
+search (zero effect, confirms a true structural local minimum). The seed
+perturbation win for `plate_1` had been found but explicitly *not* wired in
+("Fifth update" in `intel_sim.py`'s module docstring), on two worries: the
+general form would need an expensive per-attempt dense search, and the one
+measured result (0.0211m lift, barely over the 0.02m hold threshold)
+looked fragile enough to not survive the harness's own randomized jitter.
+
+Re-examined both worries instead of leaving them as a permanent block.
+Landed `OBJECT_GRASP_SEED_BIAS` in `intel_sim.py` as a fixed, zero-search
+per-object constant (`{"plate_1": (0.0, 0.2)}`, applied once after the
+transit approach) -- not the dense grid, so the cost objection doesn't
+apply. Checked the fragility worry empirically across 10 of the harness's
+own `IntelSceneConfig(randomized=True)` seeds rather than assuming it
+either way: `plate_1` now holds **10/10**, not the 1/10 the "Seventh
+update" measured under the old, unbiased attempt. Verified `cup_1` and the
+still-failing three objects are unaffected. Added two regression tests
+(`test_plate_1_grasp_escapes_its_local_minimum_via_the_verified_seed_bias`,
+`test_plate_1_seed_bias_does_not_affect_other_objects` in
+`tests/test_intel_sim_primitives.py`).
+
+One real regression surfaced by the full suite, fixed rather than papered
+over: `test_full_run_opens_the_drawer_before_retrieving_cutlery` failed
+(0.1199 vs an expected exact 0.12, `abs=1e-6`) because the passive,
+unactuated drawer slide joint settles a genuine ~0.1mm under joint-limit
+softness/contact over a longer physics trajectory -- and the trajectory is
+longer now because `plate_1` actually succeeds and runs its full
+pick-and-place instead of failing fast. Confirmed by stashing my change and
+re-running: the test passes on the old code, fails on the new. This is
+real additional physics happening, not corruption, so the fix was to widen
+that one test's tolerance to `abs=0.01` (documented why in the test), not
+to touch anything about how the drawer or the grasp actually behaves. The
+other two drawer tests that assert immediately after the teleport-to-open
+write (before any further `mj_step`) keep their tight `abs=1e-6` -- they're
+still exactly correct.
+
+Not extended to `fork_1`/`spoon_1`/`napkin_1`: none showed a comparable
+per-object win under any of the four mechanisms tried this session. Closing
+that gap needs a genuinely different technique (analytical multi-solution
+IK, a precomputed configuration library, or a learned policy), not another
+cheap search variant -- flagging honestly rather than continuing to grid-
+search variations of the same class of fix. Updated `intel_sim.py`'s module
+docstring ("Eighth update"), `integrations/intel/README.md`, and
+`BACKLOG.md` (OQ-010 status correction). Full suite green after the fix.

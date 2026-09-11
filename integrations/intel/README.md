@@ -369,24 +369,36 @@ alongside the YOLO perception node.
   documented narrow/fragile margin. The coarse `outcomes` table is
   unchanged (still 10/10 `grasp_failure`, expected, unrelated to this
   change).
-- [ ] **Tried the local-minimum escape on the new orientation-aware
-  solver too -- confirmed it still works, but not worth wiring in yet.**
-  After real orientation-aware IK landed independently (see below), all
-  four still-failing objects plateau at the same ~0.05-0.06m "pinch"
-  position error the old solver hit -- the same local-minimum signature.
-  Perturbing the pre-descent Elbow/Wrist_Pitch seed (same technique as
-  before) escapes it here too: a dense 81-point seed grid found a real
-  held grasp for `plate_1` (0.0211m lift, just over the 0.02m threshold).
-  But a bounded, cheap 17-seed grid (the same list that worked for the
-  old solver) only reached 0.0169m -- short. The margin is thin (0.0211m
-  barely clears the bar) and the sweet spot needs the dense grid's
-  resolution, which is too expensive to run on every attempt for a likely
-  fragile win. Not wired in -- a judgment call, not abandonment: the
-  underlying diagnosis (local minima, not a hard reach/orientation limit)
-  still stands and generalizes across solver versions. The real fix
-  remains what was already known: coarse-to-fine or better-seeded
-  convergence, not denser random grids. See `intel_sim.py`'s module
-  docstring, "Fifth update".
+- [x] **Local-minimum escape on the orientation-aware solver found, then
+  re-checked and wired in for `plate_1` after the fragility worry that
+  originally held it back turned out not to apply.** After real
+  orientation-aware IK landed independently (see below), all four
+  still-failing objects plateaued at the same ~0.05-0.06m "pinch" position
+  error the old solver hit -- the same local-minimum signature. Perturbing
+  the pre-descent Elbow/Wrist_Pitch seed (same technique as before)
+  escapes it here too: a dense 81-point seed grid found a real held grasp
+  for `plate_1` (0.0211m lift, just over the 0.02m threshold), while a
+  cheap 17-seed grid only reached 0.0169m -- short. That result was
+  initially *not* wired in, on two worries: (a) landing the escape
+  generally would need that same expensive per-attempt dense search, and
+  (b) 0.0211m barely clears the bar, plausibly too fragile to survive
+  scene jitter. Both were re-examined rather than left as a permanent
+  block: (a) doesn't apply to a *fixed*, zero-search per-object constant
+  (`OBJECT_GRASP_SEED_BIAS = {"plate_1": (0.0, 0.2)}` in `intel_sim.py`,
+  applied once after the transit approach, no grid), and (b) was checked
+  empirically, not assumed -- run across 10 of the harness's own
+  `IntelSceneConfig(randomized=True)` seeds, `plate_1` now holds **10/10**
+  (see `test_plate_1_grasp_escapes_its_local_minimum_via_the_verified_seed_
+  bias` in `tests/test_intel_sim_primitives.py`), not the 1/10 the
+  unbiased attempt got in the "Seventh update" evaluation
+  (`evidence/benchmark_results/intel_table_eval_2026-09-11-v8/`). `cup_1`
+  and the still-failing `fork_1`/`spoon_1`/`napkin_1` are unaffected
+  (verified directly) since the bias only applies when the object key is
+  present. Not extended to those three -- none showed a comparable
+  per-object win under any of four escape mechanisms tried this session
+  (seed perturbation, annealed damping, approach-bearing variation, full
+  free-DOF search). See `intel_sim.py`'s module docstring, "Fifth" and
+  "Eighth" updates.
 
 ### Legacy table-setting follow-up (2026-09-10)
 
