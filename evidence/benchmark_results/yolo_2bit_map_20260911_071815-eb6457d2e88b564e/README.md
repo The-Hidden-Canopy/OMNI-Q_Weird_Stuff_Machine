@@ -1,0 +1,75 @@
+# YOLO 2-bit mAP50 — weight-only RNE arms on table_yolo val (2026-09-11)
+
+Accuracy complement to `../yolo_2bit_cpu_20260910/` (the footprint/latency
+bundle, cited). Same arms, same codec, same honest-labeling rules; **latency
+is NOT re-measured here** and the latency bundle's **mAP50 row there stays
+"blocked" for the HIT-UAV model** — this bundle measures accuracy on the
+model that has its val split on disk.
+
+## Question
+
+What does the weight-only RNE MXFP4 / NVINT2 / MXFP2 round-trip (software
+dequantize, fp32 torch CPU kernels) do to the table_yolo YOLOv8n's val mAP50
+vs the fp32 baseline?
+
+## Model + data
+
+- Weights: `models/table_yolo_v2_ft_2026-09-11.pt` (ultralytics YOLOv8n, 7-class
+  fine-tune, 4 CPU epochs — the baseline is weak, ~0.058 mAP50, and that is
+  the honest fp32 arm below; the data decides).
+- Data: `data/table_yolo_v2/data.yaml` — val split,
+  1604 images / 7937
+  instances, classes plate, cup, fork, spoon, knife, napkin, drawer.
+- Protocol: per arm, fresh `ultralytics.YOLO` load; fmt arms quantize every
+  Conv2d/Linear weight with `integrations/qualcomm.lowbit` and load the
+  dequantized weights back; `yolo.val(split="val", imgsz=640, device="cpu")`
+  on the restored model. Execution = software dequantize; no native 2-bit
+  hardware is exercised.
+
+## mAP50 per arm (table_yolo val)
+
+| Arm | Packed bytes | Ratio vs fp32 | Weight cosine (mean) | mAP50 | mAP50-95 | mAP50 delta vs fp32 |
+|---|---|---|---|---|---|---|
+| fp32 | 12,006,400 | 1.0000 | - | 0.3241 | 0.2283 | — |
+| mxfp4 | 1,594,601 | 0.1328 | 0.9919 | 0.0775 | 0.0295 | -0.2465 |
+| nvint2 | 938,256 | 0.0781 | 0.9089 | 0.0003 | 0.0001 | -0.3238 |
+| mxfp2 | 844,201 | 0.0703 | 0.6875 | 0.0000 | 0.0000 | -0.3241 |
+
+Per-class AP50 (val):
+
+| Class | fp32 | mxfp4 | nvint2 | mxfp2 |
+|---|---|---|---|---|
+| plate | 0.2183 | 0.0257 | 0.0020 | 0.0000 |
+| cup | 0.5054 | 0.1474 | 0.0001 | 0.0000 |
+| fork | 0.2910 | 0.1065 | 0.0001 | 0.0000 |
+| spoon | 0.2417 | 0.0718 | 0.0000 | 0.0000 |
+| knife | 0.2356 | 0.0571 | 0.0000 | 0.0000 |
+| napkin | 0.1843 | 0.0154 | 0.0000 | 0.0000 |
+| drawer | 0.5923 | 0.1188 | 0.0000 | 0.0000 |
+
+## Honest labels
+
+- **Software dequantize; no native 2-bit hardware.** Every quantized arm
+  executes the dequantized weights with ordinary fp32 torch CPU kernels; the
+  mAP deltas below are pure weight-quantization accuracy deltas.
+- **Latency NOT re-measured here** — see `evidence/benchmark_results/yolo_2bit_cpu_20260910/` for footprint,
+  latency, output cosine, and detection-count parity.
+- The fp32 baseline itself is weak (~0.058 mAP50 after 4 CPU epochs); read
+  quantized-arm numbers against that baseline, not against an external
+  reference.
+- **Standing note**: a format is a format — all quantized arms are reported
+  symmetrically with measurements only.
+
+## Files + re-run
+
+- `results.json` — full machine-readable receipt (stats, environment, labels).
+- Harness: `integrations/qualcomm/scripts/eval_yolo_2bit_map.py`
+- Codec + provenance: `integrations/qualcomm/lowbit/`
+- Bundle format: `src/omni_q/evidence_bundle.py` (vendored from
+  open_world_model_harness); validated with `validate_evidence_bundle`.
+
+```bash
+YOLO_DATASETS_DIR=E:/HiddenCanopy/OMNI-Q_Weird_Stuff_Machine/data \
+    ./.venv/Scripts/python.exe \
+    integrations/qualcomm/scripts/eval_yolo_2bit_map.py
+```

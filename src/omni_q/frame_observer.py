@@ -14,11 +14,24 @@ The detector is injected, so swapping the stub for the real YOLO changes
 nothing else. ``frame_source`` pulls the frame from the world adapter
 (``lambda w: sim.render()``); for the mock, ``StubDetector`` derives boxes from
 the world so the whole path runs with no model and no renderer.
+
+Env-gated backend selection (``detector_from_env``), same idiom as
+``omni_reasoner`` / ``demo_intel_reasoner``:
+
+    OMNIQ_PERCEPTION=stub   StubDetector(world_ref)            (default)
+    OMNIQ_PERCEPTION=yolo   YoloDetector(fine-tuned .pt) via
+                            vision.as_frame_detector — requires the local
+                            weights (OMNIQ_YOLO_WEIGHTS overrides the path,
+                            default ``models/table_yolo_v2_ft_2026-09-11.pt``)
+    yolo + missing weights  raises a clear error naming both env vars —
+                            never silently falls back to the stub
 """
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from .contracts import DataStatus, Detection, Observation, WorldState
@@ -161,7 +174,8 @@ def grid_zone_map(cx: float, cy: float) -> str:
 class StubDetector:
     """A detector fed by the world, not a model — projects each object to a
     fake box so the FrameObserver path runs end-to-end with no YOLO/renderer.
-    Swap for `perception/` YOLO inference and nothing else changes."""
+    Swap for `perception/` YOLO inference and nothing else changes; the
+    env-gated swap lives in `detector_from_env` below."""
 
     def __init__(self, world_ref: Any, box: float = 0.08) -> None:
         self._world = world_ref
@@ -184,6 +198,67 @@ class StubDetector:
             out.append(Detection2D(d.cls, float(d.conf),
                                    (cx - b, cy - b, cx + b, cy + b)))
         return out
+
+
+# ---------------------------------------------------------------------------
+# env-gated detector selection (OMNIQ_PERCEPTION=stub|yolo)
+# ---------------------------------------------------------------------------
+
+PERCEPTION_ENV_VAR = "OMNIQ_PERCEPTION"
+YOLO_WEIGHTS_ENV_VAR = "OMNIQ_YOLO_WEIGHTS"
+
+# The fine-tuned v2 weights are a LOCAL artifact (*.pt is gitignored); this
+# default only fires when the file happens to be present.
+DEFAULT_YOLO_WEIGHTS = (
+    Path(__file__).resolve().parents[2] / "models" / "table_yolo_v2_ft_2026-09-11.pt"
+)
+
+
+def perception_mode() -> str:
+    """The configured backend: ``"stub"`` (default) or ``"yolo"``."""
+    return os.environ.get(PERCEPTION_ENV_VAR, "stub").strip().lower()
+
+
+def detector_from_env(
+    world_ref: Any = None,
+    *,
+    frame_size: tuple[int, int] = (640, 480),
+    conf_threshold: float = 0.25,
+    imgsz: int = 640,
+) -> Detector:
+    """Build the ``FrameObserver`` detector callable from the env gate.
+
+    ``stub`` (default) needs a ``world_ref`` for :class:`StubDetector`;
+    ``yolo`` loads the fine-tuned weights through :class:`YoloDetector` and
+    wraps it with ``vision.as_frame_detector`` so the tracker consumes it
+    exactly like the OpenVINO path. Requesting ``yolo`` without the weights
+    on disk raises — it never silently degrades to the stub.
+    """
+    mode = perception_mode()
+    if mode in ("", "0", "off", "stub"):
+        if world_ref is None:
+            raise ValueError(
+                f"{PERCEPTION_ENV_VAR}={mode or 'stub'} requires a world_ref "
+                f"for StubDetector (the YOLO backend ignores it)")
+        return StubDetector(world_ref)
+    if mode == "yolo":
+        weights = Path(os.environ.get(YOLO_WEIGHTS_ENV_VAR, DEFAULT_YOLO_WEIGHTS))
+        if not weights.is_file():
+            raise FileNotFoundError(
+                f"{PERCEPTION_ENV_VAR}=yolo requires the fine-tuned table YOLO "
+                f"weights, but {weights} is not a file. The weights are a local "
+                f"artifact (gitignored): pull them from "
+                f"https://huggingface.co/KissTheHabit/yolov8n-table-yolo (v2 "
+                f"fine-tune, val mAP50 0.324) and point {YOLO_WEIGHTS_ENV_VAR} "
+                f"at the .pt, or unset {PERCEPTION_ENV_VAR} to use the stub."
+            )
+        from .vision import as_frame_detector  # lazy: pulls the vision seam
+        from .yolo_perception import YoloDetector  # lazy: pulls ultralytics
+
+        yolo = YoloDetector(weights, conf_threshold=conf_threshold, imgsz=imgsz)
+        return as_frame_detector(yolo, frame_size)
+    raise ValueError(
+        f"unknown {PERCEPTION_ENV_VAR} mode: {mode!r} (expected 'stub' or 'yolo')")
 
 
 # ---------------------------------------------------------------------------

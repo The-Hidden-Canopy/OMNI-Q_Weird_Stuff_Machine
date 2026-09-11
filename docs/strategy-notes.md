@@ -237,10 +237,13 @@ Intel robotics → physical action
 Qualcomm vision → verification → success / replan
 ```
 
-Business value pitch: **adaptive physical workcells without hardcoded workflows**
-(inspect this; sort these; correct that; keep this area clear; hold this while
-fixing that; verify after action). Maps to manufacturing, warehouse automation,
-inspection, repair, logistics, lab automation, field robotics.
+Business value pitch: **a physical host that adapts without hardcoded workflows**
+(set this; move that glass; keep this area clear; hold this while plating; make
+space; verify after action). The primary demo framing is OMNI HOME / OMNI CHEF:
+another set of hands for a luxury household or personal chef. OMNI-Q TableOps is
+the enterprise expansion into banquet reset, hospitality changeover, inspection,
+and room operations. Maps later to manufacturing, warehouse automation,
+inspection, repair, logistics, lab automation, and field robotics.
 
 Originality sentence:
 

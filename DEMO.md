@@ -22,6 +22,13 @@ NATURAL-LANGUAGE GOAL → OMNI Q → execution graph → task decomposition
        → camera verification → success / replan
 ```
 
+The business wrapper is **OMNI-Q Home / OMNI-Q Chef**: a physical host that
+works with a homeowner or personal chef as another set of hands. The benchmark
+demonstrates configured etiquette, physical reference resolution, recovery, and
+bounded personality. **TableOps** is the customer-facing hospitality
+expansion—banquet reset and event changeover—while room-scale inventory and live
+multi-camera claims remain roadmap work. See [`docs/tableops.md`](docs/tableops.md).
+
 Bonus, not part of the entry: a Speechmatics voice layer can supply the goal
 and live constraints by speech instead of text (see
 [`integrations/speechmatics/README.md`](integrations/speechmatics/README.md)).
@@ -88,7 +95,7 @@ screen recording, VLA/OpenVINO, and hardware evidence._
 - 0:30–1:00  Why fixed AI workflows suck
 - 1:00–3:30  Live demo behavior (Intel online entry)
 - 3:30–4:20  Intel online integration details (+ any bonus Speechmatics/Qualcomm demo)
-- 4:20–5:00  Business value + why this is different
+- 4:20–5:00  TableOps wedge, pilot metrics, and why this is different
 
 ## Screen layout
 

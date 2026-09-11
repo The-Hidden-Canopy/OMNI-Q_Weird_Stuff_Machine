@@ -66,11 +66,13 @@ def main() -> None:
 
     print(
         "\nNote: class labels are only as meaningful as the weights loaded above. "
-        "The already-published thermal YOLO used for today's benchmark knows "
-        "HIT-UAV classes (Person/Car/Bicycle/...), not tableware -- this proves "
-        "the render->infer->project pipeline is real, not that the labels are "
-        "correct for this scene. Swap in OQ-008's fine-tuned 7-class weights "
-        "when they land; nothing else here changes."
+        "The already-published thermal YOLO knows HIT-UAV classes "
+        "(Person/Car/Bicycle/...), not tableware -- this proves the "
+        "render->infer->project pipeline is real, not that the labels are "
+        "correct for this scene. The fine-tuned 7-class table weights (OQ-008) "
+        "now exist: models/table_yolo_v2_ft_2026-09-11_openvino_model/ -- pass "
+        "its .xml here and the labels become the real plate/cup/fork/spoon/"
+        "knife/napkin/drawer taxonomy; nothing else in this demo changes."
     )
 
 

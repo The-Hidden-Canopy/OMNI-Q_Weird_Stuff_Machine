@@ -13,6 +13,8 @@ import pytest
 mujoco = pytest.importorskip("mujoco")
 
 from omni_q.intel_sim import build_intel_sim_engine, load_dual_so101_model
+from omni_q.contracts import TransitionRequest
+from omni_q.intel_sim import IntelTableWorld
 
 
 def test_dual_so101_scene_loads_two_actuated_arms_and_table_cameras():
@@ -49,3 +51,31 @@ def test_intel_table_setting_steps_real_mujoco_time_on_both_arms():
     )
     if not receipt.metrics["resolved"]:
         assert receipt.metrics["mode"] == "HOLD"  # failed cleanly, not silently
+
+
+def test_generic_expression_is_bounded_free_space_simulation_only():
+    world = IntelTableWorld()
+    before = world.state()
+    result = world.apply_transition(TransitionRequest(
+        step_id="express_1",
+        op="EXPRESS",
+        args={
+            "window_id": "window_1",
+            "primitive": "ARC",
+            "duration_ms": 120,
+            "region": "safe_free_volume",
+            "axis": 0,
+            "amplitude": 0.05,
+            "phase_deg": 30.0,
+            "cycles": 1.5,
+        },
+        expected_revision=before.revision,
+        actor="intel.left_arm",
+        org_id=before.org_id,
+    ))
+
+    assert result.ok is True
+    assert result.detail["expressive"] is True
+    assert result.detail["simulation_mode"] == world.mode
+    assert result.detail["contact_detected"] is False
+    assert result.detail["duration_ms"] == 120

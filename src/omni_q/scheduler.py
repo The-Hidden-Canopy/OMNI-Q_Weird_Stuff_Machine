@@ -25,6 +25,7 @@ from typing import Any
 
 from . import actions as _actions
 from .contracts import PlanGraph, Step, WorldState
+from .expressive import ExpressiveWindow, ExpressionPlan, generate_expression_plan
 
 ARMS: tuple[str, str] = ("left", "right")
 
@@ -126,6 +127,8 @@ class ScheduledStep:
     region_id: str | None
     flourish: bool = False
     op: str = ""             # set for scheduler-invented idle-slack flourishes
+    args: dict[str, Any] = field(default_factory=dict)
+    expression: bool = False
 
 
 @dataclass
@@ -154,9 +157,16 @@ class Schedule:
     regions: dict[str, str | None]         # step_id -> region id
     dropped: list[str] = field(default_factory=list)   # flourishes with no slack
     style_mode: str = "unset"              # last STYLE constraint, normalised
+    expression_plan: ExpressionPlan | None = None
 
     # -- integration seam ------------------------------------------------
-    def annotate(self, graph: PlanGraph, *, execute_flourishes: bool = False) -> PlanGraph:
+    def annotate(
+        self,
+        graph: PlanGraph,
+        *,
+        execute_flourishes: bool = False,
+        execute_expression: bool = False,
+    ) -> PlanGraph:
         """Return a copy of ``graph`` with each manipulate ``Step.arm`` filled
         and every step also depending on the whole previous wave, so the
         current dep-gated engine executes the waves in order. Dropped
@@ -177,8 +187,9 @@ class Schedule:
         }
         dropped = set(self.dropped)
 
-        out = PlanGraph(goal=graph.goal, revision=graph.revision)
-        for s in graph.steps:
+        graph_ids = {s.id for s in graph.steps}
+        annotated: dict[str, Step] = {}
+        for index, s in enumerate(graph.steps):
             if s.id in dropped:
                 continue
             deps = set(s.deps) - dropped
@@ -186,24 +197,54 @@ class Schedule:
             if wv is not None and wv > 0:
                 deps.update(wave_members.get(wv - 1, ()))
             deps.discard(s.id)
-            out.steps.append(replace(
+            annotated[s.id] = replace(
                 s,
                 arm=self.assignment.get(s.id, s.arm) if s.contract == "manipulate" else s.arm,
                 deps=tuple(sorted(deps)),
-            ))
+            )
 
-        if execute_flourishes:
-            graph_ids = {s.id for s in graph.steps}
-            for w in self.waves:
-                prev = tuple(sorted(wave_members.get(w.index - 1, ()))) if w.index > 0 else ()
-                for ss in w.steps:
-                    if not ss.flourish or ss.step_id in graph_ids or not ss.op:
+        # Keep generated work in its scheduled wave instead of appending it
+        # after the terminal verification step.  That makes expression work
+        # genuinely non-blocking in the graph, while the engine still applies
+        # its ordinary authorization and verification gates.
+        extras_by_wave: dict[int, list[Step]] = {}
+        for w in self.waves:
+            prev = tuple(sorted(wave_members.get(w.index - 1, ()))) if w.index > 0 else ()
+            for ss in w.steps:
+                if ss.step_id in graph_ids or not ss.op:
+                    continue
+                if ss.expression:
+                    if not execute_expression:
                         continue
-                    out.steps.append(Step(
-                        id=ss.step_id, contract="manipulate", op=ss.op,
-                        arm=ss.arm, deps=prev,
-                        rationale=f"idle-slack flourish (style={self.style_mode})",
-                    ))
+                elif not execute_flourishes:
+                    continue
+                extras_by_wave.setdefault(w.index, []).append(Step(
+                    id=ss.step_id, contract="manipulate", op=ss.op,
+                    args=dict(ss.args), arm=ss.arm, deps=prev,
+                    rationale=(
+                        "runtime-generated expressive proposal"
+                        if ss.expression else
+                        f"idle-slack flourish (style={self.style_mode})"
+                    ),
+                ))
+
+        last_position: dict[int, int] = {}
+        for index, s in enumerate(graph.steps):
+            if s.id in annotated and s.id in wave_of:
+                last_position[wave_of[s.id]] = index
+
+        out = PlanGraph(goal=graph.goal, revision=graph.revision)
+        for index, s in enumerate(graph.steps):
+            if s.id not in annotated:
+                continue
+            out.steps.append(annotated[s.id])
+            wv = wave_of.get(s.id)
+            if wv is not None and last_position.get(wv) == index:
+                out.steps.extend(extras_by_wave.pop(wv, ()))
+        # Defensive fallback for a schedule containing an expression-only
+        # wave.  Such a wave is never allowed to become a task dependency.
+        for wave_index in sorted(extras_by_wave):
+            out.steps.extend(extras_by_wave[wave_index])
         return out
 
     def to_dict(self) -> dict[str, Any]:
@@ -217,6 +258,9 @@ class Schedule:
             "dropped": list(self.dropped),
             "style_mode": self.style_mode,
             "metrics": dict(self.metrics),
+            "expression_plan": (
+                self.expression_plan.as_dict() if self.expression_plan is not None else None
+            ),
         }
 
 
@@ -358,6 +402,8 @@ def schedule(
     arms: tuple[str, str] = ARMS,
     overlap: float = 0.15,
     allow_flourish_wave: bool = True,
+    expressive_window: ExpressiveWindow | None = None,
+    expression_seed: int = 0,
 ) -> Schedule:
     layout = layout or DEFAULT_LAYOUT
     assignment, region_id, barriers = _assign_arms(graph, world, layout, arms, overlap)
@@ -464,15 +510,26 @@ def schedule(
     # -- OQ-015: place flourishes in slack, never delaying the goal --------
     mode = _style_mode(world)
     # "stop screwing around and finish" -> drop every flourish, keep only work
-    strip_flourishes = mode in {"minimum_time", "freeze"}
+    # An explicit expressive window replaces the legacy named-style path.  A
+    # window is the authority for generic runtime motion; existing gesture
+    # steps are dropped so two control schemes cannot run together.
+    strip_flourishes = expressive_window is not None or mode in {"minimum_time", "freeze"}
     dropped, flourish_waves_added = _place_flourishes(
         waves, [] if strip_flourishes else flourishes,
         assignment, region_obj, overlap, arms, allow_flourish_wave, barriers)
     if strip_flourishes:
         dropped = [s.id for s in flourishes]
 
-    # -- dance-while-working: fill idle-arm slack (never adds/reorders) ----
-    idle_flourishes = _fill_idle_slack(waves, arms, mode) if _actions.wants_idle_flourish(mode) else 0
+    expression_plan: ExpressionPlan | None = None
+    expression_dropped: list[str] = []
+    if expressive_window is not None:
+        expression_plan = generate_expression_plan(
+            expressive_window, world, seed=expression_seed)
+        expression_dropped = _place_expression_plan(waves, expression_plan, barriers)
+        idle_flourishes = 0
+    else:
+        # -- legacy dance-while-working: fill idle-arm slack -------------
+        idle_flourishes = _fill_idle_slack(waves, arms, mode) if _actions.wants_idle_flourish(mode) else 0
 
     arm_timeline: dict[str, list[str]] = {a: [] for a in arms}
     for w in waves:
@@ -493,9 +550,13 @@ def schedule(
         "flourishes_dropped": len(dropped),
         "flourish_waves_added": flourish_waves_added,
         "idle_flourishes": idle_flourishes,
+        "expressions_scheduled": len(expression_plan.proposals) - len(expression_dropped)
+        if expression_plan is not None else 0,
+        "expressions_dropped": len(expression_dropped),
+        "expression_span_ms": expression_plan.span_ms if expression_plan is not None else 0,
     }
     return Schedule(waves, barriers, arm_timeline, metrics, assignment, region_id,
-                    dropped, style_mode=mode)
+                    dropped, style_mode=mode, expression_plan=expression_plan)
 
 
 def _style_mode(world: WorldState) -> str:
@@ -619,6 +680,58 @@ def _place_flourishes(
     return [fs.id for fs in leftovers], added
 
 
+def _place_expression_plan(
+    waves: list[Wave],
+    plan: ExpressionPlan,
+    barriers: list[Barrier],
+) -> list[str]:
+    """Place generic expression groups only into already-existing slack waves.
+
+    A coordination group owns the complete granted safe volume for its wave,
+    so it is placed atomically.  If no wave can host all participating arms,
+    the group is dropped rather than delaying the task graph.
+    """
+    grouped: dict[str, list[Any]] = {}
+    for proposal in plan.proposals:
+        key = proposal.coordination_group or proposal.proposal_id
+        grouped.setdefault(key, []).append(proposal)
+
+    candidates = [w for w in waves if all(ss.arm is not None for ss in w.steps)]
+    dropped: list[str] = []
+    for group_id, proposals in grouped.items():
+        required_arms = {p.arm for p in proposals}
+        slot = next(
+            (
+                w for w in candidates
+                if required_arms.isdisjoint({ss.arm for ss in w.steps if ss.arm})
+            ),
+            None,
+        )
+        if slot is None:
+            ids = [p.proposal_id for p in proposals]
+            dropped.extend(ids)
+            barriers.append(Barrier(
+                (group_id, group_id), "expression",
+                f"expression group dropped: no idle arm wave for {ids}",
+            ))
+            continue
+        for proposal in proposals:
+            slot.steps.append(ScheduledStep(
+                step_id=f"express_{proposal.proposal_id}",
+                arm=proposal.arm,
+                region_id=None,
+                flourish=True,
+                op="EXPRESS",
+                args={
+                    **proposal.as_args(),
+                    "window_digest": plan.window_digest,
+                    "policy_seed": plan.seed,
+                },
+                expression=True,
+            ))
+    return dropped
+
+
 # ---------------------------------------------------------------------------
 # live integration — wrap any Plan provider
 # ---------------------------------------------------------------------------
@@ -635,9 +748,11 @@ class ScheduledPlanner:
     on ``.last_error`` — a scheduler bug can never break a run.
     """
 
-    def __init__(self, inner: Any, **schedule_kwargs: Any) -> None:
+    def __init__(self, inner: Any, *, execute_expression: bool = False,
+                 **schedule_kwargs: Any) -> None:
         self.inner = inner
         self._kwargs = schedule_kwargs
+        self._execute_expression = execute_expression
         self.last_schedule: Schedule | None = None
         self.last_error: str | None = None
 
@@ -645,11 +760,27 @@ class ScheduledPlanner:
     def last_decision(self) -> Any:  # the engine reads this off the planner
         return getattr(self.inner, "last_decision", None)
 
+    @property
+    def expressive_window(self) -> ExpressiveWindow | None:
+        window = self._kwargs.get("expressive_window")
+        return window if isinstance(window, ExpressiveWindow) else None
+
+    def run_context(self) -> dict[str, Any]:
+        """Expose planner inputs that must participate in durable run identity."""
+        context: dict[str, Any] = {}
+        window = self.expressive_window
+        if window is not None:
+            context["expressive_window"] = window.as_dict()
+        if "expression_seed" in self._kwargs:
+            context["expression_seed"] = self._kwargs["expression_seed"]
+        return context
+
     def _apply(self, graph: PlanGraph, world: WorldState) -> PlanGraph:
         try:
             self.last_schedule = schedule(graph, world, **self._kwargs)
             self.last_error = None
-            return self.last_schedule.annotate(graph)
+            return self.last_schedule.annotate(
+                graph, execute_expression=self._execute_expression)
         except Exception as exc:  # noqa: BLE001 - degrade, never crash the run
             self.last_schedule = None
             self.last_error = f"{type(exc).__name__}: {exc}"

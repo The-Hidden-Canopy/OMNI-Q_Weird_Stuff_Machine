@@ -266,6 +266,7 @@ from .contracts import (
 )
 from .devices import DeviceRouter
 from .engine import OmniQ
+from .expressive import validate_expressive_command
 from .fakes import FakeManipulator, FakeObserver, FakeRecorder, FakeVerifier, RulePlanner
 from .world import MockWorld
 
@@ -701,6 +702,11 @@ class IntelTableWorld(MockWorld):
     def apply_transition(self, request: TransitionRequest) -> TransitionResult:
         op = request.op
         obj = request.args.get("object")
+        if op == "EXPRESS":
+            # The provider repeats validation because a direct TransitionRequest
+            # can bypass the policy generator.  Generic expression is free-space
+            # only; contact primitives remain a separate controller gate.
+            validate_expressive_command(request.args)
         physics_snapshot = None
         if op in {"PICK", "MOVE", "PLACE"} and obj in self._object_joints:
             # A failed real attempt must not leave the next governed retry
@@ -720,6 +726,7 @@ class IntelTableWorld(MockWorld):
         result = super().apply_transition(request)
         arm_offset = 6 if request.actor and "right" in request.actor else 0
         grasp_info: dict[str, Any] = {}
+        expressive_info: dict[str, Any] = {}
 
         if op == "PICK" and obj in self._object_joints:
             grasp_info = self._do_pick(arm_offset, obj)
@@ -734,6 +741,10 @@ class IntelTableWorld(MockWorld):
                     self._objects[obj] = replace(self._objects[obj], zone=prev_zone)
                 self._ownership[obj] = prev_owner
                 self._restore_physics(physics_snapshot)
+                result = replace(result, ok=False)
+        elif op == "EXPRESS":
+            expressive_info = self._execute_expressive(arm_offset, request.args)
+            if not expressive_info["ok"]:
                 result = replace(result, ok=False)
         else:
             # OQ-010 fallback pose for ops with no dedicated IK behaviour, or
@@ -800,6 +811,7 @@ class IntelTableWorld(MockWorld):
         detail = {
             **result.detail,
             **grasp_info,
+            **expressive_info,
             "sim_time": round(float(self.data.time), 4),
             "controller_steps": self._controller_steps,
             "simulation_mode": self.mode,
@@ -810,6 +822,63 @@ class IntelTableWorld(MockWorld):
             ),
         }
         return replace(result, detail=detail)
+
+    def _execute_expressive(self, arm_offset: int, args: dict[str, Any]) -> dict[str, Any]:
+        """Run one bounded generic free-space motion in the MuJoCo proxy.
+
+        This is a provider implementation of the EXPRESS contract, not
+        evidence of learned or hardware motor intelligence.  The trajectory
+        starts and ends at the current pose and is shaped by the proposal's
+        primitive parameters rather than a named gesture table.
+        """
+        primitive = str(args["primitive"]).upper()
+        duration_ms = int(args["duration_ms"])
+        axis = int(args.get("axis", 0))
+        amplitude = float(args.get("amplitude", 0.0))
+        phase = math.radians(float(args.get("phase_deg", 0.0)))
+        cycles = float(args.get("cycles", 1.0))
+        current = [float(v) for v in self.data.qpos[arm_offset:arm_offset + 6]]
+        steps = max(1, min(180, int(math.ceil(duration_ms / 8.0))))
+        initial_contacts = int(self.data.ncon)
+
+        # A generic primitive selects a trajectory family.  No semantic
+        # gesture is encoded here; a policy can vary axis, phase, amplitude,
+        # cycles, arm, and timing on every proposal.
+        for index in range(1, steps + 1):
+            progress = index / steps
+            envelope = math.sin(math.pi * progress)
+            wave = math.sin((2.0 * math.pi * cycles * progress) + phase)
+            pose = list(current)
+            if primitive != "PAUSE":
+                pose[axis] += amplitude * envelope * wave
+            if primitive in {"CHANGE_SPEED", "CHANGE_AMPLITUDE"}:
+                pose[axis] = current[axis] + (amplitude * 0.5) * envelope * wave
+            for joint_index, value in enumerate(pose):
+                self.data.ctrl[arm_offset + joint_index] = value
+            self._mujoco.mj_step(self.model, self.data, nstep=4)
+            self._controller_steps += 4
+
+        # Return to the proposal's starting pose before yielding control back
+        # to the task graph.  A contact appearing during free-space expression
+        # is a failed provider action, never a semantic success.
+        for joint_index, value in enumerate(current):
+            self.data.ctrl[arm_offset + joint_index] = value
+        self._mujoco.mj_step(self.model, self.data, nstep=8)
+        self._controller_steps += 8
+        contact_detected = int(self.data.ncon) > initial_contacts
+        return {
+            "ok": not contact_detected,
+            "expressive": True,
+            "primitive": primitive,
+            "duration_ms": duration_ms,
+            "axis": axis,
+            "contact_detected": contact_detected,
+            "return_error_rad": round(max(
+                abs(float(self.data.qpos[arm_offset + i]) - current[i])
+                for i in range(6)
+            ), 6),
+            "simulation_mode": self.mode,
+        }
 
     def _restore_physics(self, snapshot) -> None:
         """Restore a pre-attempt MuJoCo state after a rejected transition."""

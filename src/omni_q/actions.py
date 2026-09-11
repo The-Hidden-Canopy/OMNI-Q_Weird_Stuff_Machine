@@ -36,6 +36,7 @@ class ActionCategory(str, Enum):
     PERCEPTION = "perception"
     ROUTINE = "routine"
     IDLE_FLOURISH = "idle_flourish"   # dance-while-working: fills scheduler slack
+    EXPRESSIVE = "expressive"         # runtime-selected generic motion
 
 
 class Precision(str, Enum):
@@ -239,6 +240,11 @@ _SPECS: tuple[ActionSpec, ...] = (
     _a("CALL_AND_RESPONSE", C.IDLE_FLOURISH, style_action=True, blocking=False,
        supports_bimanual=True, args=()),
     _a("FREEZE", C.IDLE_FLOURISH, blocking=True, precision=P.LOW, args=()),
+
+    # Runtime-generated motion. ``primitive`` is selected by a bounded
+    # expressive policy; there is intentionally no named gesture here.
+    _a("EXPRESS", C.EXPRESSIVE, blocking=False, precision=P.LOW,
+       args=("primitive", "duration_ms", "amplitude", "phase_deg", "region")),
 
     # -- perception ---------------------------------------------
     _a("OBSERVE", C.PERCEPTION, blocking=True, args=()),

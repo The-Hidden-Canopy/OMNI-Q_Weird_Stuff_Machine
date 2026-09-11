@@ -16,7 +16,7 @@ _AFFINITY: dict[str, tuple[str, ...]] = {
     "PICK": ("arm",), "PLACE": ("arm",), "MOVE": ("arm",),
     "OPEN": ("arm",), "CLOSE": ("arm",), "ROTATE": ("arm",),
     "PRESENT": ("arm",), "STABILIZE": ("arm",), "REGRASP": ("arm",),
-    "HANDOFF": ("arm",), "COOPERATIVE_ROTATE": ("arm",),
+    "HANDOFF": ("arm",), "COOPERATIVE_ROTATE": ("arm",), "EXPRESS": ("arm",),
     "LOCATE": ("reasoning",),
 }
 

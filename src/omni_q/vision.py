@@ -15,12 +15,18 @@ real camera replaces the simulated one, only the ``CameraSource`` swaps.
 ``OpenVINODetector`` runs a real exported YOLOv8-style OpenVINO IR model
 (see ``integrations/intel/scripts/profile_yolo_openvino.py`` for the export
 path) -- real inference, real decode (box regression + class sigmoid +
-NMS), not a stub. Its class *labels* are only as good as the weights it is
-given: the already-published thermal YOLO used for today's benchmark knows
-HIT-UAV classes (Person/Car/Bicycle/...), not tableware, so detections from
-it are real model output with honestly meaningless labels for this scene --
-swap in the real fine-tuned 7-class weights (OQ-008) and nothing else here
-changes.
+NMS), not a stub. The 7-class tabletop fine-tune (OQ-008,
+``models/table_yolo_v2_ft_2026-09-11.pt``, val mAP50 0.324, weights at
+`KissTheHabit/yolov8n-table-yolo <https://huggingface.co/KissTheHabit/yolov8n-table-yolo>`_)
+is exported for BOTH runtime paths: ``models/table_yolo_v2_ft_2026-09-11.onnx``
+and ``models/table_yolo_v2_ft_2026-09-11_openvino_model/`` (IR + the
+``metadata.yaml`` this class reads its class names from -- plate, cup,
+fork, spoon, knife, napkin, drawer). The already-published thermal
+HIT-UAV YOLO remains useful as an export/benchmark stand-in; its labels
+are honestly meaningless for a table scene. For the ultralytics/PyTorch
+runtime of the same fine-tune, see ``yolo_perception.YoloDetector`` -- it
+emits this same ``RawDetection`` contract, so ``as_frame_detector`` and
+``FrameObserver`` consume both identically.
 
 ``project_to_table`` turns a detected pixel center into an approximate
 world (x, y) by intersecting the camera's real pinhole ray (from its actual

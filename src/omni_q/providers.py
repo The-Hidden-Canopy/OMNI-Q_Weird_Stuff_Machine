@@ -27,6 +27,7 @@ _OP_KINDS: dict[str, tuple[str, ...]] = {
     "PICK": ("arm",), "PLACE": ("arm",), "MOVE": ("arm",), "OPEN": ("arm",),
     "CLOSE": ("arm",), "ROTATE": ("arm",), "PRESENT": ("arm",), "STABILIZE": ("arm",),
     "REGRASP": ("arm",), "HANDOFF": ("arm",), "COOPERATIVE_ROTATE": ("arm",),
+    "EXPRESS": ("arm",),
     "SPIN_SHOW": ("arm",), "LOCATE": ("reasoning",),
 }
 _CONTRACT_KINDS: dict[str, tuple[str, ...]] = {

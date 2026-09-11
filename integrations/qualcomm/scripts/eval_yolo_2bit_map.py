@@ -391,7 +391,7 @@ def main() -> int:
     payload = json.dumps(results, indent=2, sort_keys=True) + "\n"
     readme = render_readme(results, arms, deltas)
 
-    run_id = f"yolo_2bit_map_{stamp}"
+    run_id = f"yolo_2bit_map_{stamp}_{time.strftime('%H%M%S', time.gmtime())}"
     writer = EvidenceBundleWriter(args.out_root)
     run_dir = writer.write_run(
         run_id=run_id,

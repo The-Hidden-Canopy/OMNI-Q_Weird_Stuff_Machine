@@ -34,6 +34,7 @@ from .contracts import (
     validate_operator_constraint,
 )
 from .events import EventBus
+from .expressive import ExpressiveWindowRejected, validate_expressive_step
 from .provenance import run_id_for
 
 
@@ -275,7 +276,7 @@ class OmniQ:
         # collide in the durable ledger.
         constraints = [constraint.as_dict() for constraint in state.constraints]
         constraints.extend(constraint.as_dict() for constraint in self._pending_constraints)
-        return {
+        config = {
             "goal": goal,
             "org_id": state.org_id,
             "envelope": self.envelope.digest(),
@@ -290,6 +291,10 @@ class OmniQ:
             },
             "constraints": constraints,
         }
+        planner_context = getattr(self.planner, "run_context", None)
+        if callable(planner_context):
+            config["planner_context"] = planner_context()
+        return config
 
     def _next_step(self, executed: set[str]) -> Step | None:
         for step in self.graph.topo_order():
@@ -363,6 +368,18 @@ class OmniQ:
         if not self.envelope.op_permitted(step.op):
             verdict = AuthorizationVerdict.DENY
             reason = f"operation {step.op} is outside the mission envelope"
+        elif step.op == "EXPRESS":
+            window = getattr(self.planner, "expressive_window", None)
+            if window is None:
+                verdict = AuthorizationVerdict.DENY
+                reason = "EXPRESS requires an authorized expressive window"
+            else:
+                try:
+                    validate_expressive_step(
+                        window, step, current_world_revision=world.revision)
+                except ExpressiveWindowRejected as exc:
+                    verdict = AuthorizationVerdict.DENY
+                    reason = f"expressive window rejected: {exc}"
         elif world.org_id != self.envelope.org_id:
             verdict = AuthorizationVerdict.DENY
             reason = "world organization scope does not match the mission envelope"

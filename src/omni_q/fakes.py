@@ -161,6 +161,7 @@ class FakeManipulator:
     _OPS = {
         "PICK", "PLACE", "MOVE", "OPEN", "CLOSE", "ROTATE", "PRESENT",
         "STABILIZE", "REGRASP", "HANDOFF", "COOPERATIVE_ROTATE", "LOCATE",
+        "EXPRESS",
         # non-contact idle-slack flourishes (OQ-HAND-011): free-space arm
         # gestures, no object, no grasp -- executed as no-op successes here,
         # as real joint motion by intel_sim's coarse-pose path.
@@ -187,6 +188,12 @@ class FakeManipulator:
         if op == "LOCATE":
             return ManipResult(step.id, True,
                                {"misplaced": [d.object_id for d in world.misplaced()]})
+        if op == "EXPRESS":
+            return ManipResult(step.id, True, {
+                "expressive": True,
+                "primitive": step.args.get("primitive"),
+                "simulation_mode": "mock-expressive",
+            })
         # every other primitive is a no-op success in mock mode
         return ManipResult(step.id, True, {"op": op, "args": step.args})
 
