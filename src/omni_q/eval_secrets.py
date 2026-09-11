@@ -28,12 +28,14 @@ from .evidence_bundle import _write_json
 
 
 def stable_unit_float(domain: str, *parts: str) -> float:
-    """Deterministic hidden scalar in ``[0.65, 1.35)`` for one entity.
+    """Deterministic hidden scalar in ``[0.65, 1.35]`` for one entity.
 
     SHA-256 over ``"domain:part1:part2:..."``; the first digest byte maps
     linearly onto ``0.65 + (byte / 255) * 0.7`` (rounded to 3 decimals) —
     the aptitude-topology seeding scheme of the source engine, generalized
     from ``session_id:player_id:skill:node`` to any domain/entity keys.
+    Closed on both ends, not half-open: ``byte`` ranges 0-255 inclusive,
+    so ``byte == 255`` lands exactly on 1.35, not just approaches it.
     """
     material = ":".join((domain, *parts))
     digest = hashlib.sha256(material.encode("utf-8")).digest()

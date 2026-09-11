@@ -162,6 +162,25 @@ this up next. The honest way to actually close this gap remains what the
 a fixed HOME-derived transit configuration), not incrementally denser
 random seed grids.
 
+**One "coarse-to-fine" variant tested and ruled out**: an annealed damping
+schedule for the final pinch descent (start with high damping -- a
+smoother, more forgiving basin of attraction, standard Levenberg-Marquardt
+practice for avoiding sharp local traps -- decaying to low damping for
+tight final precision), in place of the fixed damping value
+``_ik_reach_pad`` uses throughout. Tested 4 start/end damping pairs across
+all 4 failing objects: **zero improvement in any case** -- same ~0.05m
+plateau regardless of schedule. This rules out "wrong descent dynamics" as
+the cause and reinforces the earlier finding (freeing wrist-roll from a
+stuck state barely helped either): the trap is a genuinely different
+attractor basin in *joint configuration space*, not a step-size or
+damping-tuning problem -- only a different starting configuration (a real
+seed, not a smoother path to the same one) escapes it. Coarse-to-fine
+still means something different and untried: a genuine multi-resolution
+*spatial* search (e.g. sampling several candidate transit configurations
+via forward kinematics before committing to one, the way a real motion
+planner would), not a smoother numerical schedule on top of the same
+single starting point.
+
 This is still a proxy, not hardware evidence -- no vision-guided grasp point,
 no force control. The separate OQ-010/OQ-011 contact adapter uses only MuJoCo
 contact dynamics for a bounded ``cup_1`` handoff. It is a SO-ARM100

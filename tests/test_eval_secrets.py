@@ -11,7 +11,9 @@ def test_stable_unit_float_is_deterministic_across_calls():
     first = stable_unit_float("aptitude", "session-1", "player-1", "skill", "node")
     second = stable_unit_float("aptitude", "session-1", "player-1", "skill", "node")
     assert first == second
-    assert 0.65 <= first < 1.35
+    # Closed interval, not half-open: byte 255 (possible, 1/256 of inputs)
+    # lands exactly on 1.35 -- see stable_unit_float's docstring.
+    assert 0.65 <= first <= 1.35
 
 
 def test_stable_unit_float_distinct_keys_differ():

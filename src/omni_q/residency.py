@@ -387,10 +387,21 @@ class ResidencyManager:
         return "EXECUTE"
 
     def evict_reasoner(self) -> ResidencyDecision:
-        """Force the slider to CORE_ONLY (reasoner eviction)."""
+        """Force the slider to CORE_ONLY (reasoner eviction).
+
+        Also zeroes ``self._available`` to match the zero-envelope decision
+        this computes: leaving the pre-eviction bytes on the books let a
+        later plain ``update_envelope(old_value)`` call silently restore
+        the reasoner with no validation at all, bypassing
+        ``restore_reasoner``'s explicit legality/floor checks entirely --
+        an eviction that undoes itself the moment anything re-polls the
+        envelope isn't a forced eviction. ``restore_reasoner`` still takes
+        its own explicit ``available_bytes`` argument regardless, so this
+        doesn't change its contract."""
         if not self._current.state.is_mx:
             raise ValueError("illegal transition: reasoner already evicted (CORE_ONLY)")
         decision = select_residency(0, self.body_params)
+        self._available = 0
         return self._apply(decision, trigger="memory_change")
 
     def restore_reasoner(self, available_bytes: int) -> ResidencyDecision:

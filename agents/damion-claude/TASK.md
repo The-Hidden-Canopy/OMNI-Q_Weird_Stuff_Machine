@@ -149,6 +149,31 @@ jitter. Judgment call: **not wired into `_do_pick`** given the cost
 is still coarse-to-fine/better-seeded convergence, not denser random
 grids. No regressions: `cup_1` unaffected, still holds immediately.
 
+## Extra: ruled out annealed damping too, then audited the new evidence/residency code
+
+Tested one more "coarse-to-fine" idea on the grasp thread before setting
+it aside: an annealed damping schedule for the final pinch descent
+(standard Levenberg-Marquardt practice for escaping sharp local traps),
+in place of `_ik_reach_pad`'s fixed damping. **Zero improvement across 4
+schedules on all 4 failing objects** — rules out "wrong descent dynamics"
+definitively; the trap is a different attractor basin in joint-space, not
+a step-size problem. Documented in `intel_sim.py`'s module docstring.
+
+With the grasp thread genuinely exhausted for this session, pivoted to
+independent audit of the substantial evidence/safety code that's landed
+recently without review — `residency.py`, `eval_secrets.py`,
+`evidence_bundle.py`. Found and fixed a real bug: `evict_reasoner()`
+computed its CORE_ONLY decision assuming a 0-byte envelope but never
+updated the manager's own tracked `available_bytes` to match — a receipt
+taken right after a forced eviction would self-contradict (CORE_ONLY/
+DEGRADED next to a stale multi-GB byte count), undermining the module's
+own "residency accounting is deliberately honest" design goal. Fixed +
+regression test added. Also fixed a minor doc/test inconsistency in
+`stable_unit_float` (claimed a half-open range; it's closed).
+`evidence_bundle.py` reviewed separately — fail-closed validation, real
+path-traversal guards, no issues found. 377/377 tests green. Full
+writeup: `BACKLOG.md` (OQ-029 row).
+
 ## Next up: OQ-033 (blocked on OQ-031) / OQ-048 (blocked on demo-critical tasks)
 
 Both still gated on other people's work landing first. No open P0/P1 task
@@ -156,4 +181,7 @@ right now — check back once OQ-031 (Qualcomm) or the demo-critical queue
 moves. `plate_1`/`fork_1`/`spoon_1`/`napkin_1` still don't hold — the real
 fix needs coarse-to-fine or better-seeded IK convergence, not more random
 seed grids (see "Fifth update" above) — worth picking up directly if
-nothing else unblocks first.
+nothing else unblocks first. Otherwise, continuing to audit newly-landed
+code opportunistically (residency/evidence this round) is a reasonable
+default use of idle time given the auditor role, even without a formally
+unblocked ticket.

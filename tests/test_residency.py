@@ -223,6 +223,27 @@ def test_evict_and_restore_lineage():
         manager.restore_reasoner(8 * GB)  # already resident — illegal
 
 
+def test_evicted_reasoner_reports_zero_available_bytes_not_stale_pre_eviction_value():
+    """A found bug, not a hypothetical: evict_reasoner() computes its
+    decision by pretending the envelope is 0 (select_residency(0, ...)),
+    but used to leave self._available at whatever it was before eviction
+    -- e.g. still 8 GB. Since available_bytes flows straight into
+    to_receipt()'s JSON alongside the CORE_ONLY/DEGRADED decision, a
+    receipt taken right after a forced eviction would show a
+    self-contradictory record: "evicted, degraded" next to "8 GB
+    available" -- exactly what "residency accounting is deliberately
+    honest" (this module's own stated design goal) says shouldn't
+    happen. Fixed to zero available_bytes to match the decision it
+    actually computed."""
+    manager = ResidencyManager(8 * GB)
+    manager.evict_reasoner()
+
+    assert manager.available_bytes == 0
+    receipt = manager.to_receipt()
+    assert receipt["available_bytes"] == 0
+    assert receipt["decision"]["state"] == "CORE_ONLY"
+
+
 def test_manager_hysteresis_damps_updates():
     mxfp8_bytes = body_size(1024).tier_bytes["mxfp8"]
     manager = ResidencyManager(mxfp8_bytes, body_params=1024, hysteresis_bytes=64)
