@@ -39,7 +39,7 @@ BAD_PLAN = """\
 PLAN
 STEP PICK object=ghost_9
 STEP MOVE object=connector_2 to=void_zone
-STEP PICK object=sleeve_1
+STEP PICK object=plate_1
 STEP FLY object=cable_4
 END
 """
@@ -102,9 +102,9 @@ def test_parses_valid_model_plan_into_validated_graph():
 def test_invalid_proposals_are_rejected_with_reasons():
     planner = _planner(BAD_PLAN)
     graph = planner.plan("tidy the workspace", _world())
-    # sleeve_1 is the only proposal that survives core validation
+    # plate_1 is the only proposal that survives core validation
     assert [s.op for s in graph.steps] == ["PICK"]
-    assert graph.steps[0].args["object"] == "sleeve_1"
+    assert graph.steps[0].args["object"] == "plate_1"
     decision = planner.last_decision
     assert decision is not None and "fallback" not in decision.reason
     assert len(decision.rejected) == 3
@@ -128,6 +128,95 @@ def test_partial_plan_keeps_valid_steps_and_rejects_rest():
     assert decision is not None and "fallback" not in decision.reason
     assert any("ghost_9" in key for key in decision.rejected)
     assert any("unknown object" in why for why in decision.rejected.values())
+
+
+def test_redundant_pick_on_an_already_held_object_is_rejected_not_reattempted():
+    """A found bug, not a hypothetical: composing this planner with real
+    FrameObserver+OpenVINO vision and a scripted model response measured
+    a model that hadn't (yet) noticed a prior PICK already succeeded
+    keep proposing it again every replan. The world layer correctly
+    rejects a re-pick of something already held
+    (TransitionRejected: "<oid> is already held"), but before this
+    check existed, that stale proposal reached the physical layer and
+    burned a whole revision on a real, futile re-attempt every single
+    time -- 6 of 7 revisions in the measured case. RulePlanner already
+    carries an object straight from the gripper instead of re-picking
+    it (fakes.py); this mirrors that at the model-validation layer
+    instead of trusting the model to always track state perfectly."""
+    from dataclasses import replace
+
+    world = replace(_world(), ownership={"connector_2": "intel.left_arm"})
+    text = ("PLAN\n"
+            "STEP PICK object=connector_2\n"
+            "STEP MOVE object=connector_2 to=bin\n"
+            "END\n")
+    planner = _planner(text)
+
+    graph = planner.plan("tidy the workspace", world)
+
+    assert [s.op for s in graph.steps] == ["MOVE"]
+    decision = planner.last_decision
+    assert decision is not None
+    assert any("already held" in why for why in decision.rejected.values())
+
+
+def test_move_on_a_held_object_is_routed_to_the_holding_arm_not_the_models_guess():
+    """A second, distinct instance of the same class of gap, found the
+    same way: composing real vision + this planner, a MOVE with no
+    `arm=` defaulted elsewhere while the object was actually held by the
+    right arm -- rejected every time ("held by intel.right_arm, not
+    intel.left_arm"), burning the whole budget on a step that could
+    never succeed as proposed. Once an object is held, only the holding
+    arm can act on it -- there's no ambiguity to resolve, so this is
+    corrected, not merely flagged."""
+    from dataclasses import replace
+
+    world = replace(_world(), ownership={"connector_2": "intel.right_arm"})
+    text = "PLAN\nSTEP MOVE object=connector_2 to=bin\nEND\n"
+    planner = _planner(text)
+
+    graph = planner.plan("tidy the workspace", world)
+
+    assert [s.op for s in graph.steps] == ["MOVE"]
+    assert graph.steps[0].arm == "right"
+
+
+def test_pick_or_move_on_an_already_placed_object_is_rejected_as_redundant():
+    """Third instance: RulePlanner never proposes PICK/MOVE for an object
+    outside world.misplaced() in the first place, since it generates
+    candidates FROM that set. A model instead proposes from its own
+    (possibly stale) belief about the goal, so once an object is
+    genuinely placed, a model that hasn't noticed yet may propose
+    PICK/MOVE for it again -- unlike the already-held case, ownership
+    has been released by then, so nothing else catches it, and it
+    becomes a real, wasted (or worse, disruptive) re-attempt. Measured
+    directly composing real vision + physical execution: after a real
+    PICK+MOVE genuinely placed cup_1, the next replan's static proposal
+    re-picked it anyway and failed for real.
+
+    Proposes sleeve_1 (already placed) alongside connector_2 (genuinely
+    misplaced) so at least one manipulate step survives and the fallback
+    path doesn't swallow this planner's own rejection reasons -- a
+    no-valid-steps-at-all case falls back to RulePlanner, whose *own*
+    decision (with its own, unrelated rejected dict) replaces this
+    planner's, which would hide the very rejection being tested."""
+    world = _world()
+    assert world.objects["sleeve_1"].misplaced is False  # already at target_zone
+    text = ("PLAN\n"
+            "STEP PICK object=sleeve_1\n"
+            "STEP MOVE object=sleeve_1 to=bin\n"
+            "STEP PICK object=connector_2\n"
+            "END\n")
+    planner = _planner(text)
+
+    graph = planner.plan("tidy the workspace", world)
+
+    assert [s.op for s in graph.steps] == ["PICK"]
+    assert graph.steps[0].args["object"] == "connector_2"
+    decision = planner.last_decision
+    assert decision is not None and "fallback" not in decision.reason
+    assert len(decision.rejected) == 2
+    assert all("already at its target zone" in why for why in decision.rejected.values())
 
 
 def test_forbidden_objects_still_blocked_from_model_steps():

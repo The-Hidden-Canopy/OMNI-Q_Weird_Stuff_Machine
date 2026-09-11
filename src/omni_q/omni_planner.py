@@ -22,6 +22,43 @@ a model that proposes nothing usable yields to the wrapped deterministic
 planner with the decision truthfully labeled as fallback. Model rationale
 rides the existing ``PlanDecision.reason`` channel into receipts and the
 UI's "why" display (OQ-047).
+
+**State-tracking validation, added 2026-09-11 after composing this planner
+with real FrameObserver+OpenVINO vision for the first time** (see
+``docs/oq-omni-vision-integration-2026-09-11.md`` for the full writeup).
+``RulePlanner`` never has to un-learn a completed step -- it generates
+every candidate fresh from ``world.misplaced()``/``world.ownership`` each
+call, so a done object simply never appears again. A model instead
+proposes from its own belief about the goal, carried turn to turn in its
+own context, which may lag the world by a step or more even when the
+model is behaving reasonably (its last proposal hasn't been confirmed
+successful yet when it drafts the next one). Three real, measured gaps
+this exposed, all now checked here rather than trusted to the model:
+
+1. A stale PICK on an object already held by an arm. The world layer
+   already refuses this correctly (raises: "<oid> is already held"), but
+   letting a stale proposal reach that refusal burns a full revision
+   every time it repeats -- measured 6 of 7 revisions spent this way in
+   one run. Now rejected here first, mirroring how ``RulePlanner``
+   ``fakes.py`` already "carries straight from the gripper instead" of
+   re-issuing a PICK it doesn't need.
+2. A MOVE (or other op) on a held object routed to the wrong arm because
+   the model omitted ``arm=`` or guessed. There is no ambiguity to
+   resolve here -- only the arm actually holding the object can act on
+   it -- so this is corrected to the true holder, not merely rejected.
+3. A PICK/MOVE on an object that has already reached its target zone.
+   Ownership has been released by then, so nothing else catches this;
+   left unchecked it becomes a real, wasted (or disruptive) re-attempt on
+   a finished object rather than a governed no-op.
+
+None of these are hypothetical: all three were found by actually running
+the composed pipeline (real render -> real OpenVINO detection -> real
+camera-geometry zone mapping -> this planner -> real MuJoCo IK execution)
+end to end for the first time, not by inspection. With all three fixed,
+that same composition produces a genuine real PICK+MOVE success for
+``cup_1`` end to end, then a clean, correctly-labeled fallback to the
+deterministic scheduled planner once the (deliberately static, for this
+test) mock reasoner's proposal is exhausted.
 """
 
 from __future__ import annotations
@@ -153,10 +190,64 @@ class OmniPlanner:
             if not det.authoritative:
                 rejected[label] = f"non-authoritative detection ({det.status.value})"
                 continue
+            # A model that hasn't (yet) noticed a prior PICK already
+            # succeeded will keep proposing it again on every replan --
+            # the world layer correctly rejects a re-pick of something
+            # already held (TransitionRejected: "<oid> is already held"),
+            # but with no check here that stale proposal burns a whole
+            # revision cycle every single time, exhausting max_revisions
+            # on a repeatedly-rejected no-op instead of ever reaching a
+            # step that would actually make progress. Measured directly:
+            # composing this planner with real FrameObserver+OpenVINO
+            # vision and a scripted model response reproduced exactly
+            # this -- 6 of 7 revisions spent on an already-held re-pick.
+            # RulePlanner already has the right answer for this
+            # (fakes.py: "carry straight from the gripper instead" --
+            # skip the PICK, not the whole action) -- mirror it here
+            # instead of trusting the model to always track state
+            # perfectly turn to turn.
+            if op == "PICK" and world.ownership.get(oid):
+                rejected[label] = f"{oid} is already held; PICK is redundant"
+                continue
+            # Third instance of the same class of gap: RulePlanner never
+            # proposes PICK/MOVE for an object outside world.misplaced()
+            # in the first place, because it generates candidates FROM
+            # that set -- it has nothing to un-learn. A model instead
+            # proposes from its own (possibly stale) belief about the
+            # goal, so once an object is genuinely placed a model that
+            # hasn't noticed yet will propose PICK/MOVE for it again --
+            # unlike the already-held case above, ownership has been
+            # released by then, so this passes every other check and
+            # becomes a REAL grasp/carry attempt on an object that has
+            # nothing left to do, wasting a revision on non-error work
+            # (or worse, disturbing a correctly-placed object). Measured
+            # directly: after a real PICK+MOVE genuinely placed cup_1
+            # (real vision, real IK, both succeeded), the next replan's
+            # static proposal re-picked it anyway and failed for real.
+            if op in {"PICK", "MOVE"} and not det.misplaced:
+                rejected[label] = f"{oid} is already at its target zone; {op} is redundant"
+                continue
             arm = prop.get("arm")
             if arm is not None and arm not in {"left", "right"}:
                 rejected[label] = f"invalid arm {arm!r}"
                 continue
+            # A second, distinct instance of the same class of gap: once an
+            # object is held, only the arm actually holding it can act on
+            # it -- there's no ambiguity to resolve, so a proposal for the
+            # WRONG arm (the model omitted `arm=`, defaulting elsewhere, or
+            # simply guessed) isn't a judgment call to reject, it's a fact
+            # to correct. Left uncorrected, the world layer rejects it
+            # every time ("<oid> is held by intel.right_arm, not
+            # intel.left_arm") and the run burns its whole budget on a
+            # step that can never succeed as proposed -- measured directly
+            # composing this planner with real vision: a MOVE with no
+            # `arm=` defaulted to "left" while cup_1 was held by the right
+            # arm, and 6 of 7 revisions were spent on that one mismatch.
+            holder = world.ownership.get(oid)
+            if holder:
+                holder_arm = "left" if "left" in holder else "right" if "right" in holder else None
+                if holder_arm and arm != holder_arm:
+                    arm = holder_arm
             args: dict[str, Any] = {"object": oid}
             if op == "MOVE":
                 to = prop.get("to", "")

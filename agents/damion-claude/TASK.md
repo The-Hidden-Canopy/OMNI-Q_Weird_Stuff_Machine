@@ -250,3 +250,53 @@ needs all 5 objects, and the grasp-controller thread has hit real,
 evidenced diminishing returns this session. Worth deciding explicitly
 whether to keep pushing all 5 objects or scope the demo narrative around
 what's actually proven, rather than leaving it implicit.
+
+## Extra: composed real vision + reasoning-driven planning for the first time
+
+User confirmed the real control path directly: the project sets the full
+table, with the Omni model and YOLO vision plugged in to actually control
+the arms — not a scoped-down cup_1-only demo. Given that, the highest-
+leverage thing I could verify was whether the two pieces that make that
+path real (`FrameObserver`+`OpenVINODetector` real vision,
+`OmniPlanner` reasoning-driven planning) actually work *together* — they'd
+each been proven independently, but nobody had run them on the same
+engine before.
+
+Exported the already-published thermal YOLO to OpenVINO (same model used
+for the earlier benchmark, real weights, real inference — not the future
+7-class fine-tune, same honest caveat as before) and composed:
+`build_intel_sim_engine()` + real `FrameObserver` as the observer + real
+`OmniPlanner` (mock reasoner, scripted `PLAN...END` — the actual IDA Omni
+body is still pretraining) as the planner. Running it surfaced three real
+integration bugs, all findable only by actually running the composition,
+not by reading the code:
+
+1. A stale re-PICK of an object already held — the world layer correctly
+   refuses it, but nothing upstream caught it, so it burned 6 of 7
+   revisions on a proposal that could never succeed.
+2. A MOVE routed to the wrong arm when the model didn't specify one —
+   rejected every time instead of corrected, same wasted-budget pattern.
+3. A redundant PICK/MOVE on an object already placed — ownership had
+   already released, so nothing caught this one either, and it became a
+   real wasted (or risky) re-grasp attempt on a finished object.
+
+All three are the same underlying gap: `RulePlanner` never proposes a
+stale step because it regenerates fresh from live world state every
+call; a model carries its own belief across turns instead, which can lag
+by a step even when behaving reasonably. Fixed all three in
+`OmniPlanner._validate` (mirroring `RulePlanner`'s own existing patterns,
+not inventing new policy), with regression tests for each.
+
+**Result**: the composed pipeline now produces a genuine real
+PICK+MOVE success for `cup_1` — real render, real OpenVINO inference,
+real zone mapping, real IK physics, all the way through — then a clean,
+correctly-labeled fallback to the deterministic scheduled planner once
+the scripted mock reasoner's proposal is exhausted. This is not a claim
+that table-setting works or that a trained model exists yet — it's
+verification that the *path* a real model and real vision will actually
+run through is sound, with the specific defects that would have wasted a
+real model's turns found and fixed before a real model exists to hit
+them. Full writeup: `docs/oq-omni-vision-integration-2026-09-11.md`,
+evidence at `evidence/benchmark_results/omni_vision_integration_2026-09-11/`.
+`BACKLOG.md` (OQ-028 row), `omni_planner.py`'s module docstring. 382/382
+tests green.
