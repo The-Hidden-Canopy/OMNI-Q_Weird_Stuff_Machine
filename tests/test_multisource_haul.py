@@ -191,3 +191,92 @@ def test_histogram_counts_target_classes():
     h = mh.histogram(rows)
     assert h["plate"] == 3 and h["drawer"] == 3
     assert all(v == 0 for k, v in h.items() if k not in ("plate", "drawer"))
+
+
+# ---------------------------------------------------------------------------
+# train-scale (v2): runtime category-id discovery, never hardcoded
+# ---------------------------------------------------------------------------
+
+def test_mapped_category_ids_reads_ids_from_json_not_hardcoded():
+    # ids deliberately NOT the real COCO/LVIS ids — mapping must go by NAME
+    coco = {"categories": [
+        {"id": 77, "name": "fork"}, {"id": 12, "name": "spoon"},
+        {"id": 5, "name": "bowl"}, {"id": 9, "name": "cup"},
+        {"id": 40, "name": "wine glass"}, {"id": 3, "name": "dining table"},
+    ]}
+    m = mh.mapped_category_ids(coco, "coco-2017")
+    assert m == {"cup": [9, 40], "fork": [77], "spoon": [12]}  # bowl/table dropped
+
+    lvis = {"categories": [
+        {"id": 913, "name": "plate"}, {"id": 240, "name": "saucer"},
+        {"id": 601, "name": "drawer"}, {"id": 88, "name": "place_mat"},
+    ]}
+    m = mh.mapped_category_ids(lvis, "lvis")
+    assert m == {"drawer": [601], "plate": [240, 913]}  # place_mat -> dropped
+
+
+def test_coco_train_style_json_maps_by_name():
+    # train2017 schema is the same instances format; ids must not be assumed
+    inst = {
+        "categories": [{"id": 44, "name": "knife"}, {"id": 45, "name": "fork"}],
+        "images": [{"id": 99, "width": 100, "height": 50}],
+        "annotations": [
+            {"image_id": 99, "category_id": 44, "bbox": [0, 0, 50, 25]},
+            {"image_id": 99, "category_id": 45, "bbox": [50, 25, 50, 25]},
+        ],
+    }
+    rows = mh.coco_target_rows(inst)[99]
+    assert [c for c, *_ in rows] == [cm.TARGET_INDEX["knife"], cm.TARGET_INDEX["fork"]]
+
+
+def test_lvis_image_name_prefers_file_name_then_coco_url():
+    assert mh.lvis_image_name({"file_name": "train2017/0000001.jpg"}) == "0000001.jpg"
+    assert mh.lvis_image_name(
+        {"coco_url": "http://images.cocodataset.org/train2017/000000000009.jpg"}
+    ) == "000000000009.jpg"
+    assert mh.lvis_image_name({}) == ""
+
+
+# ---------------------------------------------------------------------------
+# train-scale (v2): selective extraction plan
+# ---------------------------------------------------------------------------
+
+def test_plan_selective_extract_filters_wanted_members(tmp_path: Path):
+    z = tmp_path / "train2017.zip"
+    with mh.zipfile.ZipFile(z, "w") as zf:
+        for n in ("train2017/a.jpg", "train2017/b.jpg", "train2017/unwanted.jpg"):
+            zf.writestr(n, b"x")
+        zf.writestr("train2017/", b"")  # dir entry must not confuse matching
+    wanted = {"train2017/a.jpg": 1, "train2017/b.jpg": 2, "train2017/c.jpg": 3}
+    with mh.zipfile.ZipFile(z) as zf:
+        present, missing = mh.plan_selective_extract(zf.namelist(), wanted)
+    assert present == ["train2017/a.jpg", "train2017/b.jpg"]
+    assert missing == [3]
+
+
+# ---------------------------------------------------------------------------
+# train-scale (v2): cross-set dedup vs an existing dataset (synthetic hashes)
+# ---------------------------------------------------------------------------
+
+def test_partition_vs_reference_drops_exact_near_keeps_new():
+    ref = mh.Deduper(tolerance=6)
+    base = 0xFFFF_FF00_0000_0000
+    # seed "v1" reference images
+    for k, sha, dh in [("v1:a", "sha-a", base),
+                       ("v1:b", "sha-b", base ^ 0xFFFF_0000_0000_0000)]:
+        assert ref.add(k, sha, dh).status == "unique"
+
+    items = [
+        ("v2:new", "sha-new", 0x0000_00FF_0000_0000),   # far away -> keep
+        ("v2:exact", "sha-a", 0x1234),                  # same sha as v1:a -> drop
+        ("v2:near", "sha-near", base ^ 0x3F),           # hamming 6 vs v1:a -> drop
+    ]
+    kept, dropped = mh.partition_vs_reference(items, ref)
+    assert [k for k, *_ in kept] == ["v2:new"]
+    assert dict(dropped) == {"v2:exact": "v1:a", "v2:near": "v1:a"}
+
+    # a second candidate colliding with an already-kept v2 image is a
+    # within-set dup (matched key has no v1: prefix) — caller splits by prefix
+    kept2, dropped2 = mh.partition_vs_reference(
+        [("v2:twin", "sha-twin", 0x0000_00FF_0000_0001)], ref)  # hamming 1 vs v2:new
+    assert kept2 == [] and dropped2[0][1] == "v2:new"

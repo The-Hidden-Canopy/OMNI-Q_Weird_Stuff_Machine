@@ -26,6 +26,21 @@ note.  data/ is gitignored.
     python perception/multisource_haul.py --out data/table_yolo_v1 \
         --oi-cap 1500 --min-per-class 1500 --val-frac 0.10 --seed 7
 
+Train-scale mode (--source-set train) builds table_yolo_v2 from the SAME
+7-class vocabulary out of COCO train2017 (~19 GB zip, selectively extracted)
++ LVIS v1 train (images ARE COCO train images -> merged by image id), with
+optional cross-set dedup against an existing dataset dir (--dedup-vs) so v2
+adds genuinely new samples:
+
+    python perception/multisource_haul.py --source-set train \
+        --out data/table_yolo_v2 --dedup-vs data/table_yolo \
+        --cache data/_haul_cache_v2 --min-per-class 3000 --max-images 25000
+
+Disk safety (32 GB boxes): annotations first, then the needed-file list, then
+the big zip, then ONLY the wanted members are extracted (python zipfile),
+then the zip is deleted before hashing.  Projected extract size is estimated
+and refused past --max-extract-bytes.
+
 Portions derived from *The Hidden Canopy LLC* — [`IDA-TRAIN-V2`](https://github.com/The-Hidden-Canopy/IDA-TRAIN-V2). Used with permission.
 """
 
@@ -43,6 +58,7 @@ import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterable, Mapping
 
 import numpy as np
 import requests
@@ -56,11 +72,17 @@ from classmap import TARGET_CLASSES, TARGET_INDEX, remap  # noqa: E402
 # URLs (all verified reachable, no auth, at build time 2026-09-10)
 # ---------------------------------------------------------------------------
 URL_COCO_VAL_ZIP = "http://images.cocodataset.org/zips/val2017.zip"
+URL_COCO_TRAIN_ZIP = "http://images.cocodataset.org/zips/train2017.zip"
 URL_COCO_ANN_ZIP = "http://images.cocodataset.org/annotations/annotations_trainval2017.zip"
 URL_LVIS_VAL_ZIP = "https://dl.fbaipublicfiles.com/LVIS/lvis_v1_val.json.zip"
+URL_LVIS_TRAIN_ZIP = "https://dl.fbaipublicfiles.com/LVIS/lvis_v1_train.json.zip"
 URL_OI_BOXES_CSV = "https://storage.googleapis.com/openimages/v5/validation-annotations-bbox.csv"
 URL_OI_CLASSES_CSV = "https://storage.googleapis.com/openimages/v7/oidv7-class-descriptions-boxable.csv"
 URL_OI_IMAGE = "https://open-images-dataset.s3.amazonaws.com/validation/{image_id}.jpg"
+
+# rough mean JPEG size inside train2017.zip (~18 GB / 118,287 images); used to
+# REFUSE the download before it starts when the projected extract is too big.
+TRAIN_AVG_JPEG_BYTES = 180_000
 
 LICENSE_NOTE = (
     "Annotations: COCO (CC-BY-4.0), LVIS v1 (CC-BY-4.0), Open Images "
@@ -280,6 +302,65 @@ def histogram(rows_by_image: dict[str, list[YoloRow]]) -> dict[str, int]:
 
 
 # ---------------------------------------------------------------------------
+# Train-scale helpers (pure: no network, no I/O above the pure helpers)
+# ---------------------------------------------------------------------------
+
+def mapped_category_ids(instances: dict, source: str) -> dict[str, list[int]]:
+    """{target_class: [source category ids]} actually present in a COCO/LVIS
+    json.  Category ids are NEVER hardcoded — they are read from the file and
+    mapped by NAME via classmap, so a re-id'ed export still maps correctly."""
+    out: dict[str, list[int]] = {}
+    for c in instances.get("categories", []):
+        tgt = remap(source, c.get("name", ""))
+        if tgt:
+            out.setdefault(tgt, []).append(c["id"])
+    return {k: sorted(v) for k, v in out.items()}
+
+
+def lvis_image_name(img: dict) -> str:
+    """LVIS image file name: prefer file_name (v0.5), fall back to the last
+    path segment of coco_url (v1.0 train/val have no file_name field)."""
+    fn = img.get("file_name")
+    if fn:
+        return Path(str(fn)).name
+    return str(img.get("coco_url", "")).rstrip("/").rsplit("/", 1)[-1]
+
+
+def plan_selective_extract(names: Iterable[str], wanted: Mapping[str, int]
+                           ) -> tuple[list[str], list[int]]:
+    """Wanted zip-member -> image-id map vs the zip's namelist.
+
+    Returns (sorted present members, sorted missing image ids).  Feeding ONLY
+    the returned members to ZipFile.open is what keeps the 19 GB train2017
+    zip from being extracted wholesale onto a 32 GB disk.
+    """
+    have = set(names)
+    present = sorted(m for m in wanted if m in have)
+    missing = sorted(i for m, i in wanted.items() if m not in have)
+    return present, missing
+
+
+def partition_vs_reference(items: list[tuple[str, str, int]], ref: Deduper
+                           ) -> tuple[list[tuple[str, str, int]], list[tuple[str, str]]]:
+    """Classify (key, sha256, dhash) items against a pre-seeded Deduper.
+
+    ``ref`` is typically seeded with an existing dataset's images (keys
+    prefixed, e.g. ``v1:``).  Returns (kept, dropped); dropped pairs are
+    (item key, matched reference key) — match the prefix to tell cross-set
+    collisions apart from within-set ones.
+    """
+    kept: list[tuple[str, str, int]] = []
+    dropped: list[tuple[str, str]] = []
+    for key, sha, dh in items:
+        dec = ref.add(key, sha, dh)
+        if dec.status == "unique":
+            kept.append((key, sha, dh))
+        else:
+            dropped.append((key, dec.matched or ""))
+    return kept, dropped
+
+
+# ---------------------------------------------------------------------------
 # Network (kept thin; everything above is pure)
 # ---------------------------------------------------------------------------
 
@@ -310,6 +391,19 @@ def sha256_of(path: Path) -> str:
     return h.hexdigest()
 
 
+def seed_deduper_from_dataset(d: Deduper, data_dir: Path, prefix: str = "v1:"
+                              ) -> int:
+    """Hash every image of an existing YOLO dataset dir into ``d`` so new
+    candidates can be dropped when they duplicate it.  Returns image count."""
+    imgs = sorted((data_dir / "images").glob("*/*.jpg"))
+    for p in imgs:
+        sha = sha256_of(p)
+        with Image.open(p) as im:
+            dh = dhash64(im)
+        d.add(f"{prefix}{p.name}", sha, dh)
+    return len(imgs)
+
+
 # ---------------------------------------------------------------------------
 # The haul
 # ---------------------------------------------------------------------------
@@ -338,9 +432,168 @@ def _fresh_dir(base: Path) -> Path:
     return cand
 
 
+def _persist(pool: dict[str, KeptImage], args: argparse.Namespace,
+             rng: random.Random, manifest: dict, t_start: float) -> Path:
+    """Write the YOLO tree + data.yaml + manifest.json + evidence receipt.
+
+    Shared by the val (v1) and train (v2) pipelines.  data.yaml pins an
+    ABSOLUTE path (the repo's ultralytics settings point outside it), same
+    convention as the hand-fixed v1 yaml.
+    """
+    out = _fresh_dir(args.out)
+    n_train = n_val = 0
+    idx = 0
+    per_image: dict[str, dict] = {}
+    for stem in sorted(pool):
+        k = pool[stem]
+        if not k.rows:
+            continue
+        split = "val" if rng.random() < args.val_frac else "train"
+        out_img = out / "images" / split / f"{split}_{idx:07d}.jpg"
+        out_lbl = out / "labels" / split / f"{split}_{idx:07d}.txt"
+        out_img.parent.mkdir(parents=True, exist_ok=True)
+        out_lbl.parent.mkdir(parents=True, exist_ok=True)
+        if k.src_path is not None:
+            try:
+                out_img.hardlink_to(k.src_path)
+            except OSError:
+                out_img.write_bytes(k.src_path.read_bytes())
+        write_yolo_label(out_lbl, k.rows)
+        per_image[out_img.name] = {"source": k.source, "sha256": k.sha256}
+        n_train += split == "train"
+        n_val += split == "val"
+        idx += 1
+
+    (out / "data.yaml").write_text(
+        f"# OQ-008 {out.name} — generated by perception/multisource_haul.py\n"
+        f"path: {out.resolve()}  # absolute: pin to this repo (env ultralytics settings point outside)\n"
+        "train: images/train\n"
+        "val: images/val\n\n"
+        "names:\n"
+        + "".join(f"  {i}: {c}\n" for i, c in enumerate(TARGET_CLASSES)),
+        encoding="utf-8",
+    )
+
+    manifest["output"] = str(out)
+    manifest["final_unique_images"] = len(per_image)
+    manifest["split"] = {"train": n_train, "val": n_val}
+    manifest["class_boxes_final"] = histogram({k: v.rows for k, v in pool.items() if v.rows})
+    manifest["source_per_image"] = per_image
+    manifest["elapsed_seconds"] = round(time.time() - t_start, 1)
+    (out / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    print(f"\ndataset at {out}")
+    print(f"unique images: {len(per_image)}  (train {n_train} / val {n_val})")
+    print(f"final class boxes: {manifest['class_boxes_final']}")
+    thin = [c for c in TARGET_CLASSES[:-1] if manifest["class_boxes_final"][c] < args.min_per_class]
+    if thin:
+        print(f"below the {args.min_per_class}/class target: {thin} — scale-up path is in the receipt")
+
+    receipt = _write_receipt(out, manifest, args)
+    if receipt:
+        print(f"receipt at {receipt}", flush=True)
+    return out
+
+
+def _write_receipt(out: Path, manifest: dict, args: argparse.Namespace) -> Path | None:
+    """Copy the manifest + a README summary into evidence/datasets/ (the v1
+    receipt format).  Returns None where no evidence/ dir exists (e.g. the
+    remote build box) — the dataset-dir manifest.json is still complete."""
+    ev = Path("evidence/datasets")
+    if not ev.is_dir():
+        return None
+    stamp = datetime.now().strftime("%Y%m%d")
+    dest = ev / f"{out.name}_{stamp}"
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    src = manifest.get("sources", {})
+    offered = manifest.get("class_boxes_offered", {})
+    final = manifest.get("class_boxes_final", {})
+    split = manifest.get("split", {})
+    dedup = manifest.get("dedup", {})
+
+    def _row(source: str, label: str, split: str) -> str:
+        s = src.get(source, {})
+        if s.get("status") != "ok":
+            return f"| {label} | {split} | {s.get('status', '?')} | — | — |\n"
+        boxes = ", ".join(f"{c} {n}" for c, n in (offered.get(source) or {}).items() if n)
+        return (f"| {label} | {split} | ok | {s.get('images_kept_unique', s.get('images_with_target_boxes', '—'))} "
+                f"| {boxes} |\n")
+
+    members = (src.get("coco-2017", {}).get("selective_extract") or {})
+    n_members = members.get("members_extracted", split.get("train", 0) + split.get("val", 0))
+
+    cross = dedup.get("cross_set_vs_v1") or {}
+    md = f"""# {out.name} — train-scale multi-source haul ({stamp})
+
+**Status: haul complete.** Same 7-class vocabulary as v1
+(`plate cup fork spoon knife napkin drawer`), YOLOv5 layout, built by
+`perception/multisource_haul.py --source-set train` (no FiftyOne, no auth —
+direct HTTP).  Copy of `manifest.json` from the dataset dir sits next to this
+file.
+
+## What was pulled
+
+| Source | Split | Status | Images kept | Boxes offered |
+|---|---|---|---|---|
+""" + _row("coco-2017", "COCO 2017", src.get("coco-2017", {}).get("split", "train2017")) \
+    + _row("lvis", "LVIS v1", src.get("lvis", {}).get("split", "train")) \
+    + _row("open-images", "Open Images", "v5 validation") + f"""
+- COCO category ids (mapped by NAME, read from the json, never hardcoded):
+  {dedup.get('coco_category_map', {})}
+- LVIS category ids: {dedup.get('lvis_category_map', {})}
+- Selection: greedy per-class deficit order (min-per-class {args.min_per_class},
+  seed {manifest.get('seed')}), capped at {args.max_images or 'no cap'} images.
+- train2017.zip (~19 GB) downloaded whole but ONLY the {n_members}
+  needed members were extracted (python zipfile, namelist-filtered); the zip
+  was deleted immediately after extraction.  Projected extract was estimated
+  and refused past {args.max_extract_bytes / 1e9:.0f} GB before downloading.
+
+## Dedup (measured, owner requirement)
+
+- Exact: sha256 of image bytes.  Near: 64-bit dHash, Hamming <= {NEAR_DUP_TOLERANCE}.
+- Within-source: {dedup.get('within_source', {})}
+- Cross-set vs v1 (--dedup-vs {cross.get('reference_dir', '—')}): {cross.get('dropped', 0)}
+  of {cross.get('candidates', 0)} v2 candidates dropped ({cross.get('reference_images', 0)}
+  v1 reference images hashed).
+
+## Final numbers
+
+- **{manifest.get('final_unique_images')} unique images** — train {split.get('train')} / val {split.get('val')}
+  (val-frac {args.val_frac}, seed {manifest.get('seed')} — a DIFFERENT seed than v1's 7;
+  v2 is a fresh sample from a much larger pool, val images are NOT guaranteed
+  disjoint from v1's val).
+- Class boxes: {" · ".join(f"{c} {n}" for c, n in final.items())}.
+- Elapsed: {manifest.get('elapsed_seconds')} s.
+
+## Usage
+
+```bash
+python perception/finetune.py --data {str(out).replace(chr(92), '/')}/data.yaml ...
+```
+
+`data/` is gitignored; reproducible by re-running the command in the manifest's
+`args`.
+
+## License
+
+{LICENSE_NOTE}
+
+Portions derived from *The Hidden Canopy LLC* — [`IDA-TRAIN-V2`](https://github.com/The-Hidden-Canopy/IDA-TRAIN-V2). Used with permission.
+"""
+    (dest / "README.md").write_text(md, encoding="utf-8")
+    return dest
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", type=Path, default=Path("data/table_yolo_v1"))
+    ap.add_argument("--source-set", choices=["val", "train"], default="val",
+                    help="'val' (default) = original v1 haul: COCO/LVIS val + "
+                         "Open Images. 'train' = v2: COCO train2017 + LVIS v1 "
+                         "train, selective extraction, optional --dedup-vs.")
+    ap.add_argument("--out", type=Path, default=None,
+                    help="default: data/table_yolo_v1 (val) / data/table_yolo_v2 (train)")
     ap.add_argument("--cache", type=Path, default=Path("data/_haul_cache"))
     ap.add_argument("--coco-cap", type=int, default=None,
                     help="max COCO val images to keep (default: all with target boxes)")
@@ -349,10 +602,36 @@ def main() -> None:
     ap.add_argument("--min-per-class", type=int, default=1500,
                     help="greedy coverage target for the 6 tableware classes")
     ap.add_argument("--val-frac", type=float, default=0.10)
-    ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--seed", type=int, default=None,
+                    help="default: 7 (val, unchanged) / 13 (train)")
     ap.add_argument("--budget-minutes", type=float, default=22.0,
                     help="wall-clock cap on the whole haul's download phase")
+    # train-scale (v2) options
+    ap.add_argument("--dedup-vs", type=Path, default=None,
+                    help="existing YOLO dataset dir (e.g. data/table_yolo): drop "
+                         "v2 images that exact/near-duplicate it (sha256 + dHash)")
+    ap.add_argument("--max-images", type=int, default=None,
+                    help="train: cap on the union COCO+LVIS train image selection")
+    ap.add_argument("--max-extract-bytes", type=float, default=24e9,
+                    help="train: refuse the big-zip download when the projected "
+                         "selective extract exceeds this many bytes")
+    ap.add_argument("--zip-tmp", type=Path, default=None,
+                    help="train: stage train2017.zip in this dir (e.g. /dev/shm) "
+                         "instead of --cache; the zip is always deleted after "
+                         "selective extraction either way")
     args = ap.parse_args()
+    if args.out is None:
+        args.out = Path("data/table_yolo_v2" if args.source_set == "train"
+                        else "data/table_yolo_v1")
+    if args.seed is None:
+        args.seed = 13 if args.source_set == "train" else 7
+    if args.source_set == "train":
+        _main_train(args)
+    else:
+        _main_val(args)
+
+
+def _main_val(args: argparse.Namespace) -> None:
 
     t_start = time.time()
     rng = random.Random(args.seed)
@@ -541,41 +820,6 @@ def main() -> None:
             print(f"  OI skipped: {oi_manifest['reason']}", flush=True)
     manifest["sources"]["open-images"] = oi_manifest
 
-    # ---- 5. Persist -------------------------------------------------------
-    out = _fresh_dir(args.out)
-    n_train = n_val = 0
-    idx = 0
-    per_image: dict[str, dict] = {}
-    for stem in sorted(pool):
-        k = pool[stem]
-        if not k.rows:
-            continue
-        split = "val" if rng.random() < args.val_frac else "train"
-        out_img = out / "images" / split / f"{split}_{idx:07d}.jpg"
-        out_lbl = out / "labels" / split / f"{split}_{idx:07d}.txt"
-        out_img.parent.mkdir(parents=True, exist_ok=True)
-        out_lbl.parent.mkdir(parents=True, exist_ok=True)
-        if k.src_path is not None:
-            try:
-                out_img.hardlink_to(k.src_path)
-            except OSError:
-                out_img.write_bytes(k.src_path.read_bytes())
-        write_yolo_label(out_lbl, k.rows)
-        per_image[out_img.name] = {"source": k.source, "sha256": k.sha256}
-        n_train += split == "train"
-        n_val += split == "val"
-        idx += 1
-
-    (out / "data.yaml").write_text(
-        "# OQ-008 table_yolo_v1 — generated by perception/multisource_haul.py\n"
-        "path: .\n"
-        "train: images/train\n"
-        "val: images/val\n\n"
-        "names:\n"
-        + "".join(f"  {i}: {c}\n" for i, c in enumerate(TARGET_CLASSES)),
-        encoding="utf-8",
-    )
-
     manifest["dedup"] = {
         "method_exact": "sha256 of image bytes",
         "method_near": f"64-bit dHash, Hamming <= {NEAR_DUP_TOLERANCE}",
@@ -591,25 +835,223 @@ def main() -> None:
             },
         },
     }
-    manifest["output"] = str(out)
     manifest["class_boxes_offered"] = {
         "coco-2017": histogram(coco_rows),
         "lvis": histogram(lvis_rows),
         "open-images": oi_manifest.get("class_boxes_offered", {}),
     }
-    manifest["final_unique_images"] = len(per_image)
-    manifest["split"] = {"train": n_train, "val": n_val}
-    manifest["class_boxes_final"] = histogram({k: v.rows for k, v in pool.items() if v.rows})
-    manifest["source_per_image"] = per_image
-    manifest["elapsed_seconds"] = round(time.time() - t_start, 1)
-    (out / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
-    print(f"\ndataset at {out}")
-    print(f"unique images: {len(per_image)}  (train {n_train} / val {n_val})")
-    print(f"final class boxes: {manifest['class_boxes_final']}")
-    thin = [c for c in TARGET_CLASSES[:-1] if manifest["class_boxes_final"][c] < args.min_per_class]
-    if thin:
-        print(f"below the {args.min_per_class}/class target: {thin} — scale-up path is in the receipt")
+    # ---- 5. Persist -------------------------------------------------------
+    _persist(pool, args, rng, manifest, t_start)
+
+
+def _main_train(args: argparse.Namespace) -> None:
+    """Train-scale haul (v2): COCO train2017 + LVIS v1 train.
+
+    Disk-safe order: annotations -> needed-file list (+ size estimate, hard
+    cap) -> big zip -> selective extraction ONLY -> delete zip -> hash +
+    cross-set dedup vs --dedup-vs -> persist.
+    """
+    t_start = time.time()
+    rng = random.Random(args.seed)
+    cache = args.cache
+    manifest: dict = {
+        "created_utc": datetime.now(timezone.utc).isoformat(),
+        "seed": args.seed,
+        "args": {k: str(v) for k, v in vars(args).items()},
+        "sources": {},
+        "dedup": {},
+        "license_note": LICENSE_NOTE,
+    }
+
+    # ---- 1. COCO train annotations ----------------------------------------
+    print("== COCO 2017 train annotations", flush=True)
+    ann_zip = cache / "annotations_trainval2017.zip"
+    if not ann_zip.exists():
+        download(URL_COCO_ANN_ZIP, ann_zip, "coco-annotations")
+    with zipfile.ZipFile(ann_zip) as zf:
+        instances = json.loads(zf.read("annotations/instances_train2017.json"))
+    coco_rows = coco_target_rows(instances)
+    coco_file = {im["id"]: im["file_name"] for im in instances["images"]}
+    coco_catmap = mapped_category_ids(instances, "coco-2017")
+    if not any(coco_catmap.get(c) for c in ("cup", "fork", "spoon", "knife")):
+        raise SystemExit("no COCO train categories mapped to targets — schema changed?")
+    print(f"  {len(coco_rows)}/{len(instances['images'])} train images carry target boxes; "
+          f"category ids {coco_catmap}", flush=True)
+
+    # ---- 2. LVIS v1 train (images ARE COCO train images -> merge) ---------
+    print("== LVIS v1 train", flush=True)
+    lvis_zip = cache / "lvis_v1_train.json.zip"
+    if not lvis_zip.exists():
+        download(URL_LVIS_TRAIN_ZIP, lvis_zip, "lvis-train")
+    with zipfile.ZipFile(lvis_zip) as zf:
+        lvis = json.loads(zf.read("lvis_v1_train.json"))
+    lvis_rows = lvis_target_rows(lvis)
+    lvis_catmap = mapped_category_ids(lvis, "lvis")
+    if not any(lvis_catmap.get(c) for c in TARGET_CLASSES):
+        raise SystemExit("no LVIS train categories mapped to targets — schema changed?")
+    lvis_outside_coco = sorted(i for i in lvis_rows if i not in coco_file)
+    if lvis_outside_coco:
+        print(f"  WARNING: {len(lvis_outside_coco)} LVIS-train target images have no "
+              f"COCO train2017 id — skipped (no per-image fallback in train mode)", flush=True)
+    print(f"  {len(lvis_rows)} LVIS train images carry target boxes; category ids {lvis_catmap}",
+          flush=True)
+
+    # ---- 3. Union + greedy deficit order + size estimate ------------------
+    merged: dict[int, list[YoloRow]] = {i: list(r) for i, r in coco_rows.items()}
+    lvis_only = 0
+    for iid, rows in lvis_rows.items():
+        if iid not in coco_file:
+            continue
+        if iid in merged:
+            merged[iid].extend(rows)
+        else:
+            merged[iid] = list(rows)
+            lvis_only += 1
+    print(f"  union: {len(merged)} COCO-train images needed "
+          f"({len(coco_rows)} COCO-annotated + {lvis_only} LVIS-only)", flush=True)
+    candidates = {str(i): r for i, r in merged.items()}
+    order = order_oi_candidates(candidates, {c: 0 for c in TARGET_CLASSES},
+                                args.min_per_class, args.seed)
+    if args.max_images:
+        order = order[: args.max_images]
+    wanted = {f"train2017/{coco_file[int(s)]}": int(s) for s in order}
+    est_bytes = len(wanted) * TRAIN_AVG_JPEG_BYTES
+    print(f"  selected {len(wanted)} images (projected extract ~{est_bytes / 1e9:.1f} GB "
+          f"at {TRAIN_AVG_JPEG_BYTES / 1e3:.0f} KB/img avg)", flush=True)
+    if est_bytes > args.max_extract_bytes:
+        raise SystemExit(
+            f"projected selective extract {est_bytes / 1e9:.1f} GB exceeds "
+            f"--max-extract-bytes {args.max_extract_bytes / 1e9:.0f} GB — "
+            f"raise --max-images (or --max-extract-bytes if the disk allows)")
+
+    # ---- 4. Big zip -> selective extraction -> immediate deletion ---------
+    zip_dir = args.zip_tmp or cache
+    zip_dir.mkdir(parents=True, exist_ok=True)
+    train_zip = zip_dir / "train2017.zip"
+    if not train_zip.exists():
+        download(URL_COCO_TRAIN_ZIP, train_zip, "coco-train2017")
+    img_dir = cache / "coco_train_extract"
+    img_dir.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(train_zip) as zf:
+        names = set(zf.namelist())
+        present, missing = plan_selective_extract(names, wanted)
+        actual_bytes = sum(zf.getinfo(m).file_size for m in present)
+        print(f"  extracting {len(present)} members (~{actual_bytes / 1e9:.1f} GB "
+              f"uncompressed) of train2017.zip; {len(missing)} annotated ids absent",
+              flush=True)
+        for n, m in enumerate(present):
+            dst = img_dir / Path(m).name
+            if not dst.exists():
+                with zf.open(m) as src, dst.open("wb") as out:
+                    while True:
+                        blk = src.read(1 << 20)
+                        if not blk:
+                            break
+                        out.write(blk)
+            if n and n % 10000 == 0:
+                print(f"    extract {n}/{len(present)} ({time.time() - t_start:.0f}s)",
+                      flush=True)
+    train_zip.unlink()  # free the ~19 GB BEFORE hashing; disk-safety requirement
+    print(f"  train2017.zip deleted after selective extraction "
+          f"({time.time() - t_start:.0f}s)", flush=True)
+    missing_ids = set(missing)
+    if missing:
+        print(f"  WARNING: {len(missing)} selected images missing from the zip",
+              flush=True)
+
+    # ---- 5. Hash pool, cross-set dedup vs v1, within-v2 dedup -------------
+    print("== hashing COCO+LVIS train pool", flush=True)
+    deduper = Deduper()
+    ref_n = 0
+    if args.dedup_vs:
+        print(f"  seeding reference hashes from {args.dedup_vs}", flush=True)
+        ref_n = seed_deduper_from_dataset(deduper, args.dedup_vs)
+        print(f"  {ref_n} reference images hashed", flush=True)
+    pool: dict[str, KeptImage] = {}
+    dropped_vs_v1: list[str] = []
+    within_v2 = {"exact": 0, "near": 0}
+    kept_ids = sorted(int(s) for s in order if int(s) not in missing_ids)
+    for n, iid in enumerate(kept_ids):
+        p = img_dir / coco_file[iid]
+        if not p.exists():
+            missing_ids.add(iid)
+            continue
+        key = f"v2:{iid:012d}"
+        sha = sha256_of(p)
+        with Image.open(p) as im:
+            dh = dhash64(im)
+        dec = deduper.add(key, sha, dh)
+        if dec.status != "unique":
+            if dec.matched and dec.matched.startswith("v1:"):
+                dropped_vs_v1.append(key)
+            else:
+                within_v2[dec.status.split("_")[0]] += 1
+            continue
+        pool[key] = KeptImage(key=key, source="coco+lvis", rows=merged[iid],
+                              src_path=p, sha256=sha, dhash=dh)
+        if n and n % 10000 == 0:
+            print(f"    hash {n}/{len(kept_ids)} ({time.time() - t_start:.0f}s)",
+                  flush=True)
+    counts = histogram({k: v.rows for k, v in pool.items()})
+    print(f"  {len(pool)} unique v2 images "
+          f"({len(dropped_vs_v1)} dropped as dups of v1, "
+          f"{sum(within_v2.values())} within-v2 dups); boxes {counts}", flush=True)
+
+    # ---- 6. Manifest + persist --------------------------------------------
+    manifest["sources"]["coco-2017"] = {
+        "status": "ok", "split": "train2017",
+        "annotations": "instances_train2017.json (annotations_trainval2017.zip)",
+        "train_images_total": len(instances["images"]),
+        "images_with_target_boxes": len(coco_rows),
+        "category_ids_mapped_by_name": coco_catmap,
+        "url_images": URL_COCO_TRAIN_ZIP, "url_annotations": URL_COCO_ANN_ZIP,
+        "selective_extract": {
+            "members_extracted": len(present),
+            "members_missing": len(missing),
+            "uncompressed_bytes": actual_bytes,
+            "zip_deleted_after_extraction": True,
+        },
+    }
+    manifest["sources"]["lvis"] = {
+        "status": "ok", "version": "v1", "split": "train",
+        "url_annotations": URL_LVIS_TRAIN_ZIP,
+        "images_with_target_boxes": len(lvis_rows),
+        "images_merged_into_coco_by_id": len(lvis_rows) - lvis_only - len(lvis_outside_coco),
+        "images_lvis_only": lvis_only,
+        "images_outside_coco_skipped": len(lvis_outside_coco),
+        "category_ids_mapped_by_name": lvis_catmap,
+        "note": "LVIS v1 train images ARE COCO train2017 images; merged by "
+                "image id, no per-image downloads needed (unlike v1's val flow).",
+    }
+    manifest["sources"]["open-images"] = {
+        "status": "skipped",
+        "reason": "train source-set: plate/napkin/drawer density comes from "
+                  "LVIS train; OI is the val-split-only source in this hauler.",
+    }
+    manifest["sources"]["objects365"] = {
+        "status": "skipped",
+        "reason": "v1 requires registration; no public no-auth download URL.",
+    }
+    manifest["dedup"] = {
+        "method_exact": "sha256 of image bytes",
+        "method_near": f"64-bit dHash, Hamming <= {NEAR_DUP_TOLERANCE}",
+        "within_source": {"v2": within_v2},
+        "cross_set_vs_v1": {
+            "reference_dir": str(args.dedup_vs) if args.dedup_vs else None,
+            "reference_images": ref_n,
+            "candidates": len(kept_ids),
+            "dropped": len(dropped_vs_v1),
+            "dropped_keys_head": dropped_vs_v1[:20],
+        },
+        "coco_category_map": coco_catmap,
+        "lvis_category_map": lvis_catmap,
+    }
+    manifest["class_boxes_offered"] = {
+        "coco-2017": histogram(coco_rows),
+        "lvis": histogram(lvis_rows),
+    }
+    _persist(pool, args, rng, manifest, t_start)
 
 
 def _haul_open_images(args, cache: Path, pool: dict[str, KeptImage],

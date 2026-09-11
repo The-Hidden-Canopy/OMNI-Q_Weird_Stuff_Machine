@@ -12,7 +12,7 @@ the QAIRT/Qualcomm export path is bonus, not required. Plan:
 | step | script | what |
 |------|--------|------|
 | 1 | `build_dataset.py` | pull tableware detections from Open Images V7 / COCO / LVIS via FiftyOne, remap every source label to the 7 classes (`classmap.py`), export YOLOv5 layout |
-| 1a | `multisource_haul.py` | **no-FiftyOne alternative to step 1** — same classmap, direct-HTTP pulls (COCO val2017 + LVIS val + Open Images v5 validation via CVDF S3), sha256 + dHash dedup with *measured* dup rates in the manifest. First haul 2026-09-10: 2,723 unique images → `data/table_yolo/` (see `evidence/datasets/table_yolo_v1_20260910/`); `perception/data.yaml` consumes it unchanged |
+| 1a | `multisource_haul.py` | **no-FiftyOne alternative to step 1** — same classmap, direct-HTTP pulls (COCO val2017 + LVIS val + Open Images v5 validation via CVDF S3), sha256 + dHash dedup with *measured* dup rates in the manifest. First haul 2026-09-10: 2,723 unique images → `data/table_yolo/` (see `evidence/datasets/table_yolo_v1_20260910/`); `perception/data.yaml` consumes it unchanged. Train-scale mode `--source-set train` builds **table_yolo_v2** from COCO train2017 (selective zip extraction, zip deleted before hashing) + LVIS v1 train (images ARE COCO train images → merged by id), with `--dedup-vs` cross-set dedup against v1; see `evidence/datasets/table_yolo_v2_*` |
 | 2 | `synth_ingest.py` | fold in MuJoCo-rendered frames (or Objects365 / Roboflow YOLO-txt) — targets `drawer` and the deploy-camera slice where real data is thin |
 | 3 | `finetune.py` | Ultralytics fine-tune from the thermal `.pt` (7-class head auto-init), few epochs, early-stop on val mAP50 |
 | 4 | `export.py` | `best.pt → ONNX → OpenVINO IR` (Intel) and `ONNX → QAIRT/QNN` (Qualcomm) |
