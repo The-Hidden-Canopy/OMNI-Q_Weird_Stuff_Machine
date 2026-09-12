@@ -8,6 +8,14 @@ Most robotic demos bind a model to a workflow. Omni Q binds an objective to
 available capabilities and constructs the workflow at runtime — and rebuilds it
 when a constraint changes, a capability disappears, or an attempt fails.
 
+## Public Hub
+
+OMNI-Q is a LabLab hackathon project from The Hidden Canopy.
+
+- [OMNI-Q public software directory](https://thehiddencanopy.com/consumer-research-software.html)
+- [OMNI-Q release notes](https://thehiddencanopy.com/updates.html#release-notes)
+- [Support OMNI-Q Weird Stuff Machine](https://thehiddencanopy.com/flight-deck.html#support)
+
 ## Why
 
 Fixed AI workflows break the moment the world moves. Omni Q treats each device,
