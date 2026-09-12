@@ -399,6 +399,37 @@ alongside the YOLO perception node.
   (seed perturbation, annealed damping, approach-bearing variation, full
   free-DOF search). See `intel_sim.py`'s module docstring, "Fifth" and
   "Eighth" updates.
+- [x] **The Intel challenge hosts clarified "10 seeds" as ≥10 non-trivial
+  environment variations (lighting, object location, prompt phrasing,
+  object color/texture -- entrant picks axes/count), and every bundle
+  through v8 only varied one narrow axis (±3mm/±0.08rad object
+  position/yaw).** `IntelSceneConfig` gained `color_jitter` (tableware
+  rgba) and `light_diffuse_jitter`/`light_angle_jitter_rad` (key-light
+  intensity/incidence angle) -- both verified physics-inert, never
+  touching contype/conaffinity/friction/mass/solref/solimp.
+  `run_intel_table_evaluation_report` now cycles 10 distinct, pre-
+  verified instruction phrasings (`TABLE_SETTING_PHRASINGS`) instead of
+  the literal string "set the table" ten times -- each phrasing was
+  checked against `RulePlanner`'s keyword gate and a live run producing
+  an identical op sequence *before* being added, so this axis can't
+  silently degrade to the "unrecognised goal; observe only" fallback and
+  corrupt the evidence. Re-ran across all four combined axes
+  (`evidence/benchmark_results/intel_table_eval_2026-09-12-v9/`):
+  `cup_1`/`plate_1` both still hold 10/10 -- the first time the seed-bias
+  fix above was checked against lighting/color variation, not just
+  position jitter. **New finding, made visible by `plate_1` now
+  succeeding in every trial instead of 1/10:** it holds 10/10 but places
+  0/10 -- every `MOVE` rejected on `"unsafe carry separation"` (~0.121m
+  measured against `LEGACY_MAX_CARRY_OFFSET_M = 0.100`). Root cause
+  identified, not yet fixed: `plate_1` is deliberately grasped at its rim
+  (`OBJECT_GRASP_OFFSET["plate_1"] = 0.078`), and the carry-safety
+  check's single global bound was evidently tuned around `cup_1`'s
+  centered grasp, not a legitimately-necessary large-object rim offset --
+  a real follow-up candidate (per-object-aware bound, same pattern as
+  `OBJECT_GRASP_OFFSET`/`OBJECT_HALF_HEIGHT`), deliberately not attempted
+  in the same pass since a safety-bound change deserves its own
+  scrutiny. See `intel_sim.py`'s module docstring, "Ninth update", and
+  the v9 evidence README. `BACKLOG.md` (OQ-010) updated.
 
 ### Legacy table-setting follow-up (2026-09-10)
 

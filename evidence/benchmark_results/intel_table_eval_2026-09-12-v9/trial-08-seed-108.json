@@ -1,0 +1,906 @@
+{
+  "actions": [
+    {
+      "arm": "left",
+      "device": "intel.left_arm",
+      "op": "OPEN",
+      "result": {
+        "args": {
+          "object": "drawer"
+        },
+        "before_revision": 1,
+        "controller_steps": 420,
+        "op": "OPEN",
+        "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose",
+        "sim_time": 0.84,
+        "simulation_mode": "simulation-scripted-manipulation",
+        "state_revision": 2
+      },
+      "state": "done",
+      "step": "open_drawer"
+    },
+    {
+      "arm": "right",
+      "device": "intel.right_arm",
+      "op": "PICK",
+      "result": {
+        "before_revision": 2,
+        "controller_steps": 5076,
+        "grasp": "contact",
+        "grasped": "cup_1",
+        "held": true,
+        "lift_height_m": 0.0243,
+        "orientation": {
+          "clearance": {
+            "orientation_error_rad": 0.0,
+            "orientation_satisfied": true,
+            "position_error_m": 0.009957
+          },
+          "lift": {
+            "position_error_m": 0.009993
+          },
+          "pinch": {
+            "orientation_error_rad": 0.110104,
+            "orientation_satisfied": false,
+            "position_error_m": 0.058493
+          },
+          "roll_hint_rad": -1.600416
+        },
+        "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose",
+        "reach_error_m": 0.039081,
+        "requested_pick": "cup_1",
+        "safety": {
+          "approach": {
+            "max_contact_force_n": 0.281199,
+            "min_joint_margin_rad": 0.087907,
+            "other_pad_clearance_m": 0.408842,
+            "reason": null,
+            "relative_object_pad_distance_m": 0.0,
+            "safe": true
+          }
+        },
+        "sim_time": 10.152,
+        "simulation_mode": "simulation-scripted-manipulation",
+        "state_revision": 3
+      },
+      "state": "done",
+      "step": "pick_cup_1"
+    },
+    {
+      "arm": "right",
+      "device": "intel.right_arm",
+      "op": "MOVE",
+      "result": {
+        "before_revision": 3,
+        "controller_steps": 6510,
+        "grasp": "contact",
+        "moved": "cup_1",
+        "orientation": {
+          "place": {
+            "orientation_error_rad": 0.140073,
+            "orientation_satisfied": true,
+            "position_error_m": 0.011868
+          },
+          "retract": {
+            "position_error_m": 0.011743
+          },
+          "roll_hint_rad": -1.601338
+        },
+        "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose",
+        "placed": true,
+        "placement_error_m": 0.0375,
+        "reach_error_m": 0.011868,
+        "reason": null,
+        "requested_move": "cup_1",
+        "safety": {
+          "after": {
+            "max_contact_force_n": 0.282443,
+            "min_joint_margin_rad": 0.031605,
+            "other_pad_clearance_m": null,
+            "reason": null,
+            "relative_object_pad_distance_m": 0.0,
+            "safe": true
+          },
+          "before": {
+            "max_contact_force_n": 9.594128,
+            "min_joint_margin_rad": 0.418733,
+            "other_pad_clearance_m": 0.409844,
+            "reason": null,
+            "relative_object_pad_distance_m": 0.044241,
+            "safe": true
+          }
+        },
+        "settle": {
+          "position": [
+            0.12547,
+            0.034581,
+            0.049679
+          ],
+          "settle_drift_m": 4e-06,
+          "settle_speed_mps": 0.000236,
+          "settle_steps": 80,
+          "settled": true,
+          "table_supported": true
+        },
+        "sim_time": 13.02,
+        "simulation_mode": "simulation-scripted-manipulation",
+        "state_revision": 4,
+        "to": "upper_right"
+      },
+      "state": "done",
+      "step": "move_cup_1"
+    },
+    {
+      "arm": "left",
+      "device": "intel.left_arm",
+      "op": "PICK",
+      "result": {
+        "before_revision": 4,
+        "controller_steps": 6510,
+        "grasp": "contact",
+        "grasped": "napkin_1",
+        "held": false,
+        "lift_height_m": -0.0015,
+        "orientation": {
+          "clearance": {
+            "orientation_error_rad": 0.04556,
+            "orientation_satisfied": false,
+            "position_error_m": 0.041646
+          },
+          "lift": {
+            "position_error_m": 0.04587
+          },
+          "pinch": {
+            "orientation_error_rad": 0.05455,
+            "orientation_satisfied": false,
+            "position_error_m": 0.057056
+          },
+          "roll_hint_rad": 1.65
+        },
+        "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose",
+        "reach_error_m": 0.056009,
+        "requested_pick": "napkin_1",
+        "safety": {
+          "approach": {
+            "max_contact_force_n": 0.282443,
+            "min_joint_margin_rad": 0.090027,
+            "other_pad_clearance_m": 0.382032,
+            "reason": null,
+            "relative_object_pad_distance_m": 0.0,
+            "safe": true
+          }
+        },
+        "sim_time": 13.02,
+        "simulation_mode": "simulation-scripted-manipulation",
+        "state_revision": 5
+      },
+      "state": "failed",
+      "step": "pick_napkin_1"
+    },
+    {
+      "arm": "left",
+      "device": "intel.left_arm",
+      "op": "OPEN",
+      "result": {
+        "args": {
+          "object": "drawer"
+        },
+        "before_revision": 5,
+        "controller_steps": 6530,
+        "op": "OPEN",
+        "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose",
+        "sim_time": 13.06,
+        "simulation_mode": "simulation-scripted-manipulation",
+        "state_revision": 6
+      },
+      "state": "done",
+      "step": "open_drawer"
+    },
+    {
+      "arm": "left",
+      "device": "intel.left_arm",
+      "op": "PICK",
+      "result": {
+        "before_revision": 6,
+        "controller_steps": 12533,
+        "grasp": "contact",
+        "grasped": "plate_1",
+        "held": true,
+        "lift_height_m": 0.0213,
+        "orientation": {
+          "clearance": {
+            "orientation_error_rad": 0.0,
+            "orientation_satisfied": true,
+            "position_error_m": 0.009934
+          },
+          "lift": {
+            "position_error_m": 0.068205
+          },
+          "pinch": {
+            "orientation_error_rad": 0.046235,
+            "orientation_satisfied": false,
+            "position_error_m": 0.048344
+          },
+          "roll_hint_rad": 1.62
+        },
+        "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose",
+        "reach_error_m": 0.047958,
+        "requested_pick": "plate_1",
+        "safety": {
+          "approach": {
+            "max_contact_force_n": 0.28215,
+            "min_joint_margin_rad": 0.090027,
+            "other_pad_clearance_m": 0.380182,
+            "reason": null,
+            "relative_object_pad_distance_m": 0.0,
+            "safe": true
+          }
+        },
+        "sim_time": 25.066,
+        "simulation_mode": "simulation-scripted-manipulation",
+        "state_revision": 7
+      },
+      "state": "done",
+      "step": "pick_plate_1"
+    },
+    {
+      "arm": "left",
+      "device": "intel.left_arm",
+      "op": "MOVE",
+      "result": {
+        "before_revision": 7,
+        "controller_steps": 12533,
+        "grasp": "contact",
+        "moved": "plate_1",
+        "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose",
+        "placed": false,
+        "reason": "unsafe carry separation",
+        "requested_move": "plate_1",
+        "safety": {
+          "before": {
+            "min_joint_margin_rad": 1.162933,
+            "reason": "unsafe carry separation",
+            "relative_object_pad_distance_m": 0.121189,
+            "safe": false
+          }
+        },
+        "sim_time": 25.066,
+        "simulation_mode": "simulation-scripted-manipulation",
+        "state_revision": 8,
+        "to": "center"
+      },
+      "state": "failed",
+      "step": "move_plate_1"
+    },
+    {
+      "arm": "left",
+      "device": "intel.left_arm",
+      "op": "OPEN",
+      "result": {
+        "args": {
+          "object": "drawer"
+        },
+        "before_revision": 8,
+        "controller_steps": 12553,
+        "op": "OPEN",
+        "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose",
+        "sim_time": 25.106,
+        "simulation_mode": "simulation-scripted-manipulation",
+        "state_revision": 9
+      },
+      "state": "done",
+      "step": "open_drawer"
+    },
+    {
+      "arm": "left",
+      "device": "intel.left_arm",
+      "op": "OPEN",
+      "result": {
+        "args": {
+          "object": "drawer"
+        },
+        "before_revision": 9,
+        "controller_steps": 12573,
+        "op": "OPEN",
+        "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose",
+        "sim_time": 25.146,
+        "simulation_mode": "simulation-scripted-manipulation",
+        "state_revision": 10
+      },
+      "state": "done",
+      "step": "open_drawer"
+    },
+    {
+      "arm": "left",
+      "device": "intel.left_arm",
+      "op": "OPEN",
+      "result": {
+        "args": {
+          "object": "drawer"
+        },
+        "before_revision": 10,
+        "controller_steps": 12593,
+        "op": "OPEN",
+        "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose",
+        "sim_time": 25.186,
+        "simulation_mode": "simulation-scripted-manipulation",
+        "state_revision": 11
+      },
+      "state": "done",
+      "step": "open_drawer"
+    },
+    {
+      "arm": "left",
+      "device": "intel.left_arm",
+      "op": "PICK",
+      "result": {
+        "before_revision": 11,
+        "controller_steps": 12593,
+        "grasp": "contact",
+        "grasped": "napkin_1",
+        "held": false,
+        "lift_height_m": 0.0,
+        "orientation": {
+          "clearance": {
+            "orientation_error_rad": 0.127999,
+            "orientation_satisfied": false,
+            "position_error_m": 0.182204
+          },
+          "lift": {
+            "position_error_m": 0.169267
+          },
+          "pinch": {
+            "orientation_error_rad": 0.139782,
+            "orientation_satisfied": false,
+            "position_error_m": 0.18653
+          },
+          "roll_hint_rad": 1.62
+        },
+        "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose",
+        "reach_error_m": 0.181741,
+        "requested_pick": "napkin_1",
+        "safety": {
+          "approach": {
+            "max_contact_force_n": 32.681125,
+            "min_joint_margin_rad": 1.164009,
+            "other_pad_clearance_m": 0.381588,
+            "reason": null,
+            "relative_object_pad_distance_m": 0.0,
+            "safe": true
+          }
+        },
+        "sim_time": 25.186,
+        "simulation_mode": "simulation-scripted-manipulation",
+        "state_revision": 12
+      },
+      "state": "failed",
+      "step": "pick_napkin_1"
+    },
+    {
+      "arm": "left",
+      "device": "intel.left_arm",
+      "op": "OPEN",
+      "result": {
+        "args": {
+          "object": "drawer"
+        },
+        "before_revision": 12,
+        "controller_steps": 12613,
+        "op": "OPEN",
+        "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose",
+        "sim_time": 25.226,
+        "simulation_mode": "simulation-scripted-manipulation",
+        "state_revision": 13
+      },
+      "state": "done",
+      "step": "open_drawer"
+    },
+    {
+      "arm": "left",
+      "device": "intel.left_arm",
+      "op": "MOVE",
+      "result": {
+        "before_revision": 13,
+        "controller_steps": 12613,
+        "grasp": "contact",
+        "moved": "plate_1",
+        "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose",
+        "placed": false,
+        "reason": "unsafe carry separation",
+        "requested_move": "plate_1",
+        "safety": {
+          "before": {
+            "min_joint_margin_rad": 1.165071,
+            "reason": "unsafe carry separation",
+            "relative_object_pad_distance_m": 0.121106,
+            "safe": false
+          }
+        },
+        "sim_time": 25.226,
+        "simulation_mode": "simulation-scripted-manipulation",
+        "state_revision": 14,
+        "to": "center"
+      },
+      "state": "failed",
+      "step": "move_plate_1"
+    },
+    {
+      "arm": "left",
+      "device": "intel.left_arm",
+      "op": "OPEN",
+      "result": {
+        "args": {
+          "object": "drawer"
+        },
+        "before_revision": 14,
+        "controller_steps": 12633,
+        "op": "OPEN",
+        "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose",
+        "sim_time": 25.266,
+        "simulation_mode": "simulation-scripted-manipulation",
+        "state_revision": 15
+      },
+      "state": "done",
+      "step": "open_drawer"
+    },
+    {
+      "arm": "left",
+      "device": "intel.left_arm",
+      "op": "MOVE",
+      "result": {
+        "before_revision": 15,
+        "controller_steps": 12633,
+        "grasp": "contact",
+        "moved": "plate_1",
+        "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose",
+        "placed": false,
+        "reason": "unsafe carry separation",
+        "requested_move": "plate_1",
+        "safety": {
+          "before": {
+            "min_joint_margin_rad": 1.166152,
+            "reason": "unsafe carry separation",
+            "relative_object_pad_distance_m": 0.121098,
+            "safe": false
+          }
+        },
+        "sim_time": 25.266,
+        "simulation_mode": "simulation-scripted-manipulation",
+        "state_revision": 16,
+        "to": "center"
+      },
+      "state": "failed",
+      "step": "move_plate_1"
+    }
+  ],
+  "content_hash": "sha256:945c65f533d983a36b42aad97cfb777a640891c407f47349bc3a0561845d82d6",
+  "decisions": [
+    {
+      "candidates_considered": 5,
+      "candidates_feasible": 5,
+      "envelope_digest": "sha256:77a3ced23e155014389db5ca441c3f4110e50a978b3937a7b4d3a77c30366ce3",
+      "goal": "set the table, thanks",
+      "governing_constraints": [],
+      "latency_ms": 0.0,
+      "mode": "NOMINAL",
+      "reason": "5 object(s) actionable, 0 rejected",
+      "rejected": {},
+      "revision": 0,
+      "selected_ops": [
+        "PICK",
+        "MOVE",
+        "PICK",
+        "MOVE",
+        "PICK",
+        "MOVE",
+        "PICK",
+        "MOVE",
+        "PICK",
+        "MOVE",
+        "VERIFY"
+      ],
+      "state_hash": "8b4b84915a66cf01"
+    },
+    {
+      "candidates_considered": 4,
+      "candidates_feasible": 4,
+      "envelope_digest": "sha256:77a3ced23e155014389db5ca441c3f4110e50a978b3937a7b4d3a77c30366ce3",
+      "goal": "set the table, thanks",
+      "governing_constraints": [],
+      "latency_ms": 0.0,
+      "mode": "NOMINAL",
+      "reason": "replan: pick_napkin_1 failed",
+      "rejected": {},
+      "revision": 1,
+      "selected_ops": [
+        "PICK",
+        "MOVE",
+        "PICK",
+        "MOVE",
+        "PICK",
+        "MOVE",
+        "PICK",
+        "MOVE",
+        "VERIFY"
+      ],
+      "state_hash": "769d4013f9376232"
+    },
+    {
+      "candidates_considered": 4,
+      "candidates_feasible": 4,
+      "envelope_digest": "sha256:77a3ced23e155014389db5ca441c3f4110e50a978b3937a7b4d3a77c30366ce3",
+      "goal": "set the table, thanks",
+      "governing_constraints": [],
+      "latency_ms": 0.0,
+      "mode": "NOMINAL",
+      "reason": "replan: move_plate_1 failed",
+      "rejected": {},
+      "revision": 2,
+      "selected_ops": [
+        "PICK",
+        "MOVE",
+        "PICK",
+        "MOVE",
+        "MOVE",
+        "PICK",
+        "MOVE",
+        "VERIFY"
+      ],
+      "state_hash": "3ccef79e53137196"
+    },
+    {
+      "candidates_considered": 4,
+      "candidates_feasible": 4,
+      "envelope_digest": "sha256:77a3ced23e155014389db5ca441c3f4110e50a978b3937a7b4d3a77c30366ce3",
+      "goal": "set the table, thanks",
+      "governing_constraints": [],
+      "latency_ms": 0.0,
+      "mode": "NOMINAL",
+      "reason": "replan: verification mismatch",
+      "rejected": {},
+      "revision": 3,
+      "selected_ops": [
+        "PICK",
+        "MOVE",
+        "PICK",
+        "MOVE",
+        "MOVE",
+        "PICK",
+        "MOVE",
+        "VERIFY"
+      ],
+      "state_hash": "feb2bc0fa63b0172"
+    },
+    {
+      "candidates_considered": 4,
+      "candidates_feasible": 4,
+      "envelope_digest": "sha256:77a3ced23e155014389db5ca441c3f4110e50a978b3937a7b4d3a77c30366ce3",
+      "goal": "set the table, thanks",
+      "governing_constraints": [],
+      "latency_ms": 0.0,
+      "mode": "NOMINAL",
+      "reason": "replan: verification mismatch",
+      "rejected": {},
+      "revision": 4,
+      "selected_ops": [
+        "PICK",
+        "MOVE",
+        "PICK",
+        "MOVE",
+        "MOVE",
+        "PICK",
+        "MOVE",
+        "VERIFY"
+      ],
+      "state_hash": "eafeed2364f64796"
+    },
+    {
+      "candidates_considered": 4,
+      "candidates_feasible": 4,
+      "envelope_digest": "sha256:77a3ced23e155014389db5ca441c3f4110e50a978b3937a7b4d3a77c30366ce3",
+      "goal": "set the table, thanks",
+      "governing_constraints": [],
+      "latency_ms": 0.0,
+      "mode": "NOMINAL",
+      "reason": "replan: pick_napkin_1 failed",
+      "rejected": {},
+      "revision": 5,
+      "selected_ops": [
+        "PICK",
+        "MOVE",
+        "PICK",
+        "MOVE",
+        "MOVE",
+        "PICK",
+        "MOVE",
+        "VERIFY"
+      ],
+      "state_hash": "ac57ec1f0e44a29a"
+    },
+    {
+      "candidates_considered": 4,
+      "candidates_feasible": 4,
+      "envelope_digest": "sha256:77a3ced23e155014389db5ca441c3f4110e50a978b3937a7b4d3a77c30366ce3",
+      "goal": "set the table, thanks",
+      "governing_constraints": [],
+      "latency_ms": 0.0,
+      "mode": "NOMINAL",
+      "reason": "replan: move_plate_1 failed",
+      "rejected": {},
+      "revision": 6,
+      "selected_ops": [
+        "PICK",
+        "MOVE",
+        "PICK",
+        "MOVE",
+        "MOVE",
+        "PICK",
+        "MOVE",
+        "VERIFY"
+      ],
+      "state_hash": "081ca1234e13718b"
+    }
+  ],
+  "goal": "set the table, thanks",
+  "hashes": {
+    "actions": "483c7688ba34b3b3c85debe3f5b9564b4d60140552272ba8710bf0cb2b50199b",
+    "inputs": "24fa49af9a114ff7f090fc2d0b05f893f95fc4d9efef2211bf1b429d1c749e97",
+    "plan": "1bd9f598ce0fbc5e46d87cc922597b371bdf0b5e6ec0cd8570177c68f7da0d53"
+  },
+  "inputs": {
+    "envelope": "sha256:77a3ced23e155014389db5ca441c3f4110e50a978b3937a7b4d3a77c30366ce3",
+    "goal": "set the table, thanks",
+    "mode": "simulation-scripted-manipulation",
+    "run_config": {
+      "constraints": [],
+      "envelope": "sha256:77a3ced23e155014389db5ca441c3f4110e50a978b3937a7b4d3a77c30366ce3",
+      "goal": "set the table, thanks",
+      "objects": {
+        "cup_1": {
+          "class": "cup",
+          "status": "live",
+          "target_zone": "upper_right",
+          "zone": "tray_cup"
+        },
+        "drawer": {
+          "class": "fixture",
+          "status": "live",
+          "target_zone": "closed",
+          "zone": "closed"
+        },
+        "fork_1": {
+          "class": "fork",
+          "status": "live",
+          "target_zone": "left",
+          "zone": "drawer"
+        },
+        "napkin_1": {
+          "class": "napkin",
+          "status": "live",
+          "target_zone": "lower_left",
+          "zone": "tray_napkin"
+        },
+        "plate_1": {
+          "class": "plate",
+          "status": "live",
+          "target_zone": "center",
+          "zone": "tray_plate"
+        },
+        "spoon_1": {
+          "class": "spoon",
+          "status": "live",
+          "target_zone": "right",
+          "zone": "drawer"
+        }
+      },
+      "org_id": "local-demo"
+    },
+    "world0": {
+      "frame": 2
+    }
+  },
+  "metrics": {
+    "mode": "HOLD",
+    "resolved": false,
+    "revisions": 7,
+    "steps_executed": 15,
+    "wall_seconds": 18.0325
+  },
+  "parent_hash": "GENESIS",
+  "plan": {
+    "goal": "set the table, thanks",
+    "revision": 6,
+    "steps": [
+      {
+        "args": {
+          "object": "drawer"
+        },
+        "arm": "left",
+        "contract": "manipulate",
+        "deps": [],
+        "device": "intel.left_arm",
+        "id": "open_drawer",
+        "op": "OPEN",
+        "rationale": "fork/spoon start in the drawer; open it before retrieving them",
+        "result": {
+          "args": {
+            "object": "drawer"
+          },
+          "before_revision": 14,
+          "controller_steps": 12633,
+          "op": "OPEN",
+          "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose",
+          "sim_time": 25.266,
+          "simulation_mode": "simulation-scripted-manipulation",
+          "state_revision": 15
+        },
+        "state": "done"
+      },
+      {
+        "args": {
+          "object": "plate_1",
+          "to": "center"
+        },
+        "arm": "left",
+        "contract": "manipulate",
+        "deps": [],
+        "device": "intel.left_arm",
+        "id": "move_plate_1",
+        "op": "MOVE",
+        "rationale": "plate_1 already held; place it at center",
+        "result": {
+          "before_revision": 15,
+          "controller_steps": 12633,
+          "grasp": "contact",
+          "moved": "plate_1",
+          "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose",
+          "placed": false,
+          "reason": "unsafe carry separation",
+          "requested_move": "plate_1",
+          "safety": {
+            "before": {
+              "min_joint_margin_rad": 1.166152,
+              "reason": "unsafe carry separation",
+              "relative_object_pad_distance_m": 0.121098,
+              "safe": false
+            }
+          },
+          "sim_time": 25.266,
+          "simulation_mode": "simulation-scripted-manipulation",
+          "state_revision": 16,
+          "to": "center"
+        },
+        "state": "failed"
+      },
+      {
+        "args": {
+          "object": "spoon_1"
+        },
+        "arm": "right",
+        "contract": "manipulate",
+        "deps": [
+          "open_drawer"
+        ],
+        "device": null,
+        "id": "pick_spoon_1",
+        "op": "PICK",
+        "rationale": "spoon_1 is in drawer, belongs in right",
+        "result": null,
+        "state": "pending"
+      },
+      {
+        "args": {
+          "object": "spoon_1",
+          "to": "right"
+        },
+        "arm": "right",
+        "contract": "manipulate",
+        "deps": [
+          "pick_spoon_1"
+        ],
+        "device": null,
+        "id": "move_spoon_1",
+        "op": "MOVE",
+        "rationale": "carry spoon_1 -> right",
+        "result": null,
+        "state": "pending"
+      },
+      {
+        "args": {
+          "object": "napkin_1"
+        },
+        "arm": "left",
+        "contract": "manipulate",
+        "deps": [],
+        "device": null,
+        "id": "pick_napkin_1",
+        "op": "PICK",
+        "rationale": "napkin_1 is in tray_napkin, belongs in lower_left",
+        "result": null,
+        "state": "pending"
+      },
+      {
+        "args": {
+          "object": "napkin_1",
+          "to": "lower_left"
+        },
+        "arm": "left",
+        "contract": "manipulate",
+        "deps": [
+          "pick_napkin_1"
+        ],
+        "device": null,
+        "id": "move_napkin_1",
+        "op": "MOVE",
+        "rationale": "carry napkin_1 -> lower_left",
+        "result": null,
+        "state": "pending"
+      },
+      {
+        "args": {
+          "object": "fork_1"
+        },
+        "arm": "left",
+        "contract": "manipulate",
+        "deps": [
+          "open_drawer"
+        ],
+        "device": null,
+        "id": "pick_fork_1",
+        "op": "PICK",
+        "rationale": "fork_1 is in drawer, belongs in left",
+        "result": null,
+        "state": "pending"
+      },
+      {
+        "args": {
+          "object": "fork_1",
+          "to": "left"
+        },
+        "arm": "left",
+        "contract": "manipulate",
+        "deps": [
+          "pick_fork_1"
+        ],
+        "device": null,
+        "id": "move_fork_1",
+        "op": "MOVE",
+        "rationale": "carry fork_1 -> left",
+        "result": null,
+        "state": "pending"
+      },
+      {
+        "args": {},
+        "arm": null,
+        "contract": "verify",
+        "deps": [
+          "move_fork_1",
+          "move_napkin_1",
+          "move_plate_1",
+          "move_spoon_1"
+        ],
+        "device": null,
+        "id": "verify_final",
+        "op": "VERIFY",
+        "rationale": "re-check workspace after action",
+        "result": null,
+        "state": "pending"
+      }
+    ]
+  },
+  "provenance": {
+    "generated_at": "2026-09-12T20:11:07.996770+00:00",
+    "generated_by": "omni_q.engine",
+    "git_commit": "3e2a92a684c71ecb09c922a01259919e75cf5dce",
+    "machine": "AMD64",
+    "package_versions": {
+      "omni-q": "0.1.0",
+      "pytest": "9.1.1"
+    },
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.10"
+  },
+  "rejected": [],
+  "run_id": "d5d3d79c309d",
+  "ts": 1789243868.0270774
+}
