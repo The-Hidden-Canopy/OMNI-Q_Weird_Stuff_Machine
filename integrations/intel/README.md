@@ -369,24 +369,67 @@ alongside the YOLO perception node.
   documented narrow/fragile margin. The coarse `outcomes` table is
   unchanged (still 10/10 `grasp_failure`, expected, unrelated to this
   change).
-- [ ] **Tried the local-minimum escape on the new orientation-aware
-  solver too -- confirmed it still works, but not worth wiring in yet.**
-  After real orientation-aware IK landed independently (see below), all
-  four still-failing objects plateau at the same ~0.05-0.06m "pinch"
-  position error the old solver hit -- the same local-minimum signature.
-  Perturbing the pre-descent Elbow/Wrist_Pitch seed (same technique as
-  before) escapes it here too: a dense 81-point seed grid found a real
-  held grasp for `plate_1` (0.0211m lift, just over the 0.02m threshold).
-  But a bounded, cheap 17-seed grid (the same list that worked for the
-  old solver) only reached 0.0169m -- short. The margin is thin (0.0211m
-  barely clears the bar) and the sweet spot needs the dense grid's
-  resolution, which is too expensive to run on every attempt for a likely
-  fragile win. Not wired in -- a judgment call, not abandonment: the
-  underlying diagnosis (local minima, not a hard reach/orientation limit)
-  still stands and generalizes across solver versions. The real fix
-  remains what was already known: coarse-to-fine or better-seeded
-  convergence, not denser random grids. See `intel_sim.py`'s module
-  docstring, "Fifth update".
+- [x] **Local-minimum escape on the orientation-aware solver found, then
+  re-checked and wired in for `plate_1` after the fragility worry that
+  originally held it back turned out not to apply.** After real
+  orientation-aware IK landed independently (see below), all four
+  still-failing objects plateaued at the same ~0.05-0.06m "pinch" position
+  error the old solver hit -- the same local-minimum signature. Perturbing
+  the pre-descent Elbow/Wrist_Pitch seed (same technique as before)
+  escapes it here too: a dense 81-point seed grid found a real held grasp
+  for `plate_1` (0.0211m lift, just over the 0.02m threshold), while a
+  cheap 17-seed grid only reached 0.0169m -- short. That result was
+  initially *not* wired in, on two worries: (a) landing the escape
+  generally would need that same expensive per-attempt dense search, and
+  (b) 0.0211m barely clears the bar, plausibly too fragile to survive
+  scene jitter. Both were re-examined rather than left as a permanent
+  block: (a) doesn't apply to a *fixed*, zero-search per-object constant
+  (`OBJECT_GRASP_SEED_BIAS = {"plate_1": (0.0, 0.2)}` in `intel_sim.py`,
+  applied once after the transit approach, no grid), and (b) was checked
+  empirically, not assumed -- run across 10 of the harness's own
+  `IntelSceneConfig(randomized=True)` seeds, `plate_1` now holds **10/10**
+  (see `test_plate_1_grasp_escapes_its_local_minimum_via_the_verified_seed_
+  bias` in `tests/test_intel_sim_primitives.py`), not the 1/10 the
+  unbiased attempt got in the "Seventh update" evaluation
+  (`evidence/benchmark_results/intel_table_eval_2026-09-11-v8/`). `cup_1`
+  and the still-failing `fork_1`/`spoon_1`/`napkin_1` are unaffected
+  (verified directly) since the bias only applies when the object key is
+  present. Not extended to those three -- none showed a comparable
+  per-object win under any of four escape mechanisms tried this session
+  (seed perturbation, annealed damping, approach-bearing variation, full
+  free-DOF search). See `intel_sim.py`'s module docstring, "Fifth" and
+  "Eighth" updates.
+- [x] **The Intel challenge hosts clarified "10 seeds" as ≥10 non-trivial
+  environment variations (lighting, object location, prompt phrasing,
+  object color/texture -- entrant picks axes/count), and every bundle
+  through v8 only varied one narrow axis (±3mm/±0.08rad object
+  position/yaw).** `IntelSceneConfig` gained `color_jitter` (tableware
+  rgba) and `light_diffuse_jitter`/`light_angle_jitter_rad` (key-light
+  intensity/incidence angle) -- both verified physics-inert, never
+  touching contype/conaffinity/friction/mass/solref/solimp.
+  `run_intel_table_evaluation_report` now cycles 10 distinct, pre-
+  verified instruction phrasings (`TABLE_SETTING_PHRASINGS`) instead of
+  the literal string "set the table" ten times -- each phrasing was
+  checked against `RulePlanner`'s keyword gate and a live run producing
+  an identical op sequence *before* being added, so this axis can't
+  silently degrade to the "unrecognised goal; observe only" fallback and
+  corrupt the evidence. Re-ran across all four combined axes
+  (`evidence/benchmark_results/intel_table_eval_2026-09-12-v9/`):
+  `cup_1`/`plate_1` both still hold 10/10 -- the first time the seed-bias
+  fix above was checked against lighting/color variation, not just
+  position jitter. **New finding, made visible by `plate_1` now
+  succeeding in every trial instead of 1/10:** it holds 10/10 but places
+  0/10 -- every `MOVE` rejected on `"unsafe carry separation"` (~0.121m
+  measured against `LEGACY_MAX_CARRY_OFFSET_M = 0.100`). Root cause
+  identified, not yet fixed: `plate_1` is deliberately grasped at its rim
+  (`OBJECT_GRASP_OFFSET["plate_1"] = 0.078`), and the carry-safety
+  check's single global bound was evidently tuned around `cup_1`'s
+  centered grasp, not a legitimately-necessary large-object rim offset --
+  a real follow-up candidate (per-object-aware bound, same pattern as
+  `OBJECT_GRASP_OFFSET`/`OBJECT_HALF_HEIGHT`), deliberately not attempted
+  in the same pass since a safety-bound change deserves its own
+  scrutiny. See `intel_sim.py`'s module docstring, "Ninth update", and
+  the v9 evidence README. `BACKLOG.md` (OQ-010) updated.
 
 ### Legacy table-setting follow-up (2026-09-10)
 
