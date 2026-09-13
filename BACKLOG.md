@@ -38,6 +38,27 @@ Status legend: ` ` todo · `~` in progress · `x` done.
 | x | OQ-021 | Damion/Claude | Break the Intel demo deliberately | OQ-018 | Test moved objects, failed grasp, unreachable object, collision risk, missing detection, bad instruction; record behavior — see [`docs/oq-021-red-team-findings.md`](docs/oq-021-red-team-findings.md): 2 new latent findings (silent-false-positive perception on zero detections; scheduler "concurrency" is graph-level not real-time), 2 clean passes (unknown-zone, adversarial NL), 1 gap (mid-run perturbation untestable until grasp lands) |
 |   | OQ-022 | Gerron/GPT | Intel hardware/runtime packaging | OQ-016 | Demo can run through required Intel execution path rather than generic local-only code |
 
+### Omni reasoner promotion (what the planner seam is actually blocked on)
+
+The seam (`omni_planner.py`, `omni_reasoner.py`, `demo_intel_reasoner.py`) has
+been ready since 2026-09-10 and runs on `MockReasoner`. The backlog previously
+recorded it as waiting on the IDA Omni body finishing pretraining. **That is
+not the blocker.** Measured 2026-09-13 (Damion/Claude): loading a natively
+pretrained checkpoint into the vendored reference body maps 97 tensors, leaves
+14 native tensors with no verified Python target, and leaves **278 Python
+parameters — 7.2%, including all attention, controls, LRSS/PSS and position
+embeddings — with no native source at all.** More native pretraining never
+fills those; they are components the native trainer does not have. The native
+checkpoint is a legitimate *initialization*, and the rest has to be trained
+against this seam's own grammar. Pipeline and measured findings:
+[`reasoner/README.md`](reasoner/README.md).
+
+| Status | ID | Owner | Task | Depends on | Done when |
+|---|---|---|---|---|---|
+| x | OQ-REASONER-000 | Damion/Claude | Unblock loading a trained artifact at all | — | `OMNIQ_OMNI_REASONER=omni` no longer OOMs on a 6 GiB card. The reference forward projected its whole hidden sequence through the 256k tied head every decode step (341 MB at a 333-token prompt) while `OmniInference.generate` reads one row; generation reserved **12.29 GiB against 6.14 GiB of VRAM** and died after ~16 tokens. `omni_reasoner._last_position_head` substitutes a last-position head onto the loaded model **after** `load_omni_reference` completes its identity checks, leaving `integrations/intel/vendor/` byte-identical: **1.11 GiB reserved, 48 tokens clean, 0.76 s/token vs 1.08**. Round-trip gate passes; 476 passed, 7 skipped |
+| ~ | OQ-REASONER-001 | Damion/Claude | Train the body to answer in the planner grammar | OQ-REASONER-000 | Generator + trainer + round-trip gate exist and a smoke run completes end to end (`reasoner/`). Remaining: a real run, judged on the fraction of proposed steps `OmniPlanner._validate` accepts, usable-plan rate, and exact match vs the `RulePlanner` oracle on held-out worlds — **not loss**. Sizing: ~10-12 s/example is inherent (training must use the per-token continuation path inference uses; the full-sequence-evidence shortcut is ~4x faster but a *different computation* — cosine 0.02 at target positions, because routing is per packet), so 500 examples x 2 epochs ≈ 3 h, the full 3,300 x 2 ≈ 20 h |
+|   | OQ-REASONER-002 | — | Budget planner latency into the demo | OQ-REASONER-001 | Generation is ~0.9 s/token through the harness, so a 48-token plan is ~45 s per planning call and the engine calls the planner once per plan **and once per replan**. Either trim `max_new_tokens`/the grammar, overlap it with arm motion, or state the pause in the run-of-show |
+
 ### Multi-biarm fleet expansion (resource layer first)
 
 This is an expansion track, not evidence that the current two-arm executor is
@@ -106,7 +127,7 @@ Decision: do not spend the next iteration on 2-bit quantization. First reconcile
 | x | OQ-044 | Gerron/Claude | Dynamic arm-role reassignment | OQ-012 | Omni chooses which arm picks/holds/spins based on current reach/state, not fixed left/right roles — scheduler picks the reaching arm with lower load; explicit `Step.arm` > `prefer_arm` > reach; HANDOFF splits a chain across arms |
 |   | OQ-045 | Gerron/GPT | Fancy synchronized choreography | OQ-017, OQ-026 | Two useful actions overlap with deliberate visual timing while still reducing or preserving task completion time |
 |   | OQ-046 | Gerron/Kimi | Run comparative trials | OQ-045 | Compare sequential vs bimanual vs bimanual+flourish for completion, errors, collisions and time |
-|   | OQ-047 | Bryan/Codex | "Why Omni did that" display | OQ-018 | UI surfaces one-sentence reasoning/constraint explanation for the current graph transition — rationale channel pre-wired 2026-09-10: `omni_planner.OmniPlanner` feeds `PlanDecision.reason` (backend-labeled, `[mock]`/`[omni_torch_reference]`/fallback-tagged) through the existing `plan.decision` event into receipts; live wording waits for the real IDA Omni body (pretrain, ~day 6) |
+|   | OQ-047 | Bryan/Codex | "Why Omni did that" display | OQ-018 | UI surfaces one-sentence reasoning/constraint explanation for the current graph transition — rationale channel pre-wired 2026-09-10: `omni_planner.OmniPlanner` feeds `PlanDecision.reason` (backend-labeled, `[mock]`/`[omni_torch_reference]`/fallback-tagged) through the existing `plan.decision` event into receipts; live wording waits for the real IDA Omni body — **not on pretraining, see OQ-REASONER-001** |
 |   | OQ-048 | Damion/Claude | Final red-team pass | All demo-critical tasks | Identify anything scripted, unsupported, unverifiable, flaky or confusing before submission |
 
 ## Hand vocabulary expansion — "hands, not clamps on sticks"
