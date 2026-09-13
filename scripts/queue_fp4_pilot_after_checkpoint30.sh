@@ -58,10 +58,12 @@ fi
 # The checkpoint is used as a weight parent, not as --resume: the pilot keeps
 # MXFP8 + BF16 Lion as its authoritative optimizer state and starts a fresh
 # optimizer state at the controlled format boundary.
-cd /workspace/omniq
+# The generated YAML intentionally uses path: .; launch from its dataset root
+# so Ultralytics does not resolve images against the repository root.
+cd /workspace/omniq/data/table_yolo_combined_oi_v1
 export TORCH_CUDA_ARCH_LIST=8.9
 export OMNIQ_REQUIRE_NATIVE_FUSION=1
-exec /venv/main/bin/python -u perception/finetune.py \
+exec /venv/main/bin/python -u /workspace/omniq/perception/finetune.py \
     --data /workspace/omniq/data/table_yolo_combined_oi_v1/data.yaml \
     --base "${BASE_PT}" \
     --w-master mxfp8 \

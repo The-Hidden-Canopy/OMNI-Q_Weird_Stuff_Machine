@@ -396,6 +396,8 @@ def main(argv=None) -> None:
     ap.add_argument("--batch", type=int, default=32)
     ap.add_argument("--lr0", type=float, default=None,
                     help="initial learning rate; packed Lion defaults to 3e-4")
+    ap.add_argument("--lrf", type=float, default=0.01,
+                    help="final LR fraction; transfer stages may use a higher floor")
     ap.add_argument("--nbs", type=int, default=64,
                     help="nominal batch size: ultralytics accumulates nbs/batch "
                          "micro-batches per optimizer step (gradient accumulation)")
@@ -455,6 +457,7 @@ def main(argv=None) -> None:
         "imgsz": args.imgsz,
         "batch": args.batch,
         "nbs": args.nbs,
+        "lrf": args.lrf,
         "freeze": args.freeze,
         "patience": args.patience,
         "workers": args.workers,
