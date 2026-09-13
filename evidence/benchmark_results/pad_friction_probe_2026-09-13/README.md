@@ -166,3 +166,45 @@ learned-control side.
 This also re-scopes OQ-010-TELEOP: a human teleoperator asked to grasp a fork
 will likely discover the same manoeuvre, and whether they can is still the
 cheapest available signal.
+
+## Two-arm cooperation is impossible in this scene as authored
+
+Using both arms on a tricky object is the right physical answer — one fingertip
+as a wall or lever while the other slides the object against it, which needs no
+grasp to begin (pushing is non-prehensile). It is also a scored rubric item:
+OQ-004's audit lists two-arm coordination as PARTIAL.
+
+**Measured.** Bases are 0.52 m apart with a ~0.386 m reach each, so a genuine
+shared workspace exists — a midline band, x ∈ [-0.12, 0.13], y ∈ [-0.09, 0.30].
+**No object is in it:**
+
+| object | dist L | dist R | both arms? |
+| --- | --- | --- | --- |
+| `cup_1` | 0.494 | **0.279** | no |
+| `plate_1` | **0.309** | 0.480 | no |
+| `fork_1` | **0.257** | 0.632 | no |
+| `spoon_1` | 0.632 | **0.257** | no |
+| `napkin_1` | **0.184** | 0.513 | no |
+
+Every item is single-arm-only. So HANDOFF, STABILIZE and COOPERATIVE_ROTATE
+(OQ-011) cannot be demonstrated on any current object, and neither can a
+two-arm flat-object manoeuvre — not because the arms cannot cooperate, but
+because nothing is placed where both can reach.
+
+This is a scene-authoring gap, and repositioning is already the accepted remedy
+here: `intel_sim.py` records `fork_1`/`spoon_1` being moved once before for
+exactly this reason (they sat outside the reach envelope entirely).
+
+**Proposed, cheapest first:**
+
+1. give the flat objects a **staging pose inside the shared band** — or a
+   "slide to centre" step — so a second arm can participate at all;
+2. then the two-arm manoeuvre: arm A plants a fingertip as a stop, arm B pushes
+   the fork against it so it tips, B closes on the raised edge. All real
+   physics, no collision exemptions;
+3. `table_grazing` and the wrist cameras now make that manoeuvre observable —
+   a few millimetres of fingertip-vs-table gap is invisible from overhead.
+
+Note this does not conflict with the pad finding above: the fingertip cannot
+straddle an 8 mm object lying flat, so the object has to be *tipped* rather
+than pinched from above. Two arms are what make tipping possible.
