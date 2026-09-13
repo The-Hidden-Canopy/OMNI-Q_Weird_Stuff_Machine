@@ -4,7 +4,9 @@ set -Eeuo pipefail
 # Serial 82-class transfer cycle.  Stage A is the live packed-FP4 pilot; do
 # not start Stage B until Stage A has finished so one GPU never hosts two
 # trainers.  The later stages use last.pt as the explicit weight handoff and
-# start fresh optimizer state at each dataset boundary.
+# start fresh optimizer state at each dataset boundary.  Keep the transfer
+# LR at the current pilot level and use a 0.1 final-LR fraction; the earlier
+# 1e-4 -> 5e-5 schedule was too timid and encouraged plateaus.
 
 CURRENT_PID=41562
 PROJECT=/workspace/omniq/runs/v4_chain
@@ -83,6 +85,7 @@ run_stage() {
         --imgsz 768 \
         --batch 48 \
         --lr0 "${lr0}" \
+        --lrf 0.1 \
         --nbs 128 \
         --patience 30 \
         --workers 8 \
@@ -97,7 +100,7 @@ if [[ -s "${STAGE_B_RUN}/results.csv" || -e "${STAGE_B_RUN}/weights/last.pt" ]];
     exit 1
 fi
 echo "starting Stage B on ${OTHER_DATA_ROOT} from ${STAGE_A_RUN}/weights/last.pt"
-run_stage "${OTHER_DATA_ROOT}" "${STAGE_A_RUN}/weights/last.pt" "${STAGE_B_NAME}" 0.0001
+run_stage "${OTHER_DATA_ROOT}" "${STAGE_A_RUN}/weights/last.pt" "${STAGE_B_NAME}" 0.00015
 check_transfer_stage "${STAGE_B_RUN}"
 
 if [[ -s "${STAGE_C_RUN}/results.csv" || -e "${STAGE_C_RUN}/weights/last.pt" ]]; then
@@ -105,7 +108,7 @@ if [[ -s "${STAGE_C_RUN}/results.csv" || -e "${STAGE_C_RUN}/weights/last.pt" ]];
     exit 1
 fi
 echo "starting Stage C on ${CURRENT_DATA_ROOT} from ${STAGE_B_RUN}/weights/last.pt"
-run_stage "${CURRENT_DATA_ROOT}" "${STAGE_B_RUN}/weights/last.pt" "${STAGE_C_NAME}" 0.00005
+run_stage "${CURRENT_DATA_ROOT}" "${STAGE_B_RUN}/weights/last.pt" "${STAGE_C_NAME}" 0.00015
 check_transfer_stage "${STAGE_C_RUN}"
 
 cd /workspace/omniq
