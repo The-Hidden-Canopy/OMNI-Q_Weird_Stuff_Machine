@@ -89,3 +89,69 @@ Open question worth deciding before (1): the rationale sentence is currently
 templated from the oracle, so the model learns *our* phrasing rather than
 fluent English. Fluency would need a prose pretraining stage; the grammar and
 the state->plan mapping do not.
+
+## r1 diagnosis: the blocker is slot vocabulary, not decoding (2026-09-13)
+
+Run r1 (1000 examples x 2 epochs, GA=8, lr 1e-4 cosine) drove loss from **12.55
+to 2.43** while acceptance went **0.11 -> 0.00 -> 0.00 -> 0.00** at steps
+50/100/150/200. Loss and the metric that matters moved in opposite directions,
+which is exactly why this pipeline judges on acceptance.
+
+The logged samples show what happened:
+
+```
+step  50: 'PLA\nSTEP PICK object=setting_1\nSTEP MOVE object=_1\nSTEP Carys_1 ...'
+step 100: 'PLAN\nSTEP PICK object=setting_1\nSTEP MOVE object=setting_1 to=setting_1 ...'
+step 200: 'PLAN\nSTEP PICK object=setting_1\nSTEP MOVE object=setting_1 to=setting_1 to=setting_ ...'
+```
+
+The **grammar is learned** — `PLAN`, `STEP PICK object=`, `STEP MOVE object= to=`
+are all correct by step 100, where step 50 still produced `PLA` and `Carys_1`.
+Two things then break it, and only one of them matters.
+
+### Decoding is not the blocker (measured, not assumed)
+
+Feeding text straight to the real `OmniPlanner._parse` + `_validate` against a
+held-out world:
+
+| text | proposed | accepted |
+| --- | --- | --- |
+| raw step-200 output | 2 | **0** |
+| **perfect decode, repetition removed, same vocabulary** | 3 | **0** |
+| identical shape with a real object id | 3 | **2** |
+| oracle | 4 | 3 |
+
+Greedy `argmax` with no repetition penalty does produce degenerate
+`to=setting_1 to=setting_1 ...` tails, and that is worth fixing eventually. But
+repairing it changes acceptance by **nothing**. Every step is rejected as
+`omni:pick:setting_1` because `setting_1` is not an object.
+
+### The blocker is one slot confusion
+
+`setting_*` appears as an `object=` value **0 times in 14,583 training object
+slots**. The model is not copying a frequent pattern -- it cannot distinguish
+the two identifier slots:
+
+- `object=` takes one of **26** ids; `fork_1` alone appears 1,915 times;
+- `to=` takes one of **8** zones; `setting_1` appears 967 times.
+
+Not a tokenization artifact either: every identifier is three tokens,
+`[word, '_', digit]` (` cup`=9318, ` setting`=7056, ` napkin`=129628). After
+`object=` the model emits ` setting` rather than ` cup`. Given that **all
+attention parameters are randomly initialized** (the 7.2% of Python params with
+no native source), and that a generally-pretrained prior favours "setting" over
+"napkin", weak slot conditioning is the coherent explanation.
+
+### What to do instead of another blind run
+
+**Constrained decoding is the obvious lever, and it needs no retraining.**
+`OmniPlanner` already knows the legal object ids for the current world -- that is
+precisely what `_validate` checks *after* generation. Applying the same
+knowledge *during* generation (restrict the token after `object=` to the legal
+ids' first tokens, and after `to=` to the legal zones) removes this entire
+failure class by construction. The table above bounds the payoff: same model,
+same weights, real ids instead of `setting_1` -> 2 of 3 steps accepted.
+
+Only after that is it worth asking whether the model needs more data (3,300
+pairs exist, 1,000 were used), more epochs, or a better-initialized attention
+stack.

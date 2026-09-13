@@ -43,6 +43,7 @@ def main() -> int:
     ap.add_argument("--n", type=int, default=3)
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--max-new", type=int, default=64)
+    ap.add_argument("--out", help="write aggregate metrics to this JSON path")
     args = ap.parse_args()
 
     rows = [json.loads(l) for l in Path(args.data).read_text(encoding="utf-8").splitlines() if l.strip()]
@@ -56,6 +57,7 @@ def main() -> int:
           f"first turn {time.time()-t0:.1f}s, {len(result.token_ids)} tokens")
 
     ok = 0
+    proposed_total = accepted_total = exact_total = 0
     for i, row in enumerate(heldout):
         t0 = time.time()
         res = reasoner.reason(f"roundtrip-{i}", row["prompt"])
@@ -65,13 +67,36 @@ def main() -> int:
         manip = [s for s in steps if s.contract == "manipulate"]
         exact = plan_signature(res.text) == plan_signature(row["target"])
         ok += bool(manip)
+        proposed_total += len(proposals)
+        accepted_total += len(manip)
+        exact_total += bool(exact)
         print(f"--- held-out {i} ({time.time()-t0:.1f}s): proposed {len(proposals)}, accepted {len(manip)}, "
               f"rejected {len(rejected)}, exact={exact}")
         print("model :", repr(res.text[:240]))
         print("oracle:", repr(row["target"][:240]))
         if rejected:
             print("rejections:", rejected)
+    # Aggregates, so a run is judged on the same three numbers the trainer
+    # reports -- but measured through the real identity-gated reasoner path
+    # rather than the training loop's own forward pass.
+    n = max(1, len(heldout))
+    metrics = {
+        "checkpoint": args.checkpoint,
+        "held_out_prompts": len(heldout),
+        "acceptance": accepted_total / max(1, proposed_total),
+        "usable": ok / n,
+        "exact": exact_total / n,
+        "proposed_per_prompt": proposed_total / n,
+        "artifact_sha256": result.artifact_identity.get("checkpoint_sha256"),
+        "max_new_tokens": args.max_new,
+    }
     print(f"usable plans: {ok}/{len(heldout)}")
+    print(f"acceptance {metrics['acceptance']:.3f}  usable {metrics['usable']:.3f}  "
+          f"exact {metrics['exact']:.3f}  proposed/prompt {metrics['proposed_per_prompt']:.2f}")
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+        print(f"metrics written to {args.out}")
     return 0
 
 
