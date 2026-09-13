@@ -246,3 +246,96 @@ def test_invalid_provider_timestamp_and_missing_final_text_are_rejected():
         SpeechPartial("s", "o", "speaker", "hello", 1.5, 2, 1)  # type: ignore[arg-type]
     with pytest.raises(VoiceError, match="text"):
         SpeechFinal("s", "o", "speaker", " ", 1, 2, 1)
+
+
+def test_stop_using_an_arm_is_a_constraint_not_an_emergency_stop():
+    """Observed live 2026-09-13, spoken into the real Speechmatics transport.
+
+    "Stop using the left arm." matched the bare-``stop`` safety pattern, so the
+    gate claimed the whole sentence, ``nlu`` never saw it, and with no
+    interrupt handler registered the result was ``interrupt_denied`` -- the
+    instruction neither stopped anything nor changed the graph.
+    """
+    from omni_q.voice import InterruptionGate
+    from omni_q import nlu
+
+    gate = InterruptionGate()
+    assert gate.inspect("Stop using the left arm.").detected is False
+    assert ("prefer_arm", "right") in nlu.parse("Stop using the left arm.").constraints
+
+    runtime = VoiceRuntime("session_01", "org_a")
+    event = _final(1, "Stop using the left arm.")
+    _operator(runtime, event)
+    result = runtime.ingest_final(event)
+    assert result.status != "interrupt_denied"
+    assert result.candidate.action == "GRAPH_MUTATION"
+
+
+def test_the_safety_gate_still_fires_on_every_real_stop_phrasing():
+    """The narrowing above must not cost a single emergency phrase."""
+    from omni_q.voice import InterruptionGate
+
+    gate = InterruptionGate()
+    for phrase in ("stop", "Stop!", "stop now", "emergency stop", "stop moving",
+                   "freeze", "hold still", "back off", "retreat"):
+        assert gate.inspect(phrase).detected is True, phrase
+
+
+def test_a_safety_stop_is_still_dispatched_immediately_by_the_accumulator():
+    from omni_q.voice import IntentAccumulator
+
+    calls: list[str] = []
+    runtime = VoiceRuntime("session_01", "org_a",
+                           interrupt_handler=lambda action, claim_id: calls.append(action))
+    event = _final(1, "stop")
+    runtime.registry.observe(event)
+    runtime.registry.set_authority("speaker_01", "operator",
+                                   [VoiceCapability.INTERRUPT.value])
+    result = IntentAccumulator(runtime).ingest_final(event)
+    assert result is not None and calls == ["STOP"]
+
+
+def test_low_confidence_speech_is_recorded_but_never_authorized():
+    """Live 2026-09-13: room noise transcribed as "Praise the tag" at 0.62
+    confidence and was authorized as a COMMAND. Every real instruction in the
+    same session scored 0.81-1.0 -- the recognizer knew; nothing asked."""
+    runtime = VoiceRuntime("session_01", "org_a", min_action_confidence=0.7)
+    event = SpeechFinal(
+        session_id="session_01", org_id="org_a", speaker_id="speaker_01",
+        text="don't use the left arm", t_start_ns=1_000_000_000,
+        t_end_ns=1_600_000_000, sequence=1, confidence=0.62,
+    )
+    _operator(runtime, event)
+    result = runtime.ingest_final(event)
+
+    assert result.status == "observed"
+    assert result.candidate.action == "OBSERVATION"
+    assert any(e.kind == "voice.intent.low_confidence" for e in runtime.bus.log)
+
+
+def test_the_same_words_act_normally_above_the_floor():
+    runtime = VoiceRuntime("session_01", "org_a", min_action_confidence=0.7)
+    event = SpeechFinal(
+        session_id="session_01", org_id="org_a", speaker_id="speaker_01",
+        text="don't use the left arm", t_start_ns=1_000_000_000,
+        t_end_ns=1_600_000_000, sequence=1, confidence=0.81,
+    )
+    _operator(runtime, event)
+    assert runtime.ingest_final(event).candidate.action == "GRAPH_MUTATION"
+
+
+def test_a_mumbled_safety_word_is_still_an_interruption():
+    """Confidence gating must never suppress a safety reflex."""
+    calls: list[str] = []
+    runtime = VoiceRuntime("session_01", "org_a", min_action_confidence=0.9,
+                           interrupt_handler=lambda a, c: calls.append(a))
+    event = SpeechFinal(
+        session_id="session_01", org_id="org_a", speaker_id="speaker_01",
+        text="stop", t_start_ns=1_000_000_000, t_end_ns=1_400_000_000,
+        sequence=1, confidence=0.35,
+    )
+    runtime.registry.observe(event)
+    runtime.registry.set_authority("speaker_01", "operator",
+                                   [VoiceCapability.INTERRUPT.value])
+    runtime.ingest_final(event)
+    assert calls == ["STOP"]

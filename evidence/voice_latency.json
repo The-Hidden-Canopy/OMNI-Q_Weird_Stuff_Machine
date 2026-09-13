@@ -1,0 +1,81 @@
+{
+  "provider": "speechmatics",
+  "mode": "live",
+  "url": "wss://eu.rt.speechmatics.com/v2",
+  "started_utc": "2026-09-13T16:53:53Z",
+  "wall_s": 63.062,
+  "audio": {
+    "source": "mic:default",
+    "sample_rate": 16000,
+    "encoding": "pcm_s16le",
+    "duration_s": null,
+    "chunks_sent": 612
+  },
+  "config": {
+    "language": "en",
+    "enable_partials": true,
+    "max_delay": 1.5,
+    "max_delay_mode": "flexible",
+    "operating_point": "enhanced",
+    "diarization": "speaker",
+    "max_speakers": null,
+    "sample_rate": 16000,
+    "encoding": "pcm_s16le",
+    "chunk_ms": 100,
+    "url": "wss://eu.rt.speechmatics.com/v2",
+    "additional_vocab": [
+      "Omni",
+      "OMNI-Q",
+      "gripper",
+      "bimanual",
+      "handoff",
+      "regrasp"
+    ]
+  },
+  "utterance_segmentation": {
+    "enabled": true,
+    "silence_ms": 800.0,
+    "max_utterance_ms": 15000.0,
+    "provider_final_fragments": 26,
+    "utterances_dispatched": 7,
+    "fragments_per_utterance": 3.71
+  },
+  "transcripts": {
+    "partials": 54,
+    "finals": 4,
+    "held_for_accumulation": 2,
+    "rejected": 1,
+    "rejections": [
+      {
+        "final": true,
+        "sequence": 75,
+        "error": "VoiceError: speech sequence is not strictly increasing"
+      }
+    ],
+    "transcripts_without_word_confidence": 23,
+    "transcripts_without_speaker_label": 0,
+    "partial_latency_ms": {
+      "n": 54,
+      "mean": 646.89,
+      "p50": 469.0,
+      "p95": 1366.0,
+      "max": 1473.0
+    },
+    "final_latency_ms": {
+      "n": 4,
+      "mean": 3157.75,
+      "p50": 3613.0,
+      "p95": 3735.0,
+      "max": 3735.0
+    }
+  },
+  "dropped_empty_transcripts": 146,
+  "latency_definition": "monotonic wall-clock at message arrival minus the stream position (transcript end_time anchored at RecognitionStarted); i.e. how far behind live the transcript was, in ms",
+  "intent_accumulation": {
+    "window_ms": 4000.0,
+    "max_utterances": 8,
+    "utterances_held": 2,
+    "instructions_completed_by_joining": 0,
+    "holds_released_unexecuted": 2
+  }
+}
