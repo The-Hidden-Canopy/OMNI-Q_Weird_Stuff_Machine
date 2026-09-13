@@ -240,19 +240,42 @@ def test_randomized_legacy_report_rejects_empty_trial_count(tmp_path):
 
 
 def test_pick_and_place_keep_gripper_command_honest_on_failure():
+    """A failed PICK must not leave a stale gripper command behind.
+
+    Corrected 2026-09-13. This used to assert ``ctrl == GRIPPER_CLOSED`` after
+    a *failed* pick, which passed only because ``GRIPPER_CLOSED`` was 0.0 --
+    identical to the actuator's home value, so the assertion held whether or
+    not anything was ever commanded. Raising the constant to the Jaw joint's
+    real stop (-0.174) exposed it.
+
+    The assertion also contradicted a deliberate, separately-tested invariant:
+    a failed grasp calls ``_restore_physics`` and rolls MuJoCo state back for a
+    clean retry (``test_failed_grasp_restores_mujoco_state_for_a_clean_retry``),
+    which necessarily undoes the gripper command too. You cannot both restore
+    state and keep the command. Restoration wins, so that is what is asserted.
+    """
     world = IntelTableWorld()
+    home_gripper = float(world.data.ctrl[GRIPPER_QPOS_ADR])
 
     pick = _send(world, "PICK", {"object": "fork_1"})
-    assert world.data.ctrl[GRIPPER_QPOS_ADR] == pytest.approx(GRIPPER_CLOSED)
+    if not pick.ok:
+        # Rolled back to the pre-attempt command, not left mid-grasp.
+        assert world.data.ctrl[GRIPPER_QPOS_ADR] == pytest.approx(home_gripper)
+    else:
+        assert world.data.ctrl[GRIPPER_QPOS_ADR] == pytest.approx(GRIPPER_CLOSED)
 
     place = _send(world, "PLACE", {"object": "fork_1", "to": "left"})
     if place.ok:
         assert world.data.ctrl[GRIPPER_QPOS_ADR] == pytest.approx(GRIPPER_OPEN)
     else:
-        # A rejected placement restores the pre-attempt physics snapshot,
-        # whose gripper command is the closed command left by PICK.
+        # A rejected placement restores the pre-attempt physics snapshot. Its
+        # gripper command is whatever PICK actually left behind -- which, when
+        # PICK itself failed and was rolled back, is the home command, not
+        # GRIPPER_CLOSED. (Asserting GRIPPER_CLOSED here was the same vacuous
+        # comparison corrected above: it only held while that constant was 0.0.)
         assert place.detail["placed"] is False
-        assert world.data.ctrl[GRIPPER_QPOS_ADR] == pytest.approx(GRIPPER_CLOSED)
+        expected = GRIPPER_CLOSED if pick.ok else home_gripper
+        assert world.data.ctrl[GRIPPER_QPOS_ADR] == pytest.approx(expected)
 
 
 def test_open_close_rotate_present_execute_individually_and_differ():

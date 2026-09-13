@@ -347,7 +347,21 @@ HOME = (0.0, -1.57, 1.57, 1.57, -1.57, 0.0)
 # ops without dedicated IK behaviour (OPEN/CLOSE/ROTATE/PRESENT/HANDOFF, and
 # any PICK/MOVE/PLACE on an object this adapter doesn't track).
 GRIPPER_OPEN = 1.5     # Jaw joint, rad -- near the SO-101 open end of its range
-GRIPPER_CLOSED = 0.0
+# The Jaw joint's physical stop is -0.174 rad. Commanding 0.0 left the gripper
+# HALF CLOSED: the fingertip pads still 15.8 mm apart, so every object thinner
+# than that was ungrippable by construction, whatever the IK did. That is the
+# whole fork/spoon/napkin failure -- measured 2026-09-13:
+#
+#   cup_1    110 mm  > 15.8 -> held 10/10
+#   plate_1   32 mm  > 15.8 -> held  9/10
+#   fork_1     8 mm  < 15.8 -> held     0
+#   spoon_1    8 mm  < 15.8 -> held     0
+#   napkin_1   6 mm  < 15.8 -> held     0
+#
+# Closing to the real stop gives a 3.6 mm fingertip gap (the jaws close as a
+# wedge; see so101_capability_map.md's corrected entry). Nothing is relaxed
+# here -- this commands the joint its own MJCF range already allows.
+GRIPPER_CLOSED = -0.174
 DRAWER_OPEN = 0.12     # drawer_slide qpos, m -- matches its MJCF range max
 DRAWER_CLOSED = 0.0
 TRANSIT_HEIGHT = 0.28  # m -- above the table/drawer/tableware envelope, within reach (see _move_to)
@@ -1174,8 +1188,11 @@ class IntelTableWorld(MockWorld):
         the offset) held 10/10, ``plate_1`` (0.016 m, rim-grasped) 9/12, and
         ``fork_1`` / ``spoon_1`` / ``napkin_1`` (0.003-0.004 m) never once.
 
-        Opt-in while it is being evaluated: ``OMNIQ_FINGERTIP_PINCH=1``.
-        Returning 0.0 reproduces the previous behaviour exactly.
+        **Superseded and no longer called.** Shifting the *target* by a
+        pose-dependent world-z offset was the naive version of this fix and
+        regressed ``cup_1`` 10/10 -> 0/10. The right mechanism is to track the
+        fingertip midpoint directly (``_ik_reach_pad(track_tcp=True)``), which
+        needs no offset at all. Kept only so the measurement is not repeated.
         """
         if os.environ.get("OMNIQ_FINGERTIP_PINCH", "") not in ("1", "true", "True"):
             return 0.0
@@ -1573,7 +1590,6 @@ class IntelTableWorld(MockWorld):
         xy_now = self.data.qpos[qpos_adr:qpos_adr + 2].copy()
         z_now = float(self.data.qpos[qpos_adr + 2])
         grasp_z = z_now + OBJECT_GRASP_VERTICAL_OFFSET.get(obj, 0.0)
-        grasp_z += self._fingertip_pinch_offset(arm_offset)
         grasp_xy = xy_now - opening_xy * grasp_offset
         pinch_pose = self._ik_reach_pad_pose(
             arm_offset, (grasp_xy[0], grasp_xy[1], grasp_z), target_rotation,
@@ -1583,9 +1599,15 @@ class IntelTableWorld(MockWorld):
         # orientation frame is already established above, and this 4-DOF
         # roll-pinned solve avoids twisting a pad into the object while the
         # jaws are entering contact.
+        # Track the FINGERTIP midpoint for the final descent, not
+        # fixed_jaw_pad_4. The jaws close as a wedge -- 3.6 mm at the tip,
+        # 19.3 mm at pad_4 -- so a thin object can only ever be pinched at the
+        # tip, and pad_4 sits ~43 mm further up the finger besides. Opt-in
+        # while the downstream constants are re-tuned around it.
         pinch_error = self._ik_reach_pad(
             arm_offset, (grasp_xy[0], grasp_xy[1], grasp_z),
             iters=180, roll=roll_hint,
+            track_tcp=os.environ.get("OMNIQ_FINGERTIP_PINCH", "") in ("1", "true", "True"),
         )
 
         self._set_gripper(arm_offset, GRIPPER_CLOSED, settle_steps=180)  # let the grip actually settle
