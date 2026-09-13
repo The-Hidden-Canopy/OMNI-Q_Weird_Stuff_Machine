@@ -111,3 +111,18 @@ def test_apply_to_plain_instruction_resolves_the_workspace():
     engine = build_mock_engine()
     receipt = engine.run(p.apply_to(engine))
     assert receipt.metrics["resolved"] is True
+
+
+def test_local_inference_constraint_accepts_spoken_paraphrases():
+    """Live 2026-09-13: the operator said "save everything locally" into the
+    voice transport and got an authorized COMMAND that changed nothing -- a
+    paraphrase of a constraint the system already supported."""
+    for phrase in ("save everything locally", "keep everything local",
+                   "run inference on-device", "process it locally",
+                   "store everything locally", "no cloud"):
+        assert ("keep_local", None) in parse(phrase).constraints, phrase
+
+
+def test_local_constraint_does_not_fire_on_unrelated_saving():
+    for phrase in ("save the plates", "keep the plate local to the left"):
+        assert ("keep_local", None) not in parse(phrase).constraints, phrase
