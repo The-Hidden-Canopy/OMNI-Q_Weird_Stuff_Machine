@@ -201,6 +201,30 @@ becomes intelligence rather than robot debugging.
 
 ## Standing notes
 
+- **Packed-master training landed (2026-09-11, OQ-029/OQ-008 adjacent):**
+  `perception/finetune.py` trains from a packaged `*.mxfp8.npz` master
+  (`--base`) with `--w-master mxfp8` per-step RNE re-projection onto the
+  MXFP8 grid — IDA-TRAIN-V2 `k_lion_mxfp8` decode→update→RNE-repack
+  semantics at torch level: packed MXFP8 payload/scales plus BF16 Lion
+  momentum are the optimizer state, while stock YOLO retains a floating-point
+  compute view. `mxfp4`/`mxfp2` masters are refused at admission (sim-only per
+  the IDA-TRAIN-V2 ablation); a
+  manifest/`--w-master` format mismatch refuses at the resume gate. See
+  README "Training from packed masters" and `docs/prior-art.md` #20–21.
+  Projection fusion (2026-09-11): the per-step re-projection now runs the
+  fused `rne_reproject_tensor` (`perception/package_quant_weights.py`) —
+  bit-exact against the codec round-trip (verified element-for-element on
+  the shipped table_yolo_v2 master, 3,022,613 params, plus hostile
+  distributions: ties, denormals, NaN/Inf, floored-scale blocks). Measured
+  on this host, 3M params/tensor: slow codec round-trip ~470–740 ms vs
+  fused ~93–125 ms (~4.5–7x; single-thread numpy here streams ~4 GB/s and
+  bit-exactness needs ~15 full-array passes, so ~100 ms is the numpy floor
+  — under-30 ms needs a compiled kernel).
+  Follow-up: CUDA torch extension — sources vendored verbatim at
+  `integrations/qualcomm/lowbit/vendor/ida_train_v2/` (`fp8_e4m3.hpp`,
+  `mxfp8.cuh`, `mxfp8.cu`; needs nvcc + a parity harness vs
+  `rne_reproject_tensor`, which is the oracle; mind the 1e-30 floor
+  binding for UE8M0 codes < 28, not just code 0).
 - **Kimi:** do **not** spend the morning on the 400M corpus. Immediate
   highest-value work is arm characterization (OQ-003), evaluator (OQ-019), and
   Qualcomm profiling/data (OQ-029/037). The pretraining corpus keeps moving but

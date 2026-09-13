@@ -49,6 +49,47 @@ the train→export→deploy pipeline is proven. Transfer-learn from it:
 That's the OQ-008 path: real public boxes, one FiftyOne merge, a short
 fine-tune from our own weights.
 
+## Combined context head — opt-in, baseline preserved
+
+The tableware-only detector is still the backward-compatible baseline.  A
+separate builder now combines `data/table_yolo_v3` with the locally cached
+COCO train/validation images and annotations into
+`data/table_yolo_combined_v1`.  The combined YOLO vocabulary keeps
+`plate, cup, fork, spoon, knife, napkin, drawer` at ids 0–6 and appends COCO
+scene, animal, food, and kitchen classes.  That covers the objects needed to
+reason about both what the arm may handle and what it must avoid, including
+`person`, `chair`, `table`, `bottle`, `bowl`, `microwave`, `oven`, `toaster`,
+`sink`, and `refrigerator`.
+
+```bash
+python perception/build_combined_yolo.py \
+    --table data/table_yolo_v3 \
+    --coco-annotations data/_haul_cache/annotations_trainval2017.zip \
+    --coco-train-images data/_haul_cache/coco_train_pull \
+    --coco-val-images data/_haul_cache/coco_val_extract \
+    --out data/table_yolo_combined_v1
+```
+
+Start its first training run from the existing tableware fine-tune when that
+local artifact is available, rather than discarding the tableware feature
+baseline:
+
+```bash
+python perception/finetune.py \
+    --data data/table_yolo_combined_v1/data.yaml \
+    --base models/table_yolo_v2_ft_2026-09-11.pt \
+    --name combined_v1
+```
+
+The builder never edits its inputs.  Exact duplicate images are retained once
+with the union of tableware and COCO boxes; near duplicates are dropped and
+recorded.  The current local artifact is a **36,027-image, 82-class** subset
+(33,788 tableware images plus 2,239 cached COCO images), not a full COCO haul.
+The context classes are consequently imbalanced and require a separate
+per-class/deploy-view evaluation before promotion.  Perception breadth does
+not authorize contact: absent or ambiguous people/scene/safety evidence must
+remain unknown to the planner.
+
 **Fastest possible start** (if the big pulls are slow): the 3 Roboflow Universe
 sets — [Cutlery Detection](https://universe.roboflow.com/home-detection/cutlery-detection-1ofa0),
 [Kitchen Utensils](https://universe.roboflow.com/table-utensils-detector/kitchen-utensils-recognition),

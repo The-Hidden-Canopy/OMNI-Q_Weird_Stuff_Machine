@@ -172,6 +172,7 @@ def collect_pool(images: list[tuple[str, Path]], predict_rows, deduper: Deduper,
     stats = {
         "images_seen": 0,
         "images_no_detections": 0,
+        "images_with_detections_by_source": {},
         "cross_set_drops": {p: 0 for p in ref_prefixes},
         "within_set_dups": {"exact": 0, "near": 0},
         "unreadable": 0,
@@ -187,6 +188,9 @@ def collect_pool(images: list[tuple[str, Path]], predict_rows, deduper: Deduper,
             if on_progress and (n + 1) % progress_every == 0:
                 on_progress(n + 1, len(images), stats)
             continue
+        source = key.split("/", 1)[0]
+        stats["images_with_detections_by_source"][source] = \
+            stats["images_with_detections_by_source"].get(source, 0) + 1
         try:
             sha = sha256_of(path)
             with Image.open(path) as im:
@@ -205,7 +209,6 @@ def collect_pool(images: list[tuple[str, Path]], predict_rows, deduper: Deduper,
             if on_progress and (n + 1) % progress_every == 0:
                 on_progress(n + 1, len(images), stats)
             continue
-        source = key.split("/", 1)[0]
         pool[key] = KeptImage(key=key, source=source, rows=rows,
                               src_path=path, sha256=sha, dhash=dh)
         if on_progress and (n + 1) % progress_every == 0:
@@ -287,7 +290,8 @@ def write_receipt(out: Path, manifest: dict, receipt_dir: Path) -> Path | None:
     src_lines = "\n".join(
         f"- `{s}` ({srcs[s].get('license')}): {srcs[s].get('images_downloaded')} "
         f"images downloaded, {srcs[s].get('images_with_detections')} with "
-        f"detections kept pre-dedup"
+        f"detections (conf >= {manifest.get('conf_threshold')}), "
+        f"{srcs[s].get('images_kept_post_dedup')} kept after dedup"
         for s in srcs)
     refs_md = "\n".join(
         f"- `{r.get('dir')}` (prefix `{r.get('prefix')}`): {r.get('images')} "
@@ -469,7 +473,9 @@ def main() -> None:
           f"{stats['images_no_detections']} skipped (no detections)", flush=True)
     for spec in SOURCE_REPOS:
         slug = repo_slug(spec["repo_id"])
-        manifest["sources"][spec["repo_id"]]["images_with_detections"] = sum(
+        manifest["sources"][spec["repo_id"]]["images_with_detections"] = \
+            stats["images_with_detections_by_source"].get(slug, 0)
+        manifest["sources"][spec["repo_id"]]["images_kept_post_dedup"] = sum(
             1 for v in pool.values() if v.source == slug)
     manifest["images_seen"] = stats["images_seen"]
     manifest["images_no_detections"] = stats["images_no_detections"]

@@ -1055,35 +1055,45 @@ def _main_train(args: argparse.Namespace) -> None:
             f"raise --max-images (or --max-extract-bytes if the disk allows)")
 
     # ---- 4. Big zip -> selective extraction -> immediate deletion ---------
-    zip_dir = args.zip_tmp or cache
-    zip_dir.mkdir(parents=True, exist_ok=True)
-    train_zip = zip_dir / "train2017.zip"
-    if not train_zip.exists():
-        download(URL_COCO_TRAIN_ZIP, train_zip, "coco-train2017")
     img_dir = cache / "coco_train_extract"
     img_dir.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(train_zip) as zf:
-        names = set(zf.namelist())
-        present, missing = plan_selective_extract(names, wanted)
-        actual_bytes = sum(zf.getinfo(m).file_size for m in present)
-        print(f"  extracting {len(present)} members (~{actual_bytes / 1e9:.1f} GB "
-              f"uncompressed) of train2017.zip; {len(missing)} annotated ids absent",
-              flush=True)
-        for n, m in enumerate(present):
-            dst = img_dir / Path(m).name
-            if not dst.exists():
-                with zf.open(m) as src, dst.open("wb") as out:
-                    while True:
-                        blk = src.read(1 << 20)
-                        if not blk:
-                            break
-                        out.write(blk)
-            if n and n % 10000 == 0:
-                print(f"    extract {n}/{len(present)} ({time.time() - t_start:.0f}s)",
-                      flush=True)
-    train_zip.unlink()  # free the ~19 GB BEFORE hashing; disk-safety requirement
-    print(f"  train2017.zip deleted after selective extraction "
-          f"({time.time() - t_start:.0f}s)", flush=True)
+    cached = sum(1 for name in wanted if (img_dir / Path(name).name).exists())
+    missing: list[str] = []
+    present: list[str] = []
+    actual_bytes = 0
+    if cached == len(wanted) and wanted:
+        present = list(wanted)
+        actual_bytes = sum((img_dir / Path(n).name).stat().st_size for n in present)
+        print(f"  cache complete: {cached}/{len(wanted)} extracted images already "
+              f"present — skipping train2017.zip download/extract", flush=True)
+    else:
+        zip_dir = args.zip_tmp or cache
+        zip_dir.mkdir(parents=True, exist_ok=True)
+        train_zip = zip_dir / "train2017.zip"
+        if not train_zip.exists():
+            download(URL_COCO_TRAIN_ZIP, train_zip, "coco-train2017")
+        with zipfile.ZipFile(train_zip) as zf:
+            names = set(zf.namelist())
+            present, missing = plan_selective_extract(names, wanted)
+            actual_bytes = sum(zf.getinfo(m).file_size for m in present)
+            print(f"  extracting {len(present)} members (~{actual_bytes / 1e9:.1f} GB "
+                  f"uncompressed) of train2017.zip; {len(missing)} annotated ids absent",
+                  flush=True)
+            for n, m in enumerate(present):
+                dst = img_dir / Path(m).name
+                if not dst.exists():
+                    with zf.open(m) as src, dst.open("wb") as out:
+                        while True:
+                            blk = src.read(1 << 20)
+                            if not blk:
+                                break
+                            out.write(blk)
+                if n and n % 10000 == 0:
+                    print(f"    extract {n}/{len(present)} ({time.time() - t_start:.0f}s)",
+                          flush=True)
+        train_zip.unlink()  # free the ~19 GB BEFORE hashing; disk-safety requirement
+        print(f"  train2017.zip deleted after selective extraction "
+              f"({time.time() - t_start:.0f}s)", flush=True)
     missing_ids = set(missing)
     if missing:
         print(f"  WARNING: {len(missing)} selected images missing from the zip",
