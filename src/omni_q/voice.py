@@ -204,9 +204,26 @@ class SpeechClaim:
     status: ClaimStatus = ClaimStatus.OBSERVED
     identity_confidence: float = 0.0
     world_entity_id: str | None = None
+    #: World revision this claim was acted against, and the revision the
+    #: speaker was looking at when they started talking. Speech takes real
+    #: time -- measured 1.0-3.7 s from last word to dispatch on this hardware,
+    #: part of it a deliberate hold -- so the world can advance mid-sentence.
+    #: Recording both makes that lag auditable; see
+    #: docs/evidence-lag-audit-2026-09-13.md.
+    world_revision: int | None = None
+    observed_revision: int | None = None
+
+    @property
+    def revision_lag(self) -> int | None:
+        """How many world revisions passed while this was being said."""
+        if self.world_revision is None or self.observed_revision is None:
+            return None
+        return self.world_revision - self.observed_revision
 
     @classmethod
-    def from_final(cls, event: SpeechFinal, speaker: "SpeakerState") -> "SpeechClaim":
+    def from_final(cls, event: SpeechFinal, speaker: "SpeakerState", *,
+                   world_revision: int | None = None,
+                   observed_revision: int | None = None) -> "SpeechClaim":
         digest = hashlib.sha256(
             f"{event.session_id}|{event.org_id}|{event.sequence}|{event.speaker_id}|"
             f"{event.t_start_ns}|{event.t_end_ns}|{event.text}".encode()
@@ -223,6 +240,8 @@ class SpeechClaim:
             confidence=event.confidence,
             identity_confidence=speaker.identity_confidence,
             world_entity_id=speaker.world_entity_id,
+            world_revision=world_revision,
+            observed_revision=observed_revision,
         )
 
     def as_dict(self) -> dict[str, Any]:
@@ -239,6 +258,9 @@ class SpeechClaim:
             "status": self.status.value,
             "identity_confidence": self.identity_confidence,
             "world_entity_id": self.world_entity_id,
+            "world_revision": self.world_revision,
+            "observed_revision": self.observed_revision,
+            "revision_lag": self.revision_lag,
         }
 
 
@@ -767,14 +789,29 @@ class VoiceRuntime:
         pointed_at: str | None = None,
         recipient: str | None = None,
         object_candidates: Sequence[str] = (),
+        observed_revision: int | None = None,
     ) -> VoiceDispatchResult:
+        """Ingest finalized speech as a claim.
+
+        ``observed_revision`` is the world revision the speaker was looking at
+        when they began the utterance. Supplying it turns on evidence-lag
+        handling for *references*: speech takes 1.0-3.7 s to arrive here on
+        this hardware (measured 2026-09-13, partly a deliberate hold), and a
+        demonstrative like "that one" resolved at commit time binds against a
+        world the speaker may never have seen. Constraints are unaffected --
+        "don't use the left arm" is still valid three seconds later, and
+        rejecting on lag would break the feature while looking like rigour.
+        Omit it and behaviour is exactly as before.
+        """
         self._check_event(event)
         known = {speaker_state.speaker_id for speaker_state in self.registry.snapshot()}
         previous = self.arbiter.active_speaker
         was_overlapping = self.arbiter.mode is ConversationMode.OVERLAPPING
         speaker = self.registry.observe(event)
         turn = self.turns.update(event)
-        claim = SpeechClaim.from_final(event, speaker)
+        world_revision = getattr(world, "revision", None) if world is not None else None
+        claim = SpeechClaim.from_final(event, speaker, world_revision=world_revision,
+                                       observed_revision=observed_revision)
         self.arbiter.final(claim)
         self._emit_speaker_lifecycle(event.speaker_id, known, previous, was_overlapping)
         if was_overlapping:
@@ -812,6 +849,25 @@ class VoiceRuntime:
             pointed_at=pointed_at, recipient=recipient,
             object_candidates=object_candidates,
         )
+        lag = claim.revision_lag
+        if lag:
+            # The world advanced while this was being said, so a demonstrative
+            # was resolved against a scene the speaker was not looking at.
+            # Unresolve rather than guess -- the same conservatism the resolver
+            # already applies to an ambiguous phrase.
+            stale = tuple(
+                replace(reference, resolved=None, status=ClaimStatus.UNRESOLVED,
+                        evidence=reference.evidence + (f"stale_by_{lag}_revisions",))
+                if reference.resolved else reference
+                for reference in references
+            )
+            if any(r.resolved for r in references):
+                self.bus.publish("voice.reference.stale", source=event.source,
+                                 claim_id=claim.claim_id, revision_lag=lag,
+                                 observed_revision=claim.observed_revision,
+                                 world_revision=claim.world_revision)
+                self._emit_hook("on_reference_stale", claim=claim, revision_lag=lag)
+            references = stale
         for reference in references:
             self.bus.publish("voice.reference.candidate", source="voice",
                              claim_id=claim.claim_id, reference=reference.as_dict())

@@ -911,3 +911,52 @@ def test_an_expiring_hold_does_not_strand_the_event_that_expired_it():
 
     assert sink.rejected == [], sink.rejected
     assert result is not None and result.status != "observed"
+
+
+def test_the_transport_captures_the_revision_at_utterance_start():
+    """Evidence lag: the world can move while a sentence is being spoken.
+
+    The revision that matters is the one the speaker was looking at when they
+    *started*, not the one current when the last fragment happens to land.
+    """
+    revisions = iter([4, 9, 9, 9, 9])
+    runtime, _ = _runtime_with_operator("S1")
+    seen: list = []
+
+    class _Recording(VoiceSink):
+        def deliver(self, mapped, **extra):
+            if mapped.final:
+                seen.append(extra.get("observed_revision"))
+            return super().deliver(mapped, **extra)
+
+    mapper = _mapper()
+    sink = _Recording(SpeechmaticsRealtimeAdapter(runtime))
+    aggregator = UtteranceAggregator(sink, mapper,
+                                     world_revision=lambda: next(revisions))
+    # Two fragments of one utterance: only the first samples the revision.
+    aggregator.offer(mapper.map_message(
+        _message("AddTranscript", "don't use", 0.0, 0.5)))
+    aggregator.offer(mapper.map_message(
+        _message("AddTranscript", "the left arm.", 0.5, 1.2)))
+    aggregator.close()
+
+    assert seen == [4], "must be the revision at utterance start, not at flush"
+
+
+def test_no_world_provider_means_no_observed_revision_is_claimed():
+    runtime, _ = _runtime_with_operator("S1")
+    seen: list = []
+
+    class _Recording(VoiceSink):
+        def deliver(self, mapped, **extra):
+            if mapped.final:
+                seen.append(extra)
+            return super().deliver(mapped, **extra)
+
+    mapper = _mapper()
+    aggregator = UtteranceAggregator(_Recording(SpeechmaticsRealtimeAdapter(runtime)),
+                                     mapper)
+    aggregator.offer(mapper.map_message(
+        _message("AddTranscript", "don't use the left arm.", 0.0, 1.2)))
+    aggregator.close()
+    assert seen == [{}], "never invent a revision the transport cannot know"

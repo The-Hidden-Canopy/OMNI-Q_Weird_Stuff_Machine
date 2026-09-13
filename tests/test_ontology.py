@@ -219,3 +219,50 @@ def test_claims_carry_provenance():
     obs.observe(world.state())
     for e in obs.ontology.entities.values():
         assert e.sources                                       # every entity traces to a model
+
+
+# -- evidence lag: age-aware trust ------------------------------------
+
+
+def test_an_unrefreshed_entity_goes_stale_rather_than_staying_live():
+    """Entities carried last_seen and missed counters that no trust decision
+    ever consulted, and DataStatus.STALE was defined, exported and never
+    assigned anywhere in the repo. See docs/evidence-lag-audit-2026-09-13.md.
+    """
+    from omni_q.contracts import DataStatus
+
+    o = Ontology(stale_after_frames=5)
+    o.ingest([Claim("yolo_objects", "cup", 0.91, _box(0.44, 0.44))], 1)
+
+    fresh = o.world_state(3)
+    assert all(d.status is DataStatus.LIVE for d in fresh.objects.values())
+
+    aged = o.world_state(20)  # 19 frames since last_seen, horizon is 5
+    assert all(d.status is DataStatus.STALE for d in aged.objects.values())
+    assert all(not d.authoritative for d in aged.objects.values())
+    # The observation projection must agree with the world projection.
+    assert all(d.status is DataStatus.STALE for d in o.observation(20).detections)
+
+
+def test_age_is_checked_before_confidence():
+    """An observation the world moved past is unreliable however confident the
+    detector was when it made it."""
+    from omni_q.contracts import DataStatus
+
+    o = Ontology(stale_after_frames=2, conflict_conf=0.45)
+    o.ingest([
+        Claim("yolo_objects", "fork", 0.9, _box(0.2, 0.5)),
+        Claim("yolo_tools", "knife", 0.9, _box(0.202, 0.502)),
+    ], 1)
+    (e,) = o.entities.values()
+    assert e.conflict, "baseline: this entity is in conflict, i.e. not trusted"
+    assert all(d.status is DataStatus.STALE for d in o.world_state(9).objects.values())
+
+
+def test_staleness_is_off_by_default():
+    from omni_q.contracts import DataStatus
+
+    o = Ontology()
+    o.ingest([Claim("yolo_objects", "cup", 0.91, _box(0.44, 0.44))], 1)
+    assert all(d.status is DataStatus.LIVE
+               for d in o.world_state(10_000).objects.values())

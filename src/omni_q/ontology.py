@@ -182,6 +182,7 @@ class Ontology:
         center_gate: float = 0.15,
         conflict_conf: float = 0.45,
         max_missed: int = 3,
+        stale_after_frames: int | None = None,
         relation_rules: list[RelationRule] | None = None,
         place_setting: dict[str, set[str]] | None = None,
     ) -> None:
@@ -191,6 +192,13 @@ class Ontology:
         self.center_gate = center_gate
         self.conflict_conf = conflict_conf
         self.max_missed = max_missed
+        # Frames after which an unrefreshed entity is reported DataStatus.STALE
+        # rather than LIVE. ``None`` keeps the previous behaviour: age tracked
+        # and ignored. See docs/evidence-lag-audit-2026-09-13.md -- every
+        # entity here carried last_seen and missed counters that no trust
+        # decision ever consulted, and DataStatus.STALE was defined, exported,
+        # and never assigned by any code path in the repo.
+        self.stale_after_frames = stale_after_frames
         self.place_setting = (
             DEFAULT_PLACE_SETTING if place_setting is None else place_setting
         )
@@ -328,6 +336,19 @@ class Ontology:
         strong = [b for b, v in buckets.items() if v >= self.conflict_conf]
         e.conflict = len(strong) >= 2
 
+    def _status(self, e: "Entity", frame: int) -> DataStatus:
+        """Trust label for one entity as of ``frame``.
+
+        Age is checked before confidence on purpose: an observation the world
+        has moved past is unreliable however confident the detector was when
+        it made it, and ``DataStatus``'s own docstring requires the planner to
+        re-``Observe`` before acting on anything that is not ``LIVE``.
+        """
+        if (self.stale_after_frames is not None
+                and frame - e.last_seen > self.stale_after_frames):
+            return DataStatus.STALE
+        return DataStatus.LIVE if e.trusted else DataStatus.FALLBACK
+
     # -- projection to the rest of the stack -------------------------
     def world_state(self, frame: int, *, goal: str | None = None,
                     targets: dict[str, str] | None = None,
@@ -337,7 +358,7 @@ class Ontology:
         for e in self.entities.values():
             if e.canonical_type == "human":
                 continue                                   # people aren't task objects
-            status = DataStatus.LIVE if e.trusted else DataStatus.FALLBACK
+            status = self._status(e, frame)
             objs[e.id] = Detection(
                 object_id=e.id, cls=e.canonical_type, zone=e.zone,
                 target_zone=targets.get(e.id, e.zone),
@@ -348,7 +369,7 @@ class Ontology:
     def observation(self, frame: int) -> Observation:
         dets = tuple(
             Detection(e.id, e.canonical_type, e.zone, e.zone, round(e.type_conf, 3),
-                      DataStatus.LIVE if e.trusted else DataStatus.FALLBACK, e.last_seen)
+                      self._status(e, frame), e.last_seen)
             for e in sorted(self.entities.values(), key=lambda e: e.id)
             if e.canonical_type != "human"
         )

@@ -364,14 +364,21 @@ class VoiceSink:
         self.unmeasured_confidence = 0
         self.unlabelled_speaker = 0
 
-    def deliver(self, mapped: MappedTranscript) -> Any:
+    def deliver(self, mapped: MappedTranscript, **extra: Any) -> Any:
+        """Deliver one mapped transcript.
+
+        ``extra`` is merged into the final's kwargs for this call only -- the
+        aggregator uses it to pass ``observed_revision``, the world revision
+        captured when the utterance *started* rather than when it finished.
+        """
         if not mapped.confidence_measured:
             self.unmeasured_confidence += 1
         if not mapped.speaker_labelled:
             self.unlabelled_speaker += 1
         try:
             if mapped.final:
-                result = self.adapter.on_final(mapped.payload, **self.final_kwargs)
+                result = self.adapter.on_final(mapped.payload,
+                                               **{**self.final_kwargs, **extra})
                 if result is None:
                     # An IntentAccumulator is holding this utterance for the
                     # next one. Not a dispatch and not a failure.
@@ -507,7 +514,16 @@ class UtteranceAggregator:
                  idle_grace_ms: float = 1400.0,
                  flush_on_terminal_punctuation: bool = True,
                  min_words_for_punctuation_flush: int = 3,
-                 urgent: Callable[[str], bool] | None = None) -> None:
+                 urgent: Callable[[str], bool] | None = None,
+                 world_revision: Callable[[], int | None] | None = None) -> None:
+        # Sampled when an utterance's FIRST fragment is buffered, i.e. as close
+        # as this layer gets to "what the speaker was looking at when they
+        # started talking". Speech then takes 1.0-3.7 s to reach the boundary
+        # (measured 2026-09-13), during which the world can move. Passing this
+        # to ingest_final is what lets a demonstrative be caught as stale
+        # instead of silently binding to a scene the speaker never saw.
+        self.world_revision = world_revision
+        self._observed_revision: int | None = None
         self.flush_on_terminal_punctuation = bool(flush_on_terminal_punctuation)
         # Speechmatics punctuates a vocative: the real capture starts with the
         # fragment "Omni." Treating that period as a sentence end split the
@@ -552,6 +568,8 @@ class UtteranceAggregator:
         self.fragments += 1
         if self._buffer and self._should_close(mapped):
             self.flush()
+        if not self._buffer and self.world_revision is not None:
+            self._observed_revision = self.world_revision()
         self._buffer.append(mapped)
         self._last_arrival_ns = int(self.mapper.clock())
         if self._span_ms() >= self.max_utterance_ms:
@@ -680,12 +698,15 @@ class UtteranceAggregator:
         })
         self._last_flush_end_ns = payload["t_end_ns"]
         self.utterances += 1
+        observed_revision, self._observed_revision = self._observed_revision, None
         merged = MappedTranscript(
             payload=payload, final=True,
             confidence_measured=all(f.confidence_measured for f in fragments),
             speaker_labelled=all(f.speaker_labelled for f in fragments),
         )
-        return self.sink.deliver(merged)
+        if observed_revision is None:
+            return self.sink.deliver(merged)
+        return self.sink.deliver(merged, observed_revision=observed_revision)
 
     def stats(self) -> dict[str, Any]:
         return {

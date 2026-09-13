@@ -19,6 +19,7 @@ from omni_q import (
     WorldState,
 )
 from omni_q.contracts import Detection
+from omni_q.voice import ClaimStatus
 from omni_q.mutation import RuntimeMutator
 
 
@@ -339,3 +340,65 @@ def test_a_mumbled_safety_word_is_still_an_interruption():
                                    [VoiceCapability.INTERRUPT.value])
     runtime.ingest_final(event)
     assert calls == ["STOP"]
+
+
+def _world_with(objects, revision):
+    from omni_q.contracts import WorldState
+    return WorldState(frame=0, objects=objects, goal="set the table",
+                      revision=revision, org_id="org_a")
+
+
+def test_a_claim_records_the_world_revision_it_was_acted_against():
+    """Speech takes 1.0-3.7 s to arrive; the lag must be auditable."""
+    runtime = VoiceRuntime("session_01", "org_a")
+    event = _final(1, "don't use the left arm")
+    _operator(runtime, event)
+    result = runtime.ingest_final(event, world=_world_with({}, 7),
+                                  observed_revision=5)
+    assert result.claim.world_revision == 7
+    assert result.claim.observed_revision == 5
+    assert result.claim.revision_lag == 2
+    assert result.claim.as_dict()["revision_lag"] == 2
+
+
+def test_a_reference_resolved_against_a_moved_world_is_unresolved():
+    """The speaker pointed at a scene that no longer exists by commit time."""
+    runtime = VoiceRuntime("session_01", "org_a")
+    event = _final(1, "don't move that")
+    _operator(runtime, event)
+    world = _world_with({"cup_1": Detection("cup_1", "cup", "left_table", "left_table")}, 9)
+
+    fresh = runtime.ingest_final(event, world=world, pointed_at="cup_1",
+                                 observed_revision=9)
+    assert any(r.resolved for r in fresh.references), "baseline: it resolves"
+
+    runtime2 = VoiceRuntime("session_01", "org_a")
+    event2 = _final(1, "don't move that")
+    _operator(runtime2, event2)
+    stale = runtime2.ingest_final(event2, world=world, pointed_at="cup_1",
+                                  observed_revision=6)
+    assert not any(r.resolved for r in stale.references)
+    assert all(r.status is ClaimStatus.UNRESOLVED
+               for r in stale.references if "stale_by_3_revisions" in r.evidence)
+    assert any(e.kind == "voice.reference.stale" for e in runtime2.bus.log)
+
+
+def test_lag_does_not_suppress_a_constraint():
+    """"Don't use the left arm" is still valid three seconds later."""
+    runtime = VoiceRuntime("session_01", "org_a")
+    event = _final(1, "don't use the left arm")
+    _operator(runtime, event)
+    result = runtime.ingest_final(event, world=_world_with({}, 40),
+                                  observed_revision=1)
+    assert result.candidate.action == "GRAPH_MUTATION"
+    assert result.claim.revision_lag == 39
+
+
+def test_omitting_observed_revision_keeps_the_previous_behaviour():
+    runtime = VoiceRuntime("session_01", "org_a")
+    event = _final(1, "don't move that")
+    _operator(runtime, event)
+    world = _world_with({"cup_1": Detection("cup_1", "cup", "left_table", "left_table")}, 9)
+    result = runtime.ingest_final(event, world=world, pointed_at="cup_1")
+    assert result.claim.revision_lag is None
+    assert any(r.resolved for r in result.references)

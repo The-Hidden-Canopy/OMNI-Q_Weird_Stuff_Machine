@@ -244,11 +244,26 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("one of --file, --raw, --mic or --replay is required")
 
     mutator = None
+    world_revision = None
     if args.mock_engine:
         from omni_q import build_mock_engine  # noqa: PLC0415 - optional path
         from omni_q.mutation import RuntimeMutator
 
-        mutator = RuntimeMutator(build_mock_engine())
+        engine = build_mock_engine()
+        mutator = RuntimeMutator(engine)
+
+        def world_revision() -> int | None:
+            """World revision right now, for evidence-lag accounting.
+
+            Sampled when an utterance starts and compared against the world at
+            commit time, so a reference resolved against a scene that has since
+            moved is caught rather than silently bound. Only available with a
+            live engine -- without --mock-engine there is no world to ask.
+            """
+            try:
+                return engine.world.state().revision
+            except Exception:
+                return None
         print("[voice] mock engine attached: authorized constraint changes "
               "will be applied through RuntimeMutator")
 
@@ -288,6 +303,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.no_aggregate:
         aggregator = UtteranceAggregator(
             sink, mapper, silence_ms=args.silence_ms,
+            world_revision=world_revision,
             # The voice boundary's own gate decides what is urgent; the
             # transport only asks, so safety policy stays in one place.
             urgent=lambda text: runtime.interruption_gate.inspect(text).detected,
