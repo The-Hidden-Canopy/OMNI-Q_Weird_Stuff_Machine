@@ -879,3 +879,35 @@ def test_an_instruction_cut_at_a_false_period_is_rejoined():
         _message("AddTranscript", "Left arm.", 1.5, 2.2)))
     assert result.status == "committed"
     assert ["prefer_arm", "right"] in result.mutation["applied"]
+
+
+def test_an_expiring_hold_does_not_strand_the_event_that_expired_it():
+    """Live 2026-09-13: one final was dropped with "speech sequence is not
+    strictly increasing".
+
+    Holding reorders dispatch relative to arrival. A stale hold is released
+    *during* the handling of a newer event and takes a sequence number; the
+    event that triggered the release then followed carrying an older one, and
+    VoiceRuntime correctly rejected it -- losing real speech.
+    """
+    from omni_q.voice import IntentAccumulator
+
+    runtime, _ = _runtime_with_operator("S1")
+    mapper = _mapper()
+    accumulator = IntentAccumulator(runtime, window_ms=500,
+                                    sequence_source=mapper.next_sequence)
+    sink = VoiceSink(SpeechmaticsRealtimeAdapter(accumulator))
+
+    # Held: not an instruction on its own.
+    assert sink.deliver(mapper.map_message(
+        _message("AddTranscript", "left arm", 0.0, 0.5))) is None
+    # Partials in between move the shared counter along.
+    for index in range(3):
+        sink.deliver(mapper.map_message(
+            _message("AddPartialTranscript", f"noise {index}", 1.0, 1.4)))
+    # Far enough later that the hold expires, releasing it first.
+    result = sink.deliver(mapper.map_message(
+        _message("AddTranscript", "don't use the left arm.", 9.0, 10.0)))
+
+    assert sink.rejected == [], sink.rejected
+    assert result is not None and result.status != "observed"

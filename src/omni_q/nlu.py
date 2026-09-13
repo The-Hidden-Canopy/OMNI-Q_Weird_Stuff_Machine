@@ -156,8 +156,14 @@ def _rule_forbid(text: str, vocab: dict[str, str] | None) -> list[tuple[str, Any
 
 
 def _rule_keep_local(text: str, vocab: dict[str, str] | None) -> list[tuple[str, Any]]:
-    if re.search(r"\b(keep (everything|it|inference|things|the model)?\s*"
-                 r"(local|on[- ]device)|on[- ]device|no cloud|stay local"
+    # "keep" was the only verb accepted until 2026-09-13, when an operator
+    # said "save everything locally" into the live voice transport and got an
+    # authorized COMMAND that changed nothing -- a paraphrase of a constraint
+    # the system already supports. "locally" was likewise unmatched; only
+    # "local" was.
+    if re.search(r"\b((keep|save|run|process|do|store)\s+"
+                 r"(everything|it|inference|things|the model|this|that)?\s*"
+                 r"(local(ly)?|on[- ]device)|on[- ]device|no cloud|stay local"
                  r"|stay offline|fully local|all local|locally only"
                  r"|keep everything on the device)\b", text):
         return [("keep_local", None)]
