@@ -34,6 +34,58 @@ class ReasonerUnavailable(RuntimeError):
     """The configured reasoner backend cannot serve requests right now."""
 
 
+def _last_position_head(weight):
+    """Vocabulary projection restricted to the position generation actually reads.
+
+    The reference model projects its whole hidden sequence through the
+    256k-row tied head on *every* decode step: ``lm_head(forecast_hidden[:,
+    -end:])`` is ``[1, evidence_len, 256000]`` -- 341 MB in FP32 at a
+    333-token planner prompt -- and each subsequent step repeats it one
+    token longer. ``OmniInference.generate`` reads exactly one row of that
+    tensor (``output.logits[0, -1]``); every other row is computed,
+    allocated, and discarded.
+
+    On a 6 GiB card the cost is not the 341 MB itself but the allocator
+    fragmentation behind it: measured on an RTX 4050, generation reserved
+    **12.29 GiB** (against 6.14 GiB of VRAM) and died of OOM after ~16
+    tokens, because each step requests a differently-shaped multi-hundred-MB
+    block that no previous block can satisfy. Projecting only the final
+    position instead: **1.11 GiB reserved, 1.10 GiB peak, 48 tokens clean,
+    and 0.76 s/token versus 1.08 s/token** -- the discarded rows were also
+    pure compute.
+
+    Substituted onto the loaded model rather than patched into the vendored
+    package, so ``omni_reference`` stays byte-identical to its source. The
+    contract that matters is preserved exactly: ``logits[0, -1]`` is the same
+    vector it always was, because only rows ``generate`` never indexes are
+    the ones now missing. Positions other than the last are NOT available
+    through this head -- training reads many positions and must not use it
+    (see ``reasoner/train_planner_reasoner.py``, which keeps its own head).
+
+    This is the same defect class as the native trainer's ``[T, vocab]``
+    logits buffer (IDA-TRAIN-V2 ``f4196c7e``): a full-vocabulary surface
+    materialized where a single row was wanted.
+
+    Built here rather than at module scope because ``torch`` is a lazy
+    dependency of this backend, and it must be a real ``nn.Module``: the
+    reference model registers ``lm_head`` as a submodule, so plain objects
+    are refused by ``nn.Module.__setattr__``. Keeping the tied weight as this
+    module's own parameter mirrors the tying the model already performs.
+    """
+    import torch.nn as nn  # lazy: torch is an opt-in dependency
+    import torch.nn.functional as F
+
+    class _LastPositionHead(nn.Module):
+        def __init__(self, tied_weight) -> None:
+            super().__init__()
+            self.weight = tied_weight
+
+        def forward(self, hidden):
+            return F.linear(hidden[:, -1:], self.weight)
+
+    return _LastPositionHead(weight)
+
+
 @dataclass(frozen=True)
 class ReasonerResult:
     """One completed reasoner turn."""
@@ -204,6 +256,10 @@ class OmniReferenceReasoner:
 
         model = load_omni_reference(self.checkpoint, self.receipt,
                                     device=self.device)
+        # Identity/digest verification above is complete before this point;
+        # swapping the head afterwards cannot affect what was validated or
+        # loaded (see _LastPositionHead for the measurement that motivates it).
+        model.lm_head = _last_position_head(model.get_input_embeddings().weight)
         self._inference = OmniInference(model)
         self._artifact_identity = dict(getattr(model, "ida_artifact_identity", {}))
         self._tokenizer = AutoTokenizer.from_pretrained(str(self.tokenizer_path))
