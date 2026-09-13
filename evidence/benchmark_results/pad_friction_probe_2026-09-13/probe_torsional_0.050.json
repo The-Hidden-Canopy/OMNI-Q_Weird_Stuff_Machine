@@ -1,0 +1,23 @@
+{
+  "label": "probe_torsional_050",
+  "pad_friction": "3.00 0.050 0.001",
+  "wall_s": 118.2,
+  "outcomes": {
+    "success": 0,
+    "grasp_failure": 10,
+    "placement_failure": 0,
+    "timeout": 0,
+    "collision": 0,
+    "transition_failure": 0,
+    "unresolved": 0
+  },
+  "per_object": {
+    "held_in_trials": {
+      "cup_1": 10,
+      "plate_1": 9
+    },
+    "placed_in_trials": {
+      "cup_1": 8
+    }
+  }
+}

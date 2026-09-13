@@ -47,10 +47,16 @@ now externally corroborated rather than assumed.
 
 Torsional friction is what stops a pinched object rotating out of the grasp.
 That is precisely the failure mode for thin, flat objects, which is precisely
-the set still unsolved (`fork_1`, `spoon_1`, `napkin_1`). This is a cheap,
-falsifiable probe: raise the middle term toward 0.05 and re-run the 10-seed
-randomized harness. **Not yet run** — it changes physics parameters and
-deserves its own before/after evidence bundle, not a drive-by edit.
+the set still unsolved (`fork_1`, `spoon_1`, `napkin_1`).
+
+> **RUN AND FALSIFIED, same day.** Ten randomized trials per arm, same seed,
+> only the middle term changed: **byte-identical** per-object outcomes
+> (`cup_1` 10/10, `plate_1` 9/10, flat objects 0). Friction was never the
+> binding constraint — the receipts show the gripper never reaches these
+> objects (pinch position error up to **147 mm**, pressing the table at
+> **32.7 N** against the successful grasp's 0.28 N). Full evidence:
+> [`evidence/benchmark_results/pad_friction_probe_2026-09-13/`](../evidence/benchmark_results/pad_friction_probe_2026-09-13/README.md).
+> The blocker is IK convergence on the final descent to a low flat target.
 
 Note the raw `so_arm100.xml` values (`friction="1 0.005 0.0001"`,
 `solimp="2 1 0.01"`) are **not** what runs: `intel_sim.py` overrides friction,
@@ -98,6 +104,69 @@ the teleop step is the real cost — someone has to demonstrate the grasps.
 **Caveat before anyone budgets on that number:** 30–60 min is *their* figure on
 *their* hardware for *their* task. This box trains the planner reasoner at
 ~10 s/example; no ACT timing has been measured here.
+
+## The tutorial's code, read properly (default branch is `master`, not `main`)
+
+`mujoco_env/` is the part worth studying — `y_env.py`, `ik.py`,
+`mujoco_parser.py`, `transforms.py`, `utils.py`. `train_model.py` is **LeRobot's
+own training script, vendored** (Apache-2.0); copying it means carrying its
+licence and attribution, not treating it as tutorial code.
+
+`SimpleEnv(xml_path, action_type='eef_pose', state_type='joint_angle', seed)`:
+
+- **`action_type='eef_pose'` means the policy emits Cartesian deltas**
+  (`dx,dy,dz,dr,dp,dy`) and IK converts them. The SO-101 RL post independently
+  concluded Cartesian beats joint-space. **Two unrelated sources, same
+  conclusion** — that is the strongest single signal across both, and we are
+  already on the right side of it.
+- IK: augmented Jacobian, damped least squares (`damped_ls`), `stepsize=1.0`,
+  `eps=1e-2`, `th=1°`, `max_ik_tick=50` inside `step()` (1000 available),
+  joint angles clipped to `[q_mins, q_maxs]` every iteration. Worth comparing
+  against our own damping sweep in `_ik_reach_pad`, which tested 4 start/end
+  damping pairs; theirs is a single fixed `eps`.
+- Reset randomization: `sample_xyzs()` over `x ∈ [0.24, 0.4]`,
+  `y ∈ [-0.2, 0.2]`, `z = 0.82`, **minimum 0.2 m separation between objects**,
+  then 100 settle steps. The separation constraint is a detail our
+  `IntelSceneConfig` jitter does not enforce.
+- Success is plain geometry: mug-plate XY < 0.1 m, Z < 0.6 m, gripper opening
+  < 0.1, TCP height > 0.9.
+- Gripper fans one command to four finger joints as `[cmd, cmd*0.8, cmd,
+  cmd*0.8]`. Ours is a single `Jaw` joint — not transferable, but it shows the
+  shape.
+
+### The schema we would have to emit
+
+To use ACT / pi_0 / SmolVLA unmodified, `IntelTableWorld` must produce exactly:
+`observation.image` and `observation.wrist_image` (256×256 RGB),
+`observation.state` (6-D pose), `action` (7-D), at 20 fps, as `LeRobotDataset`
+parquet. We render cameras already; the wrist view and the 20 fps cadence are
+the work.
+
+### The objection that decides whether this path is worth starting
+
+**Imitation learning needs demonstrations of the thing we cannot currently do.**
+`fork_1` / `spoon_1` / `napkin_1` have no reliable scripted grasp. An ACT policy
+trained on teleop data can only imitate successful episodes — so someone has to
+first produce successful fork grasps *by hand*, through keyboard teleop.
+
+That may well be easier than our scripted IK, because a human closes the loop
+visually and nudges — note the RL agent independently learned to nudge the cube
+before grasping, which nobody rewarded. But it may also be impossible, in which
+case the blocker is geometry and contact, and **no policy will learn around it**.
+
+**Proposed de-risking experiment, ~30 minutes, before committing to the VLA
+path:** wire keyboard teleop (their control scheme: WASD xy, RF z, QE tilt,
+arrows rotate, SPACE gripper, Z reset) over *our existing* dual-SO-101 scene and
+try to grasp `fork_1` by hand. One bit of information, and it decides the whole
+branch:
+
+- *human succeeds* → demonstrations are collectable, ACT is worth the 30–60 min
+  train, and the scripted-IK gap is a control problem;
+- *human fails* → the problem is physics/geometry (start with the torsional
+  friction delta above), and the imitation path would have been dead on arrival.
+
+This test does not exist in `BACKLOG.md` and is cheaper than either branch it
+chooses between.
 
 ## Status
 

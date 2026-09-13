@@ -449,6 +449,21 @@ OBJECT_GRASP_VERTICAL_OFFSET: dict[str, float] = {
 OBJECT_GRASP_SEED_BIAS: dict[str, tuple[float, float]] = {
     "plate_1": (0.0, 0.2),
 }
+# Fingertip pad contact: sliding, torsional, rolling friction.
+#
+# Default is exactly the value that has been running, so this constant is a
+# no-op rename until someone overrides it. It exists because the middle term is
+# a live hypothesis: the SO-101 RL project that solved a cube grasp in the same
+# simulator used torsional 0.05 (`friction="1 0.05 0.001"`), 2.5x ours, and
+# torsional friction is precisely what stops a pinched object rotating out of
+# the grip -- the failure mode of the thin, flat objects still unsolved here
+# (fork_1/spoon_1/napkin_1). See
+# docs/oq-010-external-sources-crosscheck-2026-09-13.md.
+#
+# Overridable by env var so a probe never has to edit physics in the working
+# tree: OMNIQ_PAD_FRICTION="3.00 0.050 0.001"
+PAD_FRICTION = os.environ.get("OMNIQ_PAD_FRICTION", "3.00 0.020 0.001")
+
 GRASP_CLEARANCE = 0.015  # m -- gap kept above an object's top surface before closing on it
 # Legacy-path safety bounds.  These are controller stop bounds, not hardware
 # force limits: the contact-handoff path owns the promotion-grade force gate.
@@ -650,7 +665,7 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
         for geom in arm_body.iter("geom"):
             name = geom.attrib.get("name", "")
             if "jaw_pad_" in name:
-                geom.set("friction", "3.00 0.020 0.001")
+                geom.set("friction", PAD_FRICTION)
                 geom.set("solref", ".050 1")
                 geom.set("solimp", ".80 .95 .010")
         worldbody.append(arm_body)
@@ -2196,7 +2211,7 @@ def _configure_contact_arm(arm_body: ET.Element) -> None:
             geom.set("contype", "4")
             geom.set("conaffinity", "0")
             geom.set("group", "3")
-            geom.set("friction", "3.00 0.020 0.001")
+            geom.set("friction", PAD_FRICTION)
             geom.set("solref", ".050 1")
             geom.set("solimp", ".80 .95 .010")
         else:
@@ -2273,7 +2288,7 @@ def contact_handoff_xml(config: ContactHandoffConfig | None = None) -> str:
         "size": ".022 .050",
         "mass": ".010",
         "rgba": ".22 .58 .78 1",
-        "friction": "3.00 0.020 0.001",
+        "friction": PAD_FRICTION,
         "solref": ".050 1",
         "solimp": ".80 .95 .010",
         "contype": "16",
