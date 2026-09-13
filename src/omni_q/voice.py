@@ -636,6 +636,8 @@ class VoiceDispatchResult:
     interruption: InterruptionDecision | None = None
     mutation: dict[str, Any] | None = None
     status: str = "observed"
+    response_text: str | None = None
+    response_backend: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -645,6 +647,8 @@ class VoiceDispatchResult:
             "references": [r.as_dict() for r in self.references],
             "interruption": self.interruption.as_dict() if self.interruption else None,
             "mutation": self.mutation,
+            "response_text": self.response_text,
+            "response_backend": self.response_backend,
             "status": self.status,
         }
 
@@ -672,12 +676,45 @@ def intent_capability(parsed: Any, text: str) -> str:
 _DANGLING_WORDS = frozenset({
     "the", "a", "an", "your", "my", "its", "his", "her", "their", "our",
     "and", "or", "to", "of", "with", "for", "on", "in", "at", "from",
+    "you", "are", "is", "am", "can", "could", "would", "will", "do", "did",
+    "have", "has", "who", "what", "when", "where", "why", "how",
 })
 
 
 def _ends_mid_phrase(text: str) -> bool:
     words = re.findall(r"[\w']+", text.lower())
     return bool(words) and words[-1] in _DANGLING_WORDS
+
+
+_OMNI_ADDRESS = re.compile(r"^\s*omni(?=\s|[,.!?;:])", re.I)
+_DIALOGUE_QUESTION = re.compile(
+    r"^(?:who|what|when|where|why|how|can|could|would|will|are|is|do|did|have|has)\b",
+    re.I,
+)
+
+
+def _is_addressed_dialogue(text: str) -> bool:
+    """Return true only for speech explicitly addressed to OMNI.
+
+    Requiring the wake/address word keeps nearby human conversation from
+    becoming model dialogue.  Actionable speech is still selected by
+    ``intent_capability`` before this predicate is consulted.
+    """
+    match = _OMNI_ADDRESS.match(text)
+    if match is None:
+        return False
+    remainder = text[match.end():].lstrip(" \t,.;:!?")
+    return bool(re.search(r"[\w']", remainder))
+
+
+def _is_addressed_question(text: str) -> bool:
+    """Recognize a question without weakening explicit action parsing."""
+    match = _OMNI_ADDRESS.match(text)
+    if match is None:
+        return False
+    remainder = text[match.end():].lstrip(" \t,.;:!?")
+    return bool(_DIALOGUE_QUESTION.match(remainder) or
+                remainder.rstrip().endswith("?"))
 
 
 Hook = Callable[..., None]
@@ -699,6 +736,7 @@ class VoiceRuntime:
         mutator: Any | None = None,
         intent_handler: Callable[[IntentCandidate, WorldState | None], Any] | None = None,
         interrupt_handler: Callable[[str, str], Any] | None = None,
+        dialogue_handler: Callable[..., Any] | None = None,
         min_action_confidence: float = 0.7,
     ) -> None:
         self.session_id = _text(session_id, "session_id")
@@ -713,6 +751,7 @@ class VoiceRuntime:
         self.mutator = mutator
         self.intent_handler = intent_handler
         self.interrupt_handler = interrupt_handler
+        self.dialogue_handler = dialogue_handler
         # Below this transcription confidence a claim is recorded but never
         # becomes an actionable intent. Measured 2026-09-13: room noise came
         # back as "Praise the tag" (0.62) and was authorized as a COMMAND,
@@ -820,8 +859,17 @@ class VoiceRuntime:
                 self.bus.publish("voice.reference.resolved", source="voice",
                                  claim_id=claim.claim_id, reference=reference.as_dict())
                 self._emit_hook("on_reference_resolved", claim=claim, reference=reference)
+        addressed_question = _is_addressed_question(claim.text)
         capability = intent_capability(parsed, claim.text)
+        # Preserve the existing conservative authority behavior for ordinary
+        # capitalized sentences, but let an explicit question addressed to
+        # OMNI use the read-only lane when NLU only produced a bare COMMAND.
+        # Explicit graph constraints/mutations are left on the action lane.
+        if addressed_question and capability == VoiceCapability.COMMAND.value:
+            capability = ""
+        low_confidence_action = False
         if capability and claim.confidence < self.min_action_confidence:
+            low_confidence_action = True
             self.bus.publish("voice.intent.low_confidence", source=event.source,
                              claim=claim.as_dict(), capability=capability,
                              floor=self.min_action_confidence)
@@ -851,6 +899,11 @@ class VoiceRuntime:
                         references=references)
 
         if not capability:
+            if (not low_confidence_action and self.dialogue_handler is not None
+                    and _is_addressed_dialogue(claim.text)):
+                return self._answer_dialogue(
+                    claim, candidate, references, world,
+                )
             return VoiceDispatchResult(claim, candidate=candidate, references=references,
                                        status="observed")
         decision = self.authority.resolve(speaker, capability, world=world)
@@ -896,6 +949,85 @@ class VoiceRuntime:
                         decision=decision, mutation=mutation)
         return VoiceDispatchResult(claim, committed_intent, decision, references,
                                    mutation=mutation, status="committed")
+
+    def _answer_dialogue(
+        self,
+        claim: SpeechClaim,
+        candidate: IntentCandidate,
+        references: tuple[ReferenceClaim, ...],
+        world: WorldState | None,
+    ) -> VoiceDispatchResult:
+        """Run the read-only dialogue lane after action classification.
+
+        The callback receives no mutator or authority object.  A world from a
+        different organization is rejected before the callback is invoked,
+        and backend failures become an explicit unavailable response rather
+        than a fabricated observation or an action retry.
+        """
+        self.bus.publish(
+            "voice.dialogue.requested",
+            source="voice",
+            claim_id=claim.claim_id,
+            session_id=self.session_id,
+            org_id=self.org_id,
+            references=[reference.as_dict() for reference in references],
+        )
+        try:
+            if world is not None and world.org_id != self.org_id:
+                raise VoiceScopeError(
+                    "dialogue world organization does not match runtime organization"
+                )
+            response = self.dialogue_handler(
+                claim=claim,
+                world=world,
+                references=references,
+            )
+            if isinstance(response, Mapping):
+                text = response.get("text")
+                backend = response.get("backend", "dialogue")
+            else:
+                text = getattr(response, "text", response if isinstance(response, str) else None)
+                backend = getattr(response, "backend", "dialogue")
+            if not isinstance(text, str) or not text.strip():
+                raise ValueError("dialogue handler returned empty text")
+            if not isinstance(backend, str) or not backend.strip():
+                backend = "dialogue"
+        except Exception as exc:  # noqa: BLE001 - read-only provider boundary
+            reason = "scope_mismatch" if isinstance(exc, VoiceScopeError) else "backend_error"
+            self.bus.publish(
+                "voice.dialogue.failed",
+                source="voice",
+                claim_id=claim.claim_id,
+                reason=reason,
+                error_type=type(exc).__name__,
+            )
+            return VoiceDispatchResult(
+                claim,
+                candidate=candidate,
+                references=references,
+                response_text=(
+                    "I can't answer that from the current workspace."
+                    if reason == "scope_mismatch"
+                    else "I can't answer that from my current state."
+                ),
+                response_backend="unavailable",
+                status="dialogue_failed",
+            )
+
+        self.bus.publish(
+            "voice.dialogue.answered",
+            source="voice",
+            claim_id=claim.claim_id,
+            backend=backend.strip(),
+        )
+        return VoiceDispatchResult(
+            claim,
+            candidate=candidate,
+            references=references,
+            response_text=text.strip(),
+            response_backend=backend.strip(),
+            status="answered",
+        )
 
     def finish_turn(self, speaker_id: str) -> None:
         """Close a speaker turn and expose the idle boundary to subscribers."""
@@ -1060,6 +1192,11 @@ class IntentAccumulator:
         """
         if self.runtime.interruption_gate.inspect(text).detected:
             return True
+        if _is_addressed_dialogue(text):
+            # Questions are a complete read-only lane of their own. Without
+            # this branch, ``Omni, why are you...`` has no action capability
+            # and waits for the accumulation timeout before OMNI can answer.
+            return not _ends_mid_phrase(text)
         capability = intent_capability(nlu.parse(text), text)
         if not capability:
             return False

@@ -283,13 +283,28 @@ Speechmatics final -> aggregator -> VoiceRuntime -> real result/receipt
 ```
 
 `SpeechResponseRenderer` speaks only committed, denied, authorized-but-not-
-committed, or interruption results. Partials and observation-only finals stay
-silent. It never treats a transcript as proof of execution or invents a
-receipt. `SpeechmaticsTTS` calls the documented preview endpoint, returns a
-scoped `SpeechOutputReceipt`, and defaults to in-memory Windows WAV playback;
-other platforms can inject an `AudioPlayer`. The API key comes only from the
-process environment. TTS failures are recorded as response failures without
-changing the OMNI result.
+committed, interruption, or explicitly answered dialogue results. Partials and
+ordinary observation-only finals stay silent. It never treats a transcript as
+proof of execution or invents a receipt. Addressed questions take a separate,
+read-only lane:
+
+```text
+Speechmatics -> VoiceRuntime -> addressed/no-capability dialogue
+                            -> OmniReferenceReasoner -> text -> SpeechmaticsTTS
+```
+
+The dialogue prompt receives the scoped `WorldState` snapshot and resolved
+reference claims, but no mutator or authority object. Actionable speech is
+classified first and remains on the existing authority/mutation lane. If the
+world scope does not match or the reasoner is unavailable, the runtime returns
+an explicit unavailable response and never retries it as an action.
+
+`SpeechmaticsTTS` calls the documented preview endpoint, returns a scoped
+`SpeechOutputReceipt`, and defaults to in-memory Windows WAV playback; other
+platforms can inject an `AudioPlayer`. The API key comes only from the process
+environment. TTS failures are recorded as response failures without changing
+the OMNI result. `voice.response.started` and `voice.response.stopped` mark the
+playback boundary for the next self-speech suppression layer.
 
 For a live run, set `SPEECHMATICS_API_KEY` in the process environment and use
 the existing transport CLI:
@@ -297,6 +312,17 @@ the existing transport CLI:
 ```powershell
 $env:SPEECHMATICS_API_KEY = 'set-this-in-your-process-only'
 & .venv/Scripts/python.exe integrations/speechmatics/scripts/run_voice_transport.py --mic --operator S1
+```
+
+Enable the identity-gated OMNI dialogue backend explicitly (the two artifact
+paths must be supplied together):
+
+```powershell
+& .venv/Scripts/python.exe integrations/speechmatics/scripts/run_voice_transport.py `
+  --mic --operator S1 `
+  --omni-checkpoint path/to/checkpoint `
+  --omni-receipt path/to/receipt `
+  --omni-device cuda
 ```
 
 ## Remaining integration work
@@ -307,6 +333,10 @@ $env:SPEECHMATICS_API_KEY = 'set-this-in-your-process-only'
 - [ ] Re-measure the receipt **after** utterance segmentation landed — the
       table above is pre-aggregation, so the final-latency column no longer
       describes what an operator experiences.
+- [x] Add addressed, read-only OMNI dialogue and return its answer through the
+      existing Speechmatics TTS boundary.
+- [ ] Suppress self-speech during local response playback while preserving an
+      explicit human emergency-interrupt path.
 - [ ] Connect diarization/visual person association to a live camera provider
 - [ ] Map authorized command candidates into OMNI's capability planner
 - [ ] Surface voice claims, authority, and commitment events in the UI

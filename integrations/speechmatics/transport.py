@@ -410,10 +410,21 @@ class VoiceSink:
         failure or retry the mutation.
         """
         response = None
+        runtime = getattr(self.adapter, "runtime", None)
+        bus = getattr(runtime, "bus", None)
+        started = False
         try:
             response = self.response_renderer.render(result)
             if response is None:
                 return
+            if bus is not None:
+                bus.publish(
+                    "voice.response.started",
+                    source="speechmatics-tts",
+                    response_id=response.response_id,
+                    status=response.source_status,
+                )
+                started = True
             receipt = self.speech_output.speak(response)
         except Exception as exc:  # noqa: BLE001 - response is a side-effect boundary
             response_id = getattr(response, "response_id", None)
@@ -421,8 +432,6 @@ class VoiceSink:
                 "response_id": response_id,
                 "error": f"{type(exc).__name__}: {exc}",
             })
-            runtime = getattr(self.adapter, "runtime", None)
-            bus = getattr(runtime, "bus", None)
             if bus is not None:
                 bus.publish(
                     "voice.response.failed",
@@ -430,15 +439,28 @@ class VoiceSink:
                     response_id=response_id,
                     error=f"{type(exc).__name__}: {exc}",
                 )
+                if started:
+                    bus.publish(
+                        "voice.response.stopped",
+                        source="speechmatics-tts",
+                        response_id=response_id,
+                        status=getattr(response, "source_status", None),
+                        ok=False,
+                    )
             return
         self.outputs.append(receipt)
-        runtime = getattr(self.adapter, "runtime", None)
-        bus = getattr(runtime, "bus", None)
         if bus is not None:
             bus.publish(
                 "voice.response.sent",
                 source="speechmatics-tts",
                 response=receipt.as_dict(),
+            )
+            bus.publish(
+                "voice.response.stopped",
+                source="speechmatics-tts",
+                response_id=receipt.response_id,
+                status=getattr(response, "source_status", None),
+                ok=True,
             )
 
     def wait_for_responses(self, timeout_s: float | None = None) -> None:

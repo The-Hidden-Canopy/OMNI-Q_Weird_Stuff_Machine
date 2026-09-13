@@ -1,0 +1,89 @@
+{
+  "created_utc": "2026-09-13T19:01:15.881643+00:00",
+  "seed": 13,
+  "args": {
+    "inputs": [
+      "E:\\HiddenCanopy\\OMNI-Q_Weird_Stuff_Machine\\.pytest_local_stage1\\full_validation_voice_dialogue_20260913_1\\test_merge_two_trees_counts_sp0\\table_yolo_v2",
+      "E:\\HiddenCanopy\\OMNI-Q_Weird_Stuff_Machine\\.pytest_local_stage1\\full_validation_voice_dialogue_20260913_1\\test_merge_two_trees_counts_sp0\\table_yolo_v3_oi"
+    ],
+    "out": "E:\\HiddenCanopy\\OMNI-Q_Weird_Stuff_Machine\\.pytest_local_stage1\\full_validation_voice_dialogue_20260913_1\\test_merge_two_trees_counts_sp0\\merged2",
+    "val_frac": 0.25,
+    "seed": 13,
+    "link": true
+  },
+  "source_composition": {
+    "table_yolo_v2": {
+      "offered": 6,
+      "kept": 6
+    },
+    "table_yolo_v3_oi": {
+      "offered": 4,
+      "kept": 4
+    }
+  },
+  "dedup": {
+    "method_exact": "sha256 of image bytes",
+    "method_near": "64-bit dHash, Hamming <= 6",
+    "dropped_total": 0,
+    "dropped_by_matched_source": {},
+    "dropped_head": []
+  },
+  "final_unique_images": 10,
+  "split": {
+    "train": 5,
+    "val": 5
+  },
+  "class_boxes_final": {
+    "plate": 6,
+    "cup": 4,
+    "fork": 0,
+    "spoon": 0,
+    "knife": 0,
+    "napkin": 0,
+    "drawer": 6
+  },
+  "source_per_image": {
+    "table_yolo_v2__train_0000000.jpg": {
+      "source": "table_yolo_v2",
+      "original": "a0.jpg"
+    },
+    "table_yolo_v2__train_0000001.jpg": {
+      "source": "table_yolo_v2",
+      "original": "a1.jpg"
+    },
+    "table_yolo_v2__train_0000002.jpg": {
+      "source": "table_yolo_v2",
+      "original": "a2.jpg"
+    },
+    "table_yolo_v2__train_0000003.jpg": {
+      "source": "table_yolo_v2",
+      "original": "a3.jpg"
+    },
+    "table_yolo_v2__train_0000004.jpg": {
+      "source": "table_yolo_v2",
+      "original": "a4.jpg"
+    },
+    "table_yolo_v2__train_0000005.jpg": {
+      "source": "table_yolo_v2",
+      "original": "a5.jpg"
+    },
+    "table_yolo_v3_oi__train_0000006.jpg": {
+      "source": "table_yolo_v3_oi",
+      "original": "b0.jpg"
+    },
+    "table_yolo_v3_oi__train_0000007.jpg": {
+      "source": "table_yolo_v3_oi",
+      "original": "b1.jpg"
+    },
+    "table_yolo_v3_oi__train_0000008.jpg": {
+      "source": "table_yolo_v3_oi",
+      "original": "b2.jpg"
+    },
+    "table_yolo_v3_oi__train_0000009.jpg": {
+      "source": "table_yolo_v3_oi",
+      "original": "b3.jpg"
+    }
+  },
+  "license_note": "Annotations: COCO (CC-BY-4.0), LVIS v1 (CC-BY-4.0), Open Images (CC-BY-4.0). Images retain their original Flickr/owner licenses (COCO, Open Images) \u2014 redistribution of images is NOT granted by the annotation license; keep this dataset in-house.",
+  "elapsed_seconds": 0.1
+}

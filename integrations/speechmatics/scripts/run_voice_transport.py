@@ -39,6 +39,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -53,6 +54,8 @@ from omni_q.voice import (  # noqa: E402
     VoiceCapability,
     VoiceRuntime,
 )
+from omni_q.dialogue import OmniDialogue  # noqa: E402
+from omni_q.omni_reasoner import OmniReferenceReasoner  # noqa: E402
 from integrations.speechmatics.mapper import MappedTranscript, TranscriptMapper  # noqa: E402
 from integrations.speechmatics.response import SpeechmaticsTTS  # noqa: E402
 from integrations.speechmatics.transport import (  # noqa: E402
@@ -154,6 +157,22 @@ def build_parser() -> argparse.ArgumentParser:
                         help="attach a RuntimeMutator over omni_q's mock engine "
                              "so authorized constraint changes actually commit "
                              "(without it, finals stop at 'authorized')")
+    parser.add_argument("--omni-checkpoint", type=Path,
+                        default=(Path(os.environ["OMNIQ_OMNI_CHECKPOINT"])
+                                 if os.environ.get("OMNIQ_OMNI_CHECKPOINT") else None),
+                        help="identity-gated OMNI checkpoint for addressed, "
+                             "read-only dialogue (or OMNIQ_OMNI_CHECKPOINT)")
+    parser.add_argument("--omni-receipt", type=Path,
+                        default=(Path(os.environ["OMNIQ_OMNI_RECEIPT"])
+                                 if os.environ.get("OMNIQ_OMNI_RECEIPT") else None),
+                        help="checkpoint receipt for OMNI dialogue "
+                             "(or OMNIQ_OMNI_RECEIPT)")
+    parser.add_argument("--omni-device",
+                        default=os.environ.get("OMNIQ_OMNI_DEVICE", "cpu"),
+                        help="device for the identity-gated OMNI dialogue reasoner "
+                             "(default: OMNIQ_OMNI_DEVICE or cpu)")
+    parser.add_argument("--omni-max-new-tokens", type=int, default=48,
+                        help="maximum read-only dialogue answer tokens (default: 48)")
     parser.add_argument("--no-response", action="store_true",
                         help="disable Speechmatics response speech for live runs")
     parser.add_argument("--response-voice", default="sarah",
@@ -252,7 +271,35 @@ def main(argv: list[str] | None = None) -> int:
         print("[voice] mock engine attached: authorized constraint changes "
               "will be applied through RuntimeMutator")
 
-    runtime = VoiceRuntime(args.session_id, args.org_id, mutator=mutator)
+    if bool(args.omni_checkpoint) != bool(args.omni_receipt):
+        parser.error("--omni-checkpoint and --omni-receipt must be supplied together")
+    if args.omni_max_new_tokens <= 0:
+        parser.error("--omni-max-new-tokens must be positive")
+
+    dialogue_handler = None
+    if args.omni_checkpoint is not None and args.omni_receipt is not None:
+        reasoner = OmniReferenceReasoner(
+            args.omni_checkpoint,
+            args.omni_receipt,
+            device=args.omni_device,
+            max_new_tokens=args.omni_max_new_tokens,
+        )
+        dialogue_handler = OmniDialogue(
+            reasoner,
+            max_new_tokens=args.omni_max_new_tokens,
+        )
+        print("[voice] read-only OMNI dialogue on: addressed questions will "
+              f"use {args.omni_device} and max {args.omni_max_new_tokens} tokens")
+    else:
+        print("[voice] read-only OMNI dialogue off: provide --omni-checkpoint "
+              "and --omni-receipt to answer addressed questions")
+
+    runtime = VoiceRuntime(
+        args.session_id,
+        args.org_id,
+        mutator=mutator,
+        dialogue_handler=dialogue_handler,
+    )
     if args.operator:
         _authorize_on_first_appearance(runtime, args.operator)
         print(f"[voice] operator roles pending for {', '.join(args.operator)} "

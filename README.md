@@ -226,6 +226,36 @@ identity-gated harness at
 [`integrations/intel/vendor/omni_reference/`](integrations/intel/vendor/omni_reference/)
 — select with `OMNIQ_OMNI_REASONER=mock|omni` (+ checkpoint/receipt paths).
 
+## Governed skill runtime
+
+OMNI owns intent and authority; a controller owns only bounded motion
+proposals. `src/omni_q/skills/` is the seam for deterministic, scripted, RL,
+and residual-RL skills:
+
+```text
+PlanGraph / ActionAuthorization
+              ↓
+        SkillRegistry (ACTIVE only)
+              ↓
+        controller.propose()
+              ↓
+        SkillSupervisor (ALLOW / CLAMP / DENY / STOP)
+              ↓
+        actuator.apply(safe_action)
+              ↓
+        caller verifies reality and applies the world transition
+```
+
+Learned artifacts cannot enter as `ACTIVE`: they move through adjacent,
+artifact-matched promotion receipts (`TRAINED → SIM_EVAL →
+DOMAIN_RANDOMIZATION → SHADOW → SUPERVISED_HARDWARE → VALIDATED → ACTIVE`). A
+residual policy must declare its maximum scale, workspace, velocity, force, and
+action bounds. A supervisor denial or stop does not automatically invoke a
+fallback skill; the governed planner must issue a fresh, revision-bound
+request. This package does not claim hardware validation or a live RL policy—
+the current proof is the proposal/supervisor/actuator boundary and its
+adversarial tests.
+
 ## Residency slider (born-compressed OMNI)
 
 OMNI is **born compressed**: the model never lives in FP32/BF16 as a residency

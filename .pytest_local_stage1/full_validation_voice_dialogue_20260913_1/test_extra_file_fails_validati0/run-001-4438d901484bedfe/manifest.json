@@ -1,0 +1,20 @@
+{
+  "artifact_files": [
+    "manifest.json",
+    "detections.jsonl",
+    "frame.png",
+    "checksums.json"
+  ],
+  "counts": {
+    "detections": 2
+  },
+  "created_at": "2026-09-13T19:01:11.281610+00:00",
+  "metadata": {
+    "scenario": "table-setting",
+    "seed": 7
+  },
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python_version": "3.12.10",
+  "run_id": "run-001",
+  "schema_version": "1.0.0"
+}
