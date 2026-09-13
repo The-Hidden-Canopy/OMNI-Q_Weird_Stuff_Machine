@@ -30,6 +30,20 @@ intel = [
     "pyyaml>=6.0",  # src/omni_q/vision.py -- OpenVINODetector reads exported metadata.yaml
 ]
 
+# Speechmatics realtime transport (integrations/speechmatics/). The core voice
+# boundary in src/omni_q/voice.py needs none of this -- it takes plain payload
+# mappings -- and the offline replay path runs on the stdlib alone, so this is
+# only needed to talk to the live service. Key comes from SPEECHMATICS_API_KEY.
+speechmatics = [
+    "websockets>=12",  # realtime v2 websocket client
+]
+# Microphone capture on top of the above; needs PortAudio present on the host,
+# which is why it is separate from the file/replay path.
+speechmatics-mic = [
+    "websockets>=12",
+    "sounddevice>=0.4",
+]
+
 [project.scripts]
 omni-q-demo = "omni_q.demo:main"
 omni-q-server = "omni_q.server:main"

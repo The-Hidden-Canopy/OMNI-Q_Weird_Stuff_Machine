@@ -101,10 +101,13 @@ Rule = Callable[[str, "dict[str, str] | None"], "list[tuple[str, Any]]"]
 
 def _rule_stop_using_arm(text: str, vocab: dict[str, str] | None) -> list[tuple[str, Any]]:
     # "don't use the left arm" / "stop using the right hand" -> prefer the other
+    # Determiners: spoken instructions say "your left arm" at least as often as
+    # "the left arm" (measured against real Speechmatics transcripts,
+    # 2026-09-13); accepting only "the" silently dropped the command.
     out: list[tuple[str, Any]] = []
     pat = re.compile(
         r"\b(do ?n['’]?t|do not|stop|never|quit)\s+(use|using)\s+"
-        r"(the\s+)?(?P<side>left|right)\s*(arm|hand)\b"
+        r"((the|your|that|this)\s+)?(?P<side>left|right)\s*(arm|hand)\b"
     )
     for m in pat.finditer(text):
         other = "right" if m.group("side") == "left" else "left"
@@ -161,9 +164,32 @@ def _rule_keep_local(text: str, vocab: dict[str, str] | None) -> list[tuple[str,
     return []
 
 
+_NEGATED_SIDE = re.compile(
+    r"\b(do ?n['’]?t|do not|stop|never|quit)\s+(use|using)\s+"
+    r"((the|your|that|this)\s+)?(left|right)\b"
+)
+
+
 def _rule_prefer_arm(text: str, vocab: dict[str, str] | None) -> list[tuple[str, Any]]:
+    # "don't use your left arm" contains the literal phrase "use your left",
+    # which this rule would read as a preference *for* the left arm -- the
+    # exact opposite of the instruction. _rule_stop_using_arm handles negated
+    # phrasing and wins on ordering for the complete sentence, but on a partial
+    # one ("don't use your left", before "arm" is transcribed) only this rule
+    # matches, and it inverted the operator's meaning. Found 2026-09-13 while
+    # accumulating live Speechmatics fragments.
+    if _NEGATED_SIDE.search(text):
+        return []
+    # "using the left arm" is a sentence fragment, not an instruction -- it is
+    # what is left over when "stop using the left arm" gets split, and reading
+    # it as a preference inverts the operator's meaning. An imperative "use the
+    # left arm" (or "just use ...") is unaffected: only a leading *gerund* is
+    # rejected, because no one issues an order beginning with one.
+    if re.match(r"\s*(using|preferring|favou?ring)\b", text):
+        return []
     m = re.search(r"\b(use|using|prefer|preferring|with|favou?r(?:ing)?|just)\s+"
-                  r"(the\s+)?(?P<side>left|right)(\s+(arm|hand))?\b", text)
+                  r"((the|your|that|this)\s+)?(?P<side>left|right)"
+                  r"(\s+(arm|hand))?\b", text)
     if not m:
         m = re.search(r"\b(?P<side>left|right)[- ](arm|hand)\s+only\b", text)
     return [("prefer_arm", m.group("side"))] if m else []

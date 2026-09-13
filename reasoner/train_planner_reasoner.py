@@ -69,18 +69,30 @@ TOKENIZER_DIR = ROOT / "integrations" / "intel" / "vendor" / "omni_reference" / 
 
 
 class Lion(torch.optim.Optimizer):
+    """Lion, with each group's lr scaled by a caller-supplied decay factor.
+
+    Lion moves every weight by exactly ``lr * sign(...)`` -- the step magnitude
+    does not shrink as the loss flattens, so at a constant lr it reaches a
+    basin and bounces back out instead of settling. Measured directly on an
+    8-example overfit probe: loss fell 12.4 -> 7.8 -> 4.2 -> 2.3 and then rose
+    again (2.37, 2.44) while oracle exact-match flickered 0 -> 0.50 -> 0
+    across successive evals. Decaying the multiplier toward zero is what lets
+    the late steps settle rather than orbit.
+    """
+
     def __init__(self, params, lr=1e-4, betas=(0.9, 0.99)):
         super().__init__(params, dict(lr=lr, betas=betas))
 
     @torch.no_grad()
-    def step(self):
+    def step(self, lr_scale: float = 1.0):
         for g in self.param_groups:
             b1, b2 = g["betas"]
+            step_lr = g["lr"] * lr_scale
             for p in g["params"]:
                 if p.grad is None:
                     continue
                 m = self.state[p].setdefault("m", torch.zeros_like(p))
-                p.add_(torch.sign(m.mul(b1).add(p.grad, alpha=1 - b1)), alpha=-g["lr"])
+                p.add_(torch.sign(m.mul(b1).add(p.grad, alpha=1 - b1)), alpha=-step_lr)
                 m.mul_(b2).add_(p.grad, alpha=1 - b2)
 
 
@@ -219,6 +231,10 @@ def main() -> int:
     ap.add_argument("--ga", type=int, default=32)
     ap.add_argument("--lr", type=float, default=1e-4)
     ap.add_argument("--router-lr-scale", type=float, default=0.005)
+    ap.add_argument("--lr-final-frac", type=float, default=0.05,
+                    help="cosine-decay the lr to this fraction of its initial value by the "
+                         "last optimizer step (1.0 disables decay)")
+    ap.add_argument("--warmup-steps", type=int, default=5)
     ap.add_argument("--eval-every", type=int, default=25)
     ap.add_argument("--save-every", type=int, default=25)
     ap.add_argument("--max-len", type=int, default=1024)
@@ -285,6 +301,20 @@ def main() -> int:
           f"(embeddings {'trained' if args.train_embeddings else 'frozen'}, grad-checkpoint "
           f"{'off' if args.no_grad_checkpoint else 'on'}), router group {sum(p.numel() for p in router_params)/1e6:.2f}M at {args.router_lr_scale}x lr")
 
+    steps_per_epoch = max(1, len(enc) // args.ga)
+    total_steps = max(1, steps_per_epoch * args.epochs)
+
+    def lr_scale_at(step_index: int) -> float:
+        """Linear warmup, then cosine decay to --lr-final-frac of the base lr."""
+        if step_index < args.warmup_steps:
+            return (step_index + 1) / max(1, args.warmup_steps)
+        progress = min(1.0, (step_index - args.warmup_steps)
+                       / max(1, total_steps - args.warmup_steps))
+        return args.lr_final_frac + (1.0 - args.lr_final_frac) * 0.5 * (1.0 + math.cos(math.pi * progress))
+
+    print(f"schedule: {total_steps} optimizer steps ({steps_per_epoch}/epoch x {args.epochs}), "
+          f"warmup {args.warmup_steps}, cosine to {args.lr_final_frac:g}x lr")
+
     out_stem = Path(args.out); out_stem.parent.mkdir(parents=True, exist_ok=True)
     best = {"exact": -1.0, "acceptance": -1.0}
     opt_step = 0; micro = 0; t0 = time.time(); run_loss = 0.0; run_n = 0
@@ -302,11 +332,13 @@ def main() -> int:
             run_loss += float(loss); run_n += 1; micro += 1
             if micro % args.ga == 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                opt.step(); opt.zero_grad(set_to_none=True); opt_step += 1
+                cur_scale = lr_scale_at(opt_step)
+                opt.step(lr_scale=cur_scale); opt.zero_grad(set_to_none=True); opt_step += 1
                 peak = torch.cuda.max_memory_allocated()
                 flag = "  !! PEAK NEAR VRAM LIMIT (paging risk)" if peak > MEM_GATE else ""
-                print(f"[step {opt_step} ep {epoch} ex {micro}] loss {run_loss/run_n:.4f}  "
-                      f"{(time.time()-t0)/micro:.2f} s/ex  peak {peak/1e9:.2f} GB{flag}", flush=True)
+                print(f"[step {opt_step}/{total_steps} ep {epoch} ex {micro}] loss {run_loss/run_n:.4f}  "
+                      f"lr {args.lr * cur_scale:.2e}  {(time.time()-t0)/micro:.2f} s/ex  "
+                      f"peak {peak/1e9:.2f} GB{flag}", flush=True)
                 run_loss = 0.0; run_n = 0
                 if opt_step % args.save_every == 0:
                     ck, dg = export(model, weight, out_stem.with_name(out_stem.name + "_latest"), TOKENIZER_DIR.name,

@@ -32,6 +32,11 @@ multi-camera claims remain roadmap work. See [`docs/tableops.md`](docs/tableops.
 Bonus, not part of the entry: a Speechmatics voice layer can supply the goal
 and live constraints by speech instead of text (see
 [`integrations/speechmatics/README.md`](integrations/speechmatics/README.md)).
+The realtime transport is built; on stage it needs `SPEECHMATICS_API_KEY`
+exported and `--mic`. If the venue network or the key is a risk, the same CLI
+replays a recorded session offline and produces the identical committed
+mutations — rehearse with `--replay`, and keep a `--record` capture of the real
+run as the fallback.
 
 Then, on camera, one of these happens and the audience watches Omni Q react:
 

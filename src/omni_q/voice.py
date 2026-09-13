@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import time
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any, Callable, Mapping, Sequence
@@ -39,6 +40,7 @@ __all__ = [
     "ConversationArbiter",
     "ConversationMode",
     "InterruptionDecision",
+    "IntentAccumulator",
     "InterruptionGate",
     "IntentCandidate",
     "ReferenceClaim",
@@ -601,8 +603,18 @@ class InterruptionDecision:
 
 
 class InterruptionGate:
+    # "stop" is an emergency reflex, but "stop using the left arm" is an
+    # ordinary preference constraint that ``nlu._rule_stop_using_arm`` exists to
+    # parse. Without the lookahead the gate claimed the whole sentence, the
+    # parser never saw it, and — with no interrupt handler registered — it died
+    # as ``interrupt_denied``: the operator's instruction neither stopped
+    # anything nor changed the graph. Observed live 2026-09-13.
+    # Narrow on purpose: only "stop use/using ..." is excluded. "stop",
+    # "stop now", "stop moving", "emergency stop" and "freeze" all still fire,
+    # and "stop using the left arm" still stops using it — via prefer_arm.
     _PATTERNS = (
-        ("STOP", re.compile(r"\b(emergency\s+stop|stop|freeze)\b", re.I), 100),
+        ("STOP", re.compile(r"\b(emergency\s+stop|stop(?!\s+us(?:e|ing)\b)|freeze)\b",
+                            re.I), 100),
         ("HOLD", re.compile(r"\bhold\s+(it|still|position)\b", re.I), 90),
         ("BACKOFF", re.compile(r"\b(back\s+off|back\s+away|retreat)\b", re.I), 80),
     )
@@ -637,6 +649,37 @@ class VoiceDispatchResult:
         }
 
 
+def intent_capability(parsed: Any, text: str) -> str:
+    """Capability a parsed utterance asks for, or ``""`` if it asks for nothing.
+
+    ``""`` is the "not yet an instruction" predicate: the text is an
+    observation, either because it genuinely is one ("the plate is blue") or
+    because it is only *part* of an instruction ("use your").
+    ``IntentAccumulator`` uses exactly this function to decide whether to hold
+    an utterance back, so "semantically complete" can never drift apart from
+    what ``ingest_final`` actually acts on.
+    """
+    if parsed.constraints or parsed.mutations:
+        return VoiceCapability.GRAPH_MUTATION.value
+    return VoiceCapability.COMMAND.value if parsed.goal != text else ""
+
+
+#: Words an English instruction does not end on. Demonstratives ("that",
+#: "this") are deliberately absent -- "don't touch that" is a whole
+#: instruction. Used to spot a sentence the provider cut short: live on
+#: 2026-09-13 "Omni. Don't use your." arrived punctuated as a finished
+#: sentence, a full second before "Left arm."
+_DANGLING_WORDS = frozenset({
+    "the", "a", "an", "your", "my", "its", "his", "her", "their", "our",
+    "and", "or", "to", "of", "with", "for", "on", "in", "at", "from",
+})
+
+
+def _ends_mid_phrase(text: str) -> bool:
+    words = re.findall(r"[\w']+", text.lower())
+    return bool(words) and words[-1] in _DANGLING_WORDS
+
+
 Hook = Callable[..., None]
 
 
@@ -656,6 +699,7 @@ class VoiceRuntime:
         mutator: Any | None = None,
         intent_handler: Callable[[IntentCandidate, WorldState | None], Any] | None = None,
         interrupt_handler: Callable[[str, str], Any] | None = None,
+        min_action_confidence: float = 0.7,
     ) -> None:
         self.session_id = _text(session_id, "session_id")
         self.org_id = _text(org_id, "org_id")
@@ -669,6 +713,15 @@ class VoiceRuntime:
         self.mutator = mutator
         self.intent_handler = intent_handler
         self.interrupt_handler = interrupt_handler
+        # Below this transcription confidence a claim is recorded but never
+        # becomes an actionable intent. Measured 2026-09-13: room noise came
+        # back as "Praise the tag" (0.62) and was authorized as a COMMAND,
+        # while every real instruction in the same session scored 0.81-1.0.
+        # The recognizer knew it was unsure; nothing was asking.
+        # Interruptions are deliberately exempt -- a safety reflex must not be
+        # suppressed for being mumbled.
+        self.min_action_confidence = _finite_probability(
+            min_action_confidence, "min_action_confidence")
         self._hooks: dict[str, list[Hook]] = {}
         self._last_sequence = 0
 
@@ -767,9 +820,13 @@ class VoiceRuntime:
                 self.bus.publish("voice.reference.resolved", source="voice",
                                  claim_id=claim.claim_id, reference=reference.as_dict())
                 self._emit_hook("on_reference_resolved", claim=claim, reference=reference)
-        capability = VoiceCapability.GRAPH_MUTATION.value if (
-            parsed.constraints or parsed.mutations
-        ) else VoiceCapability.COMMAND.value if parsed.goal != claim.text else ""
+        capability = intent_capability(parsed, claim.text)
+        if capability and claim.confidence < self.min_action_confidence:
+            self.bus.publish("voice.intent.low_confidence", source=event.source,
+                             claim=claim.as_dict(), capability=capability,
+                             floor=self.min_action_confidence)
+            self._emit_hook("on_low_confidence", claim=claim, capability=capability)
+            capability = ""  # recorded as an observation, never authorized
         action = "GRAPH_MUTATION" if capability == VoiceCapability.GRAPH_MUTATION.value else (
             "COMMAND" if capability else "OBSERVATION"
         )
@@ -866,6 +923,239 @@ class VoiceRuntime:
             speakers = tuple(sorted(self.arbiter.overlapping_speakers))
             self.bus.publish("voice.overlap.started", source="voice", speakers=speakers)
             self._emit_hook("on_overlap_started", speakers=speakers)
+
+
+class IntentAccumulator:
+    """Hold utterances that are not yet an instruction, and join them.
+
+    ``VoiceRuntime`` acts on one final at a time, which assumes each final is a
+    whole thought.  Speech does not work that way: a speaker pauses mid-clause,
+    and a transport that segments on silence alone then delivers "don't use"
+    and "your left arm anymore" as two claims — each individually meaningless,
+    so the instruction is recorded as two observations and never executed.
+    (Observed for real on 2026-09-13; see
+    ``integrations/speechmatics/README.md``.)
+
+    This sits between utterance segmentation and the runtime and is shaped like
+    a ``VoiceRuntime``, so anything that takes a runtime — the Speechmatics
+    adapter included — takes one of these instead, unmodified::
+
+        adapter = SpeechmaticsRealtimeAdapter(IntentAccumulator(runtime))
+
+    Rules, each of which exists to prevent a specific failure:
+
+    * an utterance whose parse asks for no capability (``intent_capability``
+      returns ``""``) is **held**, not dispatched;
+    * the next utterance from the same speaker is appended and the joined text
+      re-parsed — so completion is decided by the same predicate the runtime
+      acts on, never by a second opinion;
+    * holding is bounded by ``window_ms`` (the gap between consecutive
+      utterances) and ``max_utterances``.  Without bounds, two unrelated
+      remarks minutes apart would concatenate into a command nobody uttered.
+      ``window_ms`` is the meaningful bound; the count is a backstop, and it is
+      deliberately generous — halting speech produced **six** fragments for one
+      instruction on 2026-09-13, and a limit of 3 cut the instruction in half;
+    * a hold that expires is **dispatched anyway** as an ordinary observation.
+      Speech is never silently discarded — an unexecuted instruction must still
+      be visible in the claim record;
+    * authority is not consulted here.  It stays inside ``ingest_final``, so
+      unauthorized speakers still produce claims and explicit denials rather
+      than vanishing before the boundary sees them.
+    """
+
+    def __init__(self, runtime: VoiceRuntime, *, window_ms: float = 4000.0,
+                 max_utterances: int = 8, min_command_words: int = 2,
+                 sequence_source: Callable[[], int] | None = None,
+                 clock: Callable[[], int] = time.monotonic_ns) -> None:
+        self.runtime = runtime
+        self.clock = clock
+        self._held_since_ns: int | None = None
+        self.window_ms = float(window_ms)
+        self.max_utterances = int(max_utterances)
+        self.min_command_words = int(min_command_words)
+        self.sequence_source = sequence_source
+        self._held: list[SpeechFinal] = []
+        self.held_count = 0
+        self.joined_count = 0
+        self.expired_count = 0
+
+    # Runtime-shaped surface -------------------------------------------
+    @property
+    def session_id(self) -> str:
+        return self.runtime.session_id
+
+    @property
+    def org_id(self) -> str:
+        return self.runtime.org_id
+
+    @property
+    def registry(self) -> SpeakerRegistry:
+        return self.runtime.registry
+
+    @property
+    def bus(self) -> EventBus:
+        return self.runtime.bus
+
+    def on(self, hook: str, callback: Hook) -> Callable[[], None]:
+        return self.runtime.on(hook, callback)
+
+    def ingest_partial(self, event: SpeechPartial) -> TurnDecision:
+        return self.runtime.ingest_partial(event)
+
+    def ingest_final(self, event: SpeechFinal, **kwargs: Any):
+        """Dispatch, or hold and return ``None``.
+
+        ``None`` means "not an instruction yet, kept for the next utterance" —
+        it is not a failure, and callers should report it as held rather than
+        as a dropped final.
+        """
+        if self._held and self._expired(event):
+            self._release(**kwargs)
+        candidate = self._joined_text(event)
+        if self._complete(candidate):
+            joined = self._merge(event, candidate)
+            self._held = []
+            self._held_since_ns = None
+            if joined is not event:
+                self.joined_count += 1
+            return self.runtime.ingest_final(joined, **kwargs)
+        self._held.append(event)
+        self.held_count += 1
+        if self._held_since_ns is None:
+            self._held_since_ns = int(self.clock())
+        self.bus.publish("voice.intent.incomplete", source=event.source,
+                         speaker_id=event.speaker_id, text=candidate,
+                         held_utterances=len(self._held))
+        if len(self._held) >= self.max_utterances:
+            return self._release(**kwargs)
+        return None
+
+    def flush(self, **kwargs: Any):
+        """Release anything still held, e.g. at end of stream."""
+        return self._release(**kwargs) if self._held else None
+
+    def tick(self, now_ns: int | None = None, **kwargs: Any):
+        """Release a hold that has waited out ``window_ms`` on the wall clock.
+
+        Needed because holds are otherwise only re-examined when the *next*
+        utterance arrives: an operator who says "set the table" and then stops
+        talking would wait forever, since a bare goal waits for a sentence end
+        that may never be transcribed.
+        """
+        if not self._held or self._held_since_ns is None:
+            return None
+        now = int(self.clock() if now_ns is None else now_ns)
+        if (now - self._held_since_ns) / 1_000_000.0 >= self.window_ms:
+            return self._release(**kwargs)
+        return None
+
+    # Internals ---------------------------------------------------------
+    def _complete(self, text: str) -> bool:
+        """Is this text something the runtime could actually act on?
+
+        Safety first: anything the interruption gate recognizes (STOP / HOLD /
+        BACKOFF) is complete by definition and is never held.  Delaying a
+        safety word to wait for more speech would be the worst bug in this
+        file.
+        """
+        if self.runtime.interruption_gate.inspect(text).detected:
+            return True
+        capability = intent_capability(nlu.parse(text), text)
+        if not capability:
+            return False
+        if _ends_mid_phrase(text):
+            # The provider punctuates aggressively; a period after "your" is
+            # not a sentence end, and dispatching there loses the object of
+            # the instruction entirely.
+            return False
+        if capability == VoiceCapability.GRAPH_MUTATION.value:
+            # A constraint or mutation is unambiguous: act at once.
+            return True
+        # A bare COMMAND is the weak signal -- it means only that goal
+        # classification reworded the text, which fires on fragments that are
+        # not instructions at all. Live on 2026-09-13, "Keep" dispatched as an
+        # authorized command a second before "everything local" arrived, and
+        # "They don't use" dispatched before "your left arm anymore". So a bare
+        # goal waits for the sentence to actually end; the provider sends
+        # terminal punctuation as its own fragment moments later. If it never
+        # comes, the window backstop releases the text anyway.
+        if len(text.split()) < self.min_command_words:
+            return False
+        return text.rstrip().endswith((".", "!", "?"))
+
+    def _expired(self, event: SpeechFinal) -> bool:
+        last = self._held[-1]
+        if event.speaker_id != last.speaker_id:
+            return True
+        gap_ms = (event.t_start_ns - last.t_end_ns) / 1_000_000.0
+        return gap_ms > self.window_ms
+
+    def _joined_text(self, event: SpeechFinal | None = None) -> str:
+        # Held text was judged incomplete, so any sentence-final punctuation
+        # the provider attached to it was wrong. Keeping it breaks the join:
+        # "don't use your." + "Left arm." reads as "don't use your. Left arm.",
+        # and the parser cannot see across the period -- the instruction stays
+        # unrecognized even though both halves arrived. Observed 2026-09-13.
+        parts = [held.text.rstrip().rstrip(".!?") for held in self._held]
+        if event is not None:
+            parts.append(event.text)
+        joined = ""
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+            if joined and part[0] not in ",.!?;:":
+                joined += " "
+            joined += part
+        return joined
+
+    def _merge(self, event: SpeechFinal, text: str) -> SpeechFinal:
+        changes: dict[str, Any] = {}
+        if self._held:
+            changes["text"] = text
+            changes["t_start_ns"] = self._held[0].t_start_ns
+        if self.sequence_source is None:
+            return replace(event, **changes) if changes else event
+        # Always take a fresh number, even when nothing was held. Holding
+        # reorders dispatch relative to arrival: an expiring hold is released
+        # *during* the handling of a newer event, takes a sequence, and the
+        # event that triggered the release would then follow carrying an older
+        # one -- which VoiceRuntime rejects, dropping real speech. Observed
+        # live 2026-09-13 (one "sequence is not strictly increasing" rejection
+        # in a 63 s session). Allocating at dispatch keeps arrival order and
+        # dispatch order from ever disagreeing.
+        changes["sequence"] = self.sequence_source()
+        return replace(event, **changes)
+
+    def _release(self, **kwargs: Any):
+        """Dispatch held speech as-is; it never became an instruction."""
+        held, self._held = self._held, []
+        self._held_since_ns = None
+        text = ""
+        for part in (h.text for h in held):
+            part = part.strip()
+            if not part:
+                continue
+            if text and part[0] not in ",.!?;:":
+                text += " "
+            text += part
+        if not text:
+            return None
+        self.expired_count += 1
+        changes: dict[str, Any] = {"text": text, "t_start_ns": held[0].t_start_ns,
+                                   "t_end_ns": held[-1].t_end_ns}
+        if self.sequence_source is not None:
+            changes["sequence"] = self.sequence_source()
+        return self.runtime.ingest_final(replace(held[-1], **changes), **kwargs)
+
+    def stats(self) -> dict[str, Any]:
+        return {
+            "window_ms": self.window_ms,
+            "max_utterances": self.max_utterances,
+            "utterances_held": self.held_count,
+            "instructions_completed_by_joining": self.joined_count,
+            "holds_released_unexecuted": self.expired_count,
+        }
 
 
 class SpeechmaticsRealtimeAdapter:
