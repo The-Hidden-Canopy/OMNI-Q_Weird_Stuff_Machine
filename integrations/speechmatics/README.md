@@ -271,6 +271,34 @@ reports n / mean / p50 / p95 / max separately for partials and finals, plus
 chunks sent, dropped-empty count, and adapter rejections. Replay-mode latency
 is explicitly labelled as *not* a service number.
 
+## Result-to-speech response seam
+
+`VoiceSink` in `transport.py` is the existing mapped-transcript/result boundary.
+The response output attaches there, after `VoiceRuntime` or the injected OMNI
+handler returns its real result:
+
+```text
+Speechmatics final -> aggregator -> VoiceRuntime -> real result/receipt
+                   -> VoiceSink.on_result -> SpeechmaticsTTS -> audio player
+```
+
+`SpeechResponseRenderer` speaks only committed, denied, authorized-but-not-
+committed, or interruption results. Partials and observation-only finals stay
+silent. It never treats a transcript as proof of execution or invents a
+receipt. `SpeechmaticsTTS` calls the documented preview endpoint, returns a
+scoped `SpeechOutputReceipt`, and defaults to in-memory Windows WAV playback;
+other platforms can inject an `AudioPlayer`. The API key comes only from the
+process environment. TTS failures are recorded as response failures without
+changing the OMNI result.
+
+For a live run, set `SPEECHMATICS_API_KEY` in the process environment and use
+the existing transport CLI:
+
+```powershell
+$env:SPEECHMATICS_API_KEY = 'set-this-in-your-process-only'
+& .venv/Scripts/python.exe integrations/speechmatics/scripts/run_voice_transport.py --mic --operator S1
+```
+
 ## Remaining integration work
 
 - [x] Speechmatics websocket/audio transport and measured latency receipt —

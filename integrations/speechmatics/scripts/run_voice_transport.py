@@ -54,6 +54,7 @@ from omni_q.voice import (  # noqa: E402
     VoiceRuntime,
 )
 from integrations.speechmatics.mapper import MappedTranscript, TranscriptMapper  # noqa: E402
+from integrations.speechmatics.response import SpeechmaticsTTS  # noqa: E402
 from integrations.speechmatics.transport import (  # noqa: E402
     AudioStream,
     SpeechmaticsConfig,
@@ -153,6 +154,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="attach a RuntimeMutator over omni_q's mock engine "
                              "so authorized constraint changes actually commit "
                              "(without it, finals stop at 'authorized')")
+    parser.add_argument("--no-response", action="store_true",
+                        help="disable Speechmatics response speech for live runs")
+    parser.add_argument("--response-voice", default="sarah",
+                        help="Speechmatics TTS voice for live responses (default: sarah)")
     parser.add_argument("--intent-window-ms", type=float, default=4000.0,
                         help="how long an incomplete utterance is held waiting "
                              "for the rest of the instruction (default 4000)")
@@ -264,7 +269,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[voice] intent accumulation on: utterances that are not yet an "
               f"instruction are held up to {args.intent_window_ms:.0f} ms and joined")
     adapter = SpeechmaticsRealtimeAdapter(accumulator or runtime)
-    sink = VoiceSink(adapter, on_result=_print_result)
+    speech_output = None
+    if not args.replay and not args.no_response:
+        # Read the key before opening the microphone or websocket. It remains
+        # process-local and is never printed or written into a receipt.
+        speech_output = SpeechmaticsTTS(
+            api_key_from_env(),
+            voice=args.response_voice,
+        )
+        print(f"[voice] response playback on: Speechmatics TTS voice={args.response_voice}")
+    sink = VoiceSink(
+        adapter,
+        on_result=_print_result,
+        speech_output=speech_output,
+        response_async=speech_output is not None,
+    )
     aggregator = None
     if not args.no_aggregate:
         aggregator = UtteranceAggregator(

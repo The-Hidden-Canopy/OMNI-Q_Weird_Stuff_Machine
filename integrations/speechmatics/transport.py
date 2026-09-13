@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from concurrent.futures import Future, ThreadPoolExecutor
 import json
 import os
 import statistics
@@ -52,6 +53,11 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Iterable, Iterator, Mapping
 
 from .mapper import FINAL_MESSAGE, MappedTranscript, PARTIAL_MESSAGE, TranscriptMapper
+from .response import (
+    SpeechOutputReceipt,
+    SpeechResponseRenderer,
+    SpeechmaticsTTS,
+)
 
 __all__ = [
     "AudioStream",
@@ -329,14 +335,30 @@ class VoiceSink:
 
     def __init__(self, adapter: Any, *,
                  on_result: Callable[[MappedTranscript, Any], None] | None = None,
-                 final_kwargs: Mapping[str, Any] | None = None) -> None:
+                 final_kwargs: Mapping[str, Any] | None = None,
+                 response_renderer: SpeechResponseRenderer | None = None,
+                 speech_output: SpeechmaticsTTS | None = None,
+                 response_async: bool = False) -> None:
+        if not isinstance(response_async, bool):
+            raise TypeError("response_async must be a bool")
         self.adapter = adapter
         self.on_result = on_result
         self.final_kwargs = dict(final_kwargs or {})
+        self.response_renderer = response_renderer or SpeechResponseRenderer()
+        self.speech_output = speech_output
+        self.response_async = response_async and speech_output is not None
+        self._response_executor = (
+            ThreadPoolExecutor(max_workers=1,
+                               thread_name_prefix="omni-q-voice-response")
+            if self.response_async else None
+        )
+        self._response_futures: list[Future[None]] = []
         self.partials = 0
         self.finals = 0
         self.held = 0
         self.rejected: list[dict[str, Any]] = []
+        self.outputs: list[SpeechOutputReceipt] = []
+        self.response_errors: list[dict[str, Any]] = []
         self.partial_latency_ms: list[float] = []
         self.final_latency_ms: list[float] = []
         self.unmeasured_confidence = 0
@@ -370,7 +392,71 @@ class VoiceSink:
             return None
         if self.on_result is not None:
             self.on_result(mapped, result)
+        if mapped.final and result is not None and self.speech_output is not None:
+            if self._response_executor is None:
+                self._speak(result)
+            else:
+                self._response_futures.append(
+                    self._response_executor.submit(self._speak, result)
+                )
         return result
+
+    def _speak(self, result: Any) -> None:
+        """Render and play only a completed result from the real voice boundary.
+
+        Response playback is deliberately best-effort at the transport edge:
+        an unavailable speaker or TTS endpoint must be visible in the receipt,
+        but must not turn a valid authority/mutation decision into a transport
+        failure or retry the mutation.
+        """
+        response = None
+        try:
+            response = self.response_renderer.render(result)
+            if response is None:
+                return
+            receipt = self.speech_output.speak(response)
+        except Exception as exc:  # noqa: BLE001 - response is a side-effect boundary
+            response_id = getattr(response, "response_id", None)
+            self.response_errors.append({
+                "response_id": response_id,
+                "error": f"{type(exc).__name__}: {exc}",
+            })
+            runtime = getattr(self.adapter, "runtime", None)
+            bus = getattr(runtime, "bus", None)
+            if bus is not None:
+                bus.publish(
+                    "voice.response.failed",
+                    source="speechmatics-tts",
+                    response_id=response_id,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+            return
+        self.outputs.append(receipt)
+        runtime = getattr(self.adapter, "runtime", None)
+        bus = getattr(runtime, "bus", None)
+        if bus is not None:
+            bus.publish(
+                "voice.response.sent",
+                source="speechmatics-tts",
+                response=receipt.as_dict(),
+            )
+
+    def wait_for_responses(self, timeout_s: float | None = None) -> None:
+        """Drain queued response playback before a receipt is finalized."""
+        if timeout_s is not None and timeout_s <= 0:
+            raise ValueError("timeout_s must be positive when provided")
+        deadline = (time.monotonic() + timeout_s
+                    if timeout_s is not None else None)
+        futures = tuple(self._response_futures)
+        for future in futures:
+            remaining = (None if deadline is None
+                         else max(0.0, deadline - time.monotonic()))
+            future.result(timeout=remaining)
+        if futures:
+            self._response_futures = [
+                future for future in self._response_futures
+                if not future.done()
+            ]
 
     def stats(self) -> dict[str, Any]:
         return {
@@ -383,6 +469,9 @@ class VoiceSink:
             "transcripts_without_speaker_label": self.unlabelled_speaker,
             "partial_latency_ms": _latency_summary(self.partial_latency_ms),
             "final_latency_ms": _latency_summary(self.final_latency_ms),
+            "responses_sent": len(self.outputs),
+            "response_failures": len(self.response_errors),
+            "response_errors": self.response_errors[:20],
         }
 
 
@@ -843,6 +932,7 @@ class SpeechmaticsTransport:
                 started_wall: float, mode: str = "live",
                 aggregator: UtteranceAggregator | None = None) -> dict[str, Any]:
         """Measured latency receipt.  Contains no credentials."""
+        sink.wait_for_responses()
         return {
             "provider": "speechmatics",
             "mode": mode,
