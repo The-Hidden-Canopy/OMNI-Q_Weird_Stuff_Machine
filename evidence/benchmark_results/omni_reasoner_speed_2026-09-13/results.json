@@ -1,0 +1,54 @@
+{
+  "format": "omni_reasoner_cumulative_speed_receipt_v1",
+  "measured_at": "2026-09-13",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU",
+    "vram_gib": 6.14
+  },
+  "protocol": {
+    "packets": 300,
+    "gradient_accumulation": 1,
+    "comparison": "same 300-packet training shape"
+  },
+  "stages": [
+    {
+      "name": "first_attempt",
+      "wall_seconds": 118800,
+      "wall_hours": 33.0,
+      "source": "2026-09-10 report"
+    },
+    {
+      "name": "v2_three_kernel_fixes",
+      "wall_seconds": 15300,
+      "wall_hours": 4.25,
+      "source": "v2 run clock"
+    },
+    {
+      "name": "current_memory_fix",
+      "seconds_per_packet": 2.15,
+      "training_seconds": 645.0,
+      "checkpoint_writes": 25,
+      "checkpoint_seconds_each": 1.5,
+      "estimated_wall_seconds": 690.0,
+      "estimated_wall_minutes": 11.5,
+      "source": "RTX 4050 GA=1 estimate"
+    }
+  ],
+  "throughput": {
+    "initial_tokens_per_second": 82.0,
+    "current_tokens_per_second": 1900.0,
+    "approximate_speedup": 23.17
+  },
+  "speedups": {
+    "v2_to_current": 22.17,
+    "first_attempt_to_current": 172.17,
+    "reported_end_to_end": "about 170x",
+    "reported_single_fix": "about 22x"
+  },
+  "notes": [
+    "The 22x figure is the single recent full-vocabulary/per-step optimizer improvement: about 4.2 hours to about 11.5 minutes for the same 300 packets at GA=1.",
+    "The about 170x figure is cumulative: the initial 33-hour attempt, the v2 run at about 4.25 hours, and the current 11.5-minute run.",
+    "The current wall time is an estimate: 645 seconds of packet work plus about 37.5 seconds of checkpoint writes, rounded to about 11.5 minutes.",
+    "The initial and v2 figures are retained run/report measurements; the current figure is the RTX 4050 GA=1 projection supplied by the run analysis."
+  ]
+}
