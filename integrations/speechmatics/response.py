@@ -100,6 +100,12 @@ class SpeechResponseRenderer:
         return self._response(session, org, claim, str(payload.get("status", "result")), text)
 
     def _voice_text(self, result: VoiceDispatchResult) -> str | None:
+        if result.status == "answered":
+            return self._fragment(result.response_text)
+        if result.status == "dialogue_failed":
+            return self._fragment(
+                result.response_text or "I can't answer that from my current state."
+            )
         if result.status == "interrupted":
             return f"{(result.interruption.action if result.interruption else 'STOP').title()} requested."
         if result.status == "interrupt_denied":

@@ -118,7 +118,40 @@ def test_sink_speaks_only_from_committed_runtime_result() -> None:
     assert sink.outputs[0].audio_bytes == len(b"RIFF-test-audio")
     assert [event.kind for event in runtime.bus.log
             if event.kind.startswith("voice.response")] == [
-                "voice.response.sent"
+                "voice.response.started",
+                "voice.response.sent",
+                "voice.response.stopped",
+            ]
+
+
+def test_addressed_dialogue_is_spoken_without_a_mutation_result() -> None:
+    from omni_q import SpeechmaticsRealtimeAdapter
+
+    runtime = VoiceRuntime(
+        "session_01",
+        "org_a",
+        dialogue_handler=lambda **_kwargs: {
+            "text": "The left arm is excluded by the observed state.",
+            "backend": "test-dialogue",
+        },
+    )
+    player = Player()
+    sink = VoiceSink(
+        SpeechmaticsRealtimeAdapter(runtime),
+        speech_output=tts(player, "The left arm is excluded by the observed state"),
+    )
+
+    result = sink.deliver(mapped(1, "Omni, why are you using only one arm?"))
+
+    assert result.status == "answered"
+    assert result.mutation is None
+    assert len(player.calls) == 1
+    assert sink.outputs[0].status == "sent"
+    assert [event.kind for event in runtime.bus.log
+            if event.kind.startswith("voice.response")] == [
+                "voice.response.started",
+                "voice.response.sent",
+                "voice.response.stopped",
             ]
 
 
@@ -218,3 +251,9 @@ def test_response_failure_is_recorded_without_replaying_mutation() -> None:
     assert len(sink.response_errors) == 1
     assert sink.stats()["responses_sent"] == 0
     assert sink.stats()["response_failures"] == 1
+    assert [event.kind for event in runtime.bus.log
+            if event.kind.startswith("voice.response")] == [
+                "voice.response.started",
+                "voice.response.failed",
+                "voice.response.stopped",
+            ]

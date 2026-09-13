@@ -1,0 +1,60 @@
+{
+  "created_utc": "2026-09-13T19:01:15.916968+00:00",
+  "seed": 13,
+  "args": {
+    "inputs": [
+      "E:\\HiddenCanopy\\OMNI-Q_Weird_Stuff_Machine\\.pytest_local_stage1\\full_validation_voice_dialogue_20260913_1\\test_merge_dedups_cross_input_0\\set_a",
+      "E:\\HiddenCanopy\\OMNI-Q_Weird_Stuff_Machine\\.pytest_local_stage1\\full_validation_voice_dialogue_20260913_1\\test_merge_dedups_cross_input_0\\set_b"
+    ],
+    "out": "E:\\HiddenCanopy\\OMNI-Q_Weird_Stuff_Machine\\.pytest_local_stage1\\full_validation_voice_dialogue_20260913_1\\test_merge_dedups_cross_input_0\\merged",
+    "val_frac": 0.0,
+    "seed": 13,
+    "link": true
+  },
+  "source_composition": {
+    "set_a": {
+      "offered": 1,
+      "kept": 1
+    },
+    "set_b": {
+      "offered": 1,
+      "kept": 0
+    }
+  },
+  "dedup": {
+    "method_exact": "sha256 of image bytes",
+    "method_near": "64-bit dHash, Hamming <= 6",
+    "dropped_total": 1,
+    "dropped_by_matched_source": {
+      "set_a": 1
+    },
+    "dropped_head": [
+      [
+        "set_b:other.jpg",
+        "set_a:shared.jpg"
+      ]
+    ]
+  },
+  "final_unique_images": 1,
+  "split": {
+    "train": 1,
+    "val": 0
+  },
+  "class_boxes_final": {
+    "plate": 0,
+    "cup": 0,
+    "fork": 1,
+    "spoon": 0,
+    "knife": 0,
+    "napkin": 0,
+    "drawer": 0
+  },
+  "source_per_image": {
+    "set_a__train_0000000.jpg": {
+      "source": "set_a",
+      "original": "shared.jpg"
+    }
+  },
+  "license_note": "Annotations: COCO (CC-BY-4.0), LVIS v1 (CC-BY-4.0), Open Images (CC-BY-4.0). Images retain their original Flickr/owner licenses (COCO, Open Images) \u2014 redistribution of images is NOT granted by the annotation license; keep this dataset in-house.",
+  "elapsed_seconds": 0.0
+}

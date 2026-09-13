@@ -1,0 +1,39 @@
+{
+  "available_bytes": 1288490188,
+  "body_params": 6000000000,
+  "decision": {
+    "autonomy": "DEGRADED",
+    "body_params": 6000000000,
+    "capability_retained": true,
+    "format": null,
+    "graph_revision": 1,
+    "placement": "LOCAL",
+    "reason": "envelope 1288490188 B below MXFP2 body residency (1687500000 B): neural reasoner evicted, OMNI-Q core remains; novel tasks HOLD",
+    "resident_bytes": 0,
+    "state": "CORE_ONLY"
+  },
+  "graph_revision": 1,
+  "labels": {
+    "born_compressed": "the model never resides in FP32/BF16; BF16 is plumbing only (accumulators, norms)",
+    "capability_retained": "the same body/capability stays resident across all MX tiers; only the format changes",
+    "core_only_semantics": "below the MXFP2 envelope the neural reasoner is evicted; OMNI-Q core remains and novel tasks HOLD",
+    "software_dequantize_only": "no native low-precision hardware exercised"
+  },
+  "schema_version": "1.0.0",
+  "transitions": [
+    {
+      "envelope_bytes": 1288490188,
+      "from_state": "MXFP8",
+      "timestamp": "2026-09-13T19:01:22.165039+00:00",
+      "to_state": "CORE_ONLY",
+      "trigger": "memory_change"
+    },
+    {
+      "envelope_bytes": 1288490188,
+      "from_state": "CORE_ONLY",
+      "timestamp": "2026-09-13T19:01:22.165039+00:00",
+      "to_state": "CORE_ONLY",
+      "trigger": "novel_task"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "format": "mxfp8",
+  "block_size": 32,
+  "code_bits": 8,
+  "tensors": [
+    {
+      "name": "w",
+      "shape": [
+        4,
+        4
+      ],
+      "weight_cosine": 0.9996761979741473,
+      "packed_bytes": 17
+    }
+  ],
+  "totals": {
+    "params": 16,
+    "packed_bytes": 17,
+    "fp32_bytes": 64,
+    "ratio": 0.265625,
+    "mean_weight_cosine": 0.9996761979741473
+  },
+  "model": {
+    "source_file": "tiny.pt",
+    "param_count": 16
+  },
+  "honesty": {
+    "label": "weight-only RNE, software dequantize; mxfp4/mxfp2 collapse this detector's mAP \u2014 see stats",
+    "arms_ref": "evidence/benchmark_results/yolo_2bit_map_20260911_071815-*"
+  }
+}

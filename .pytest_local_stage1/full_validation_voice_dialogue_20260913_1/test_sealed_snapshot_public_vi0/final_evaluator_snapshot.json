@@ -1,0 +1,9 @@
+{
+  "hidden_ground_truth": {
+    "object_3": "hot_glue"
+  },
+  "scores": {
+    "team_a": 0.9
+  },
+  "session_id": "s-1"
+}
