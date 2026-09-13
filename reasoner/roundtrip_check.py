@@ -19,6 +19,13 @@ import sys
 import time
 from pathlib import Path
 
+# The 256k byte-level BPE decodes to arbitrary Unicode; an undertrained model
+# emits plenty of it. Windows' cp1252 console raises UnicodeEncodeError
+# mid-print and would kill the check for a display reason.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "reasoner"))
