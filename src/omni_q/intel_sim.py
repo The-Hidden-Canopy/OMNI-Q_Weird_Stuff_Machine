@@ -1160,9 +1160,31 @@ class IntelTableWorld(MockWorld):
         offset = float(self.data.geom_xpos[tracked][2] - self.data.geom_xpos[tip][2])
         return max(0.0, offset)
 
+    def _tcp_geoms(self, arm_offset: int) -> tuple[int, int] | None:
+        """The two fingertip pads whose midpoint is the real TCP.
+
+        The vendored menagerie SO-ARM100 defines **no sites at all**
+        (``model.nsite == 0``), which is why this file improvised by tracking a
+        pad geom -- and picked ``fixed_jaw_pad_4``, 43 mm up the finger. The
+        SO-101 RL write-up the hosts circulated hit both halves of this: its
+        model *does* carry a ``gripperframe`` (fingertips) and a ``graspframe``
+        (further back), and targeting the wrong one made the gripper
+        "keep overshooting the cube"; separately, "one finger is fixed, one
+        moves", so the contact point is the midpoint, not the fixed finger.
+        """
+        prefix = "left_" if arm_offset == 0 else "right_"
+        ids = []
+        for name in (f"{prefix}fixed_jaw_pad_1", f"{prefix}moving_jaw_pad_1"):
+            gid = self._mujoco.mj_name2id(
+                self.model, self._mujoco.mjtObj.mjOBJ_GEOM, name)
+            if gid < 0:
+                return None
+            ids.append(gid)
+        return ids[0], ids[1]
+
     def _ik_reach_pad(
         self, arm_offset: int, target_pos, *, iters: int = 300, max_dq: float = 0.04, tol: float = 0.01,
-        roll: float | None = None,
+        roll: float | None = None, track_tcp: bool = False,
     ) -> float:
         """4-DOF (Rotation/Pitch/Elbow/Wrist_Pitch) IK tracking the fixed-jaw
         pad geom toward ``target_pos`` with wrist-roll pinned to
@@ -1172,17 +1194,32 @@ class IntelTableWorld(MockWorld):
 
         mujoco = self._mujoco
         pad_id = self._pad_geom[arm_offset]
+        # track_tcp drives the *midpoint of the two fingertips* instead of the
+        # fixed jaw's fourth pad. Position and Jacobian are both averaged, so
+        # the solve stays consistent rather than steering one point while
+        # measuring another.
+        tcp = self._tcp_geoms(arm_offset) if track_tcp else None
         roll = self._GRASP_WRIST_ROLL[arm_offset] if roll is None else float(roll)
         jacp = np.zeros((3, self.model.nv))
+        jacp_b = np.zeros((3, self.model.nv))
         lo = self.model.jnt_range[arm_offset:arm_offset + 4, 0]
         hi = self.model.jnt_range[arm_offset:arm_offset + 4, 1]
         target = np.asarray(target_pos, dtype=float)
         err_norm = float("inf")
         for _ in range(iters):
             self.data.ctrl[arm_offset + 4] = roll  # re-pin every iteration; the servo can drift under load
-            mujoco.mj_jacGeom(self.model, self.data, jacp, None, pad_id)
-            jac = jacp[:, arm_offset:arm_offset + 4]
-            err = target - self.data.geom_xpos[pad_id]
+            if tcp is None:
+                mujoco.mj_jacGeom(self.model, self.data, jacp, None, pad_id)
+                jac = jacp[:, arm_offset:arm_offset + 4]
+                current = self.data.geom_xpos[pad_id]
+            else:
+                mujoco.mj_jacGeom(self.model, self.data, jacp, None, tcp[0])
+                mujoco.mj_jacGeom(self.model, self.data, jacp_b, None, tcp[1])
+                jac = 0.5 * (jacp[:, arm_offset:arm_offset + 4]
+                             + jacp_b[:, arm_offset:arm_offset + 4])
+                current = 0.5 * (self.data.geom_xpos[tcp[0]]
+                                 + self.data.geom_xpos[tcp[1]])
+            err = target - current
             err_norm = float(np.linalg.norm(err))
             if err_norm < tol:
                 break

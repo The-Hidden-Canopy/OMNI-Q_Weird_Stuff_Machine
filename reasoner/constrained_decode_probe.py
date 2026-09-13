@@ -42,7 +42,7 @@ sys.path.insert(0, str(ROOT / "reasoner"))
 from omni_q.omni_planner import OmniPlanner  # noqa: E402
 from omni_q.omni_reasoner import MockReasoner  # noqa: E402
 from omni_q.plan_grammar import PlanGrammarConstraint, vocabulary_from_world  # noqa: E402
-from train_planner_reasoner import plan_signature, world_from_meta  # noqa: E402
+from train_planner_reasoner import EOS_ID, plan_signature, world_from_meta  # noqa: E402
 
 VENDOR = ROOT / "integrations" / "intel" / "vendor"
 
@@ -127,7 +127,9 @@ def main() -> int:
     import torch.nn as nn
     model.lm_head = nn.Identity()          # hidden states come out as .logits
     planner = OmniPlanner(MockReasoner())
-    eos_id = int(tok.eos_token_id)
+    # The tokenizer carries no eos_token_id; training appended EOS_ID
+    # explicitly, so the probe must stop on the same token.
+    eos_id = int(tok.eos_token_id) if tok.eos_token_id is not None else EOS_ID
 
     totals = {"free": {"proposed": 0, "accepted": 0, "usable": 0, "exact": 0},
               "fenced": {"proposed": 0, "accepted": 0, "usable": 0, "exact": 0}}

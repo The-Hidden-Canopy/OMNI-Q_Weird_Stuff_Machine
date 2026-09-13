@@ -128,3 +128,41 @@ by the time the pinch executes. A correct version resolves the offset in the
 gripper frame at the pinch orientation. Flat objects also stayed at zero, so
 the frame mismatch is necessary but not sufficient — the 10 mm tolerance, and
 possibly pad geometry against a 6-8 mm target, remain.
+
+## Can the simulator legitimately be changed to help? (checked, mostly no)
+
+The SO-101 post's fingertip collision boxes are **2.5 mm**; ours are 8 mm tall
+at the tip (`pad_1` half-extents `0.001 x 0.005 x 0.004`). Tempting to shrink
+them — an 8 mm pad cannot straddle an 8 mm fork without its underside reaching
+the table exactly, which is the ~11 mm descent floor measured above.
+
+**Checked against the real finger first, and the answer is no.** On
+`left_Fixed_Jaw` the two group-3 collision meshes span roughly 74 mm in z and
+±16-25 mm in the other axes; the pads are a **2 mm-thin strip** running along
+the gripping edge at local y = -0.057 → -0.101. The pads are far *thinner* than
+the finger they sit on, not bulkier than it. Shrinking them would not be a
+fidelity correction — it would be making the gripper better than the hardware,
+i.e. exactly the class of change the no-simulation-cheating rule exists to stop
+(cf. the reverted `contype`/`conaffinity` = 0 incident).
+
+So the 8 mm fingertip is a fair model, and a real parallel-jaw gripper genuinely
+struggles to pinch an 8 mm object lying on a flat table. **That is a physical
+constraint, not a simulator artifact.**
+
+### What that leaves
+
+A pre-grasp manoeuvre, all of which use real physics and stay inside the rules:
+
+1. **push to the table edge**, then grasp from the side with the pads clear of
+   the surface;
+2. **tilt/scoop** — press one fingertip down to lever the far edge up, then
+   close on the raised lip;
+3. **slide onto a raised feature** (the plate, the tray) and grasp from there.
+
+Worth noting the SO-101 RL agent independently discovered a *nudge before
+grasping* that nobody rewarded — the same conclusion arrived at from the
+learned-control side.
+
+This also re-scopes OQ-010-TELEOP: a human teleoperator asked to grasp a fork
+will likely discover the same manoeuvre, and whether they can is still the
+cheapest available signal.
