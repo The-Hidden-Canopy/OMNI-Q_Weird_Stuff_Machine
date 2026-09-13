@@ -133,7 +133,7 @@
     },
     "tokenizer_path": "tokenizers/omni_prism_bpe_256k"
   },
-  "checkpoint_sha256": "f08b98197e4fd07c21cb2dec12df2a21a4c8440a19575345b8cd0484cba37f87",
+  "checkpoint_sha256": "a790ef24cc073c0b4f2e121d7bebff980a64b3704aeb269a32a522cf2bd74226",
   "identity": {
     "architecture_hash": "1b1eaed7df30052d9ebc68e937aff6e89f94bb1049fd054d2d0b6a520a4c6e23",
     "execution_revision": "availability_horizon_complete_execution_v2",
@@ -142,7 +142,7 @@
     "lineage": "omni_planner_advisor_synthetic_v1"
   },
   "training": {
-    "opt_step": 75,
+    "opt_step": 100,
     "epoch": 0
   }
 }

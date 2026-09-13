@@ -43,6 +43,12 @@ is trained in this venv (torch 2.11 + CUDA 12.6 on the RTX 4050).
   (only supervised rows are projected — see `selective_ce`), and generation
   (fixed in `omni_reasoner._last_position_head`: 12.29 GiB reserved -> 1.11
   GiB). Watch for a fourth.
+- **Cumulative RTX 4050 training speedup:** the same 300-packet, GA=1 shape
+  went from a first-attempt estimate of 33 hours, through a 4.25-hour v2 run,
+  to an estimated 11.5 minutes after today's memory fix: about **170x end to
+  end**. The last stage alone is about 22x versus v2 (82 -> ~1,900 tokens/s
+  in the corresponding throughput comparison). Full arithmetic and provenance:
+  [`evidence/benchmark_results/omni_reasoner_speed_2026-09-13/`](../evidence/benchmark_results/omni_reasoner_speed_2026-09-13/).
 - **Generation costs ~0.9 s/token through the harness**, so a 48-token plan is
   ~45 s per planning call, and the engine calls the planner once per plan and
   once per replan. Worth budgeting for in the demo, or trimming `max_new_tokens`
