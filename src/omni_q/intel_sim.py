@@ -1128,6 +1128,38 @@ class IntelTableWorld(MockWorld):
     # contact-handoff scene; not yet re-tuned per object geometry here.
     _GRASP_WRIST_ROLL = {0: 1.65, 6: -1.65}
 
+    def _fingertip_pinch_offset(self, arm_offset: int) -> float:
+        """Height to add so the *fingertip* lands at the grasp height.
+
+        The IK tracks ``fixed_jaw_pad_4``, which sits ~43 mm up the finger from
+        the fingertip (measured: tip 0.0076 m, pad_4 0.0510 m at a stalled
+        pinch). The grasp height, though, is computed from the object's own
+        centre. Demanding the object's centre height *of pad_4* therefore asks
+        the fingertip to go that same 43 mm lower -- about 4 cm below the table
+        for a fork lying flat, which is unsatisfiable, so the solver stalls with
+        the tip grazing the object instead of straddling it.
+
+        That single frame mismatch explains the whole success pattern measured
+        on 2026-09-13: ``cup_1`` (centre 0.050 m, the only object taller than
+        the offset) held 10/10, ``plate_1`` (0.016 m, rim-grasped) 9/12, and
+        ``fork_1`` / ``spoon_1`` / ``napkin_1`` (0.003-0.004 m) never once.
+
+        Opt-in while it is being evaluated: ``OMNIQ_FINGERTIP_PINCH=1``.
+        Returning 0.0 reproduces the previous behaviour exactly.
+        """
+        if os.environ.get("OMNIQ_FINGERTIP_PINCH", "") not in ("1", "true", "True"):
+            return 0.0
+        tracked = self._pad_geom.get(arm_offset)
+        if tracked is None:
+            return 0.0
+        prefix = "left_" if arm_offset == 0 else "right_"
+        tip = self._mujoco.mj_name2id(
+            self.model, self._mujoco.mjtObj.mjOBJ_GEOM, f"{prefix}fixed_jaw_pad_1")
+        if tip < 0:
+            return 0.0
+        offset = float(self.data.geom_xpos[tracked][2] - self.data.geom_xpos[tip][2])
+        return max(0.0, offset)
+
     def _ik_reach_pad(
         self, arm_offset: int, target_pos, *, iters: int = 300, max_dq: float = 0.04, tol: float = 0.01,
         roll: float | None = None,
@@ -1474,6 +1506,7 @@ class IntelTableWorld(MockWorld):
         xy_now = self.data.qpos[qpos_adr:qpos_adr + 2].copy()
         z_now = float(self.data.qpos[qpos_adr + 2])
         grasp_z = z_now + OBJECT_GRASP_VERTICAL_OFFSET.get(obj, 0.0)
+        grasp_z += self._fingertip_pinch_offset(arm_offset)
         grasp_xy = xy_now - opening_xy * grasp_offset
         pinch_pose = self._ik_reach_pad_pose(
             arm_offset, (grasp_xy[0], grasp_xy[1], grasp_z), target_rotation,

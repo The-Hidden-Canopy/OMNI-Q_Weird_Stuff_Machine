@@ -65,3 +65,66 @@ print(run_intel_table_evaluation_report('out', trials=10, seed=900)['per_object_
 
 `PAD_FRICTION` (`intel_sim.py`) defaults to the value that has always run, so
 this probe required no edit to tracked physics.
+
+## Follow-up: the real blocker is a grasp-frame mismatch (same day)
+
+Chasing the "gripper never reaches the object" finding above to its root.
+
+**Measured, with the correct arm** (an earlier probe of mine used the wrong
+one — `fork_1` is only reachable by the *left* arm at 0.257 m; the right arm is
+0.632 m away, well outside the ~0.386 m envelope. Arm routing in the system is
+correct; my probe was not):
+
+The fingertip pads run **up** the finger. At a stalled fork pinch:
+
+| pad | world z |
+| --- | --- |
+| `pad_1` (fingertip) | 0.0076 |
+| `pad_2` | 0.0174 |
+| `pad_3` | 0.0317 |
+| **`pad_4` — the geom the IK tracks** | **0.0510** |
+
+`_do_pick` computes `grasp_z` from the **object's centre** and demands it of
+`pad_4`, which sits ~43 mm above the fingertip. For `fork_1` (centre 0.0027 m)
+that asks the fingertip to reach ~4 cm **below the table**. Unsatisfiable, so
+the solver stalls with the tip at 7.6 mm — grazing the fork (1–3 N contacts)
+but never straddling it.
+
+This single mismatch predicts the entire measured success pattern:
+
+| object | grasp height | vs 43 mm offset | held |
+| --- | --- | --- | --- |
+| `cup_1` | 0.050 m | above | **10/10** |
+| `plate_1` | 0.016 m (rim) | below | 9/12 |
+| `fork_1`/`spoon_1`/`napkin_1` | 0.003–0.004 m | far below | **0** |
+
+`cup_1` is the only object taller than the offset, and the only reliable grasp.
+
+**Corroboration:** the SO-101 RL post the hosts circulated names this as its #1
+IK bug — *"Mixed up `graspframe` (contact point) vs `gripperframe` (TCP)"* —
+and reports needing visualization to find it. It also places its fingertip
+collision boxes **at the tip**, not up the finger.
+
+**Second defect, independent:** `_ik_reach_pad(tol=0.01)` stops once the pad is
+within **10 mm**. `fork_1`/`spoon_1` are 8 mm thick and `napkin_1` 6 mm — the
+solver declares success while off by more than the whole object.
+
+### Attempted fix, and why it is OFF
+
+`_fingertip_pinch_offset` (`OMNIQ_FINGERTIP_PINCH=1`, default off) adds the
+measured tip↔`pad_4` height to the pinch target. Ten trials:
+
+| object | baseline | fingertip pinch |
+| --- | --- | --- |
+| `cup_1` held | **10/10** | **0/10** |
+| `cup_1` placed | 8/10 | 0/10 |
+| `plate_1` held | 9/10 | **10/10** |
+| flat objects | 0 | 0 |
+
+Directionally right (`plate_1` improved) but a **net regression**, so it stays
+disabled. The implementation is naive: it samples the tip↔pad offset at the
+*current* pose, and that offset is wrist-orientation dependent, so it is stale
+by the time the pinch executes. A correct version resolves the offset in the
+gripper frame at the pinch orientation. Flat objects also stayed at zero, so
+the frame mismatch is necessary but not sufficient — the 10 mm tolerance, and
+possibly pad geometry against a 6-8 mm target, remain.
