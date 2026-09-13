@@ -166,9 +166,14 @@ PYTHONPATH=src .venv/Scripts/python -m pytest tests/test_intel_sim.py -q
 
 The current Intel slice loads a real dual-arm MuJoCo scene from the pinned
 SO-ARM100 mechanical proxy, moves both controller stacks, and records
-explicitly labelled `simulation-scripted-manipulation` state transitions. It is
-not camera perception, contact-rich grasp control, a trained VLA, OpenVINO, or
-hardware evidence yet.
+explicitly labelled `simulation-scripted-manipulation` state transitions. Its
+contact evidence is object-specific: `cup_1` and `plate_1` have measured grasp
+results, while complete placement and the thin cutlery path remain open.
+This is not yet a complete table-setting result, a trained VLA, OpenVINO policy
+inference, or hardware evidence. Governed command-level demonstrations can now
+be captured with optional MuJoCo telemetry through
+[`integrations/intel/demonstrations.py`](integrations/intel/demonstrations.py),
+but motor-level LeRobot conversion remains open.
 
 The `intel` project extra tracks the later LeRobot/OpenVINO policy stack; it is
 not required for, nor proof of, the current MuJoCo controller smoke.
@@ -256,6 +261,35 @@ request. This package does not claim hardware validation or a live RL policy—
 the current proof is the proposal/supervisor/actuator boundary and its
 adversarial tests.
 
+The first concrete learned-controller seam is
+[`skills/controllers/rl_grasp.py`](src/omni_q/skills/controllers/rl_grasp.py):
+it adapts inference-only grasp policies into proposals without exposing an
+actuator. Physical success is a separate evidence decision in
+[`skills/verification/grasp.py`](src/omni_q/skills/verification/grasp.py),
+which requires measured contact, lift, and relative containment rather than
+accepting a completed motion as proof of grasp.
+
+## Speechmatics voice path
+
+Speechmatics is an optional voice layer over the same governed runtime, not a
+second command architecture:
+
+```text
+Speechmatics partials/finals or Voice API events
+    → utterance aggregation and semantic turn handling
+    → VoiceRuntime authority and reference checks
+    → RuntimeMutator / read-only dialogue handler
+    → existing Speechmatics TTS response sink
+```
+
+The raw Realtime v2 transport remains available for replay, file, and
+microphone runs. The optional `speechmatics-voice` path adds provider-side
+Smart Turn, explicit speaker focus, and known-speaker bindings. Speaker focus
+is provider filtering only; it never grants command authority. Voice authority
+is still granted explicitly with `--operator`, and live post-fix latency plus
+multi-speaker acceptance remain unmeasured. See
+[`integrations/speechmatics/README.md`](integrations/speechmatics/README.md).
+
 ## Residency slider (born-compressed OMNI)
 
 OMNI is **born compressed**: the model never lives in FP32/BF16 as a residency
@@ -290,6 +324,8 @@ evidence-bundle receipts) · `demo/residency_slider.py` (walks 8 → 6 → 3 →
   [`docs/providers.md`](docs/providers.md) (Intel + Qualcomm as one Omni graph) ·
   [`docs/datasets.md`](docs/datasets.md) (YOLO real-image haul + synthetic depth; Omni policy/planner data)
 - [`docs/strategy-notes.md`](docs/strategy-notes.md) — track analysis and rubric strategy
+- [`docs/skill-runtime-architecture-2026-09-13.md`](docs/skill-runtime-architecture-2026-09-13.md) —
+  current skill contracts, supervisor, promotion gates, and remaining Intel-arm wiring
 - [`docs/prior-art.md`](docs/prior-art.md) — patterns borrowed from sibling THC repos (SOCOM_REACT, Open-World-Model-Harness, FALCON-DARPA, VIGIL, IDA-TRAIN-V2)
 - [`docs/challenge-briefs/intel-online-physical-ai-challenge.md`](docs/challenge-briefs/intel-online-physical-ai-challenge.md) —
   official Intel Online Challenge brief (transcription + [source PDF](docs/challenge-briefs/intel-online-physical-ai-challenge.pdf))
@@ -303,3 +339,7 @@ evidence-bundle receipts) · `demo/residency_slider.py` (walks 8 → 6 → 3 →
 ## License
 
 Released under the [MIT License](LICENSE).
+
+Third-party source and asset provenance is recorded in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Vendored material retains
+its own license and is not relicensed by this repository's MIT license.

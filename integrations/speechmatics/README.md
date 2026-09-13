@@ -42,25 +42,28 @@ reflex request and still requires an explicitly registered interrupt role.
 | File | Role |
 | --- | --- |
 | `mapper.py` | Provider message → adapter payload. Pure; no socket, no SDK, injectable clock. |
-| `transport.py` | Realtime v2 WebSocket, audio pacing, offline replay, latency receipt. |
+| `transport.py` | Raw Realtime v2 WebSocket, audio pacing, offline replay, latency receipt. |
+| `voice_sdk.py` | Optional `speechmatics-voice` bridge for Smart Turn, segmented events, and explicit speaker focus. |
 | `scripts/run_voice_transport.py` | CLI: file / mic / replay → the real voice boundary. |
 | `samples/session_replay.jsonl` | Synthetic provider messages (`make_sample_replay.py` regenerates them). |
 | `samples/live_session_2026-09-13.jsonl` | **Real** recorded session — exposed the fragmentation defect. |
 | `samples/live_halting_2026-09-13.jsonl` | **Real** halting-speech session — exposed everything in "Intent accumulation". |
 | `samples/live_stop_using_2026-09-13.jsonl` | **Real** session — exposed the safety-gate collision. |
-| `tests/test_speechmatics_transport.py` | 42 tests, no network and no key. |
+| `tests/test_speechmatics_transport.py` | 58 tests, no network and no key. |
+| `tests/test_speechmatics_voice_sdk.py` | Optional Voice SDK bridge tests with a fake client; no network or SDK install. |
 
 The pipeline, end to end:
 
 ```
 Speechmatics ─┬─ partials ──────────────────> UI / anticipation only
+              ├─ EndOfTurn / SmartTurnResult ─> semantic boundary
               └─ finals
                    │
                    ▼
-          UtteranceAggregator      (acoustic: silence, speaker change)
+          UtteranceAggregator      (provider fragments + acoustic fallback)
                    │
                    ▼
-          IntentAccumulator        (semantic: is this an instruction yet?)
+          IntentAccumulator        (semantic parse + provider turn signal)
                    │
                    ▼
           VoiceRuntime.ingest_final
@@ -220,6 +223,16 @@ Bounds: `--intent-window-ms` (default 4000) between utterances, 8 utterances
 max. The count is deliberately generous — halting speech produced *six*
 fragments for one instruction, and a limit of 3 cut it in half.
 
+When the provider supplies a semantic turn event, the transport flushes the
+provider fragment buffer first and passes the control event to this layer.
+`EndOfTurn` closes a matching speaker's hold immediately. A positive
+`SmartTurnResult` closes it only when the payload contains an explicit
+completion field. `EndOfTurnPrediction` and incomplete or ambiguous Smart
+Turn payloads are telemetry only; they cannot execute or release a claim. A
+speaker-mismatched signal is ignored. The existing parse, punctuation,
+silence, and timeout fallbacks remain active when the provider does not emit
+these events.
+
 ### Three bugs this found in code that was not the transport
 
 0. **The safety gate swallowed a preference constraint.** Spoken live:
@@ -305,6 +318,42 @@ platforms can inject an `AudioPlayer`. The API key comes only from the process
 environment. TTS failures are recorded as response failures without changing
 the OMNI result. `voice.response.started` and `voice.response.stopped` mark the
 playback boundary for the next self-speech suppression layer.
+
+### Optional Voice SDK path
+
+The raw transport remains the default and the replay/reference path. For live
+conversational endpointing, install the optional dependency:
+
+```powershell
+pip install -e ".[speechmatics-voice]"
+```
+
+Then run:
+
+```powershell
+& .venv/Scripts/python.exe integrations/speechmatics/scripts/run_voice_transport.py `
+    --voice-api --voice-preset smart_turn --mic --operator S1
+```
+
+An explicit provider focus can be selected for a crowded lab without changing
+authority:
+
+```powershell
+& .venv/Scripts/python.exe integrations/speechmatics/scripts/run_voice_transport.py `
+    --voice-api --mic --operator S1 --focus-speaker S1
+```
+
+`voice_sdk.py` translates `AddSegment` and `AddPartialSegment` into the same
+`VoiceSink`, and forwards `EndOfTurn` / Smart Turn events into the existing
+semantic accumulator. `SpeakerFocusRequest` is explicit and provider-only:
+changing focus never grants authority, changes the operator registry, or
+mutates the OMNI graph. The Voice SDK path intentionally does not support raw
+JSONL recording yet; capture/replay remains on the raw transport until a
+schema-preserving Voice SDK recorder is added. Programmatic
+`VoiceIdentityBinding` values can supply provider voiceprint identifiers to
+the SDK; those identifiers are never copied into OMNI receipts and do not
+authorize the resulting label. The operator registry still requires its own
+explicit authority decision.
 
 For a live run, set `SPEECHMATICS_API_KEY` in the process environment and use
 the existing transport CLI:

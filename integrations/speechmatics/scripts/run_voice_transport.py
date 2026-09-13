@@ -26,6 +26,11 @@ Live from the default microphone (needs the optional ``sounddevice`` extra)::
     .venv/Scripts/python integrations/speechmatics/scripts/run_voice_transport.py \\
         --mic --operator S1 --record tmp/provider_messages.jsonl
 
+The optional Voice SDK path enables provider-side segmentation and Smart Turn::
+
+    .venv/Scripts/python integrations/speechmatics/scripts/run_voice_transport.py \
+        --voice-api --voice-preset smart_turn --mic --operator S1
+
 ``--record`` writes every provider message to JSON lines, which can then be fed
 back through ``--replay`` to re-run the boundary offline against real audio.
 
@@ -74,7 +79,12 @@ from integrations.speechmatics.transport import (  # noqa: E402
 )
 
 
-def _print_result(mapped: MappedTranscript, result) -> None:
+def _print_result(mapped: MappedTranscript | None, result) -> None:
+    if mapped is None:
+        claim = getattr(getattr(result, "claim", None), "text", "")
+        status = getattr(result, "status", "?")
+        print(f"* [semantic-turn] {claim}\n    status={status}")
+        return
     payload = mapped.payload
     speaker = payload["speaker_id"]
     latency = payload["latency_ms"]
@@ -175,6 +185,17 @@ def build_parser() -> argparse.ArgumentParser:
                         help="maximum read-only dialogue answer tokens (default: 48)")
     parser.add_argument("--no-response", action="store_true",
                         help="disable Speechmatics response speech for live runs")
+    parser.add_argument("--voice-api", action="store_true",
+                        help="use optional speechmatics-voice instead of raw Realtime v2")
+    parser.add_argument("--voice-preset", default="smart_turn",
+                        help="Voice SDK preset (default: smart_turn)")
+    focus = parser.add_mutually_exclusive_group()
+    focus.add_argument("--focus-speaker", action="append", default=[],
+                       metavar="SPEAKER_ID",
+                       help="Voice SDK focus label; repeatable and provider-only")
+    focus.add_argument("--ignore-speaker", action="append", default=[],
+                       metavar="SPEAKER_ID",
+                       help="Voice SDK ignore label; repeatable and provider-only")
     parser.add_argument("--response-voice", default="sarah",
                         help="Speechmatics TTS voice for live responses (default: sarah)")
     parser.add_argument("--intent-window-ms", type=float, default=4000.0,
@@ -261,6 +282,12 @@ def main(argv: list[str] | None = None) -> int:
         return list_input_devices()
     if not (args.file or args.raw or args.mic or args.replay):
         parser.error("one of --file, --raw, --mic or --replay is required")
+    if args.voice_api and args.replay:
+        parser.error("--voice-api is live-only; use raw replay for recorded messages")
+    if args.voice_api and args.record:
+        parser.error("--record is only supported by the raw Realtime v2 transport")
+    if (args.focus_speaker or args.ignore_speaker) and not args.voice_api:
+        parser.error("speaker focus controls require --voice-api")
 
     mutator = None
     world_revision = None
@@ -367,6 +394,24 @@ def main(argv: list[str] | None = None) -> int:
         url=args.url,
     )
     transport = SpeechmaticsTransport(config=config, record_path=args.record)
+    voice_transport = None
+    if args.voice_api:
+        from integrations.speechmatics.voice_sdk import (
+            SpeakerFocusRequest,
+            SpeechmaticsVoiceTransport,
+        )
+
+        focus_request = None
+        if args.focus_speaker:
+            focus_request = SpeakerFocusRequest(tuple(args.focus_speaker), "retain")
+        elif args.ignore_speaker:
+            focus_request = SpeakerFocusRequest(tuple(args.ignore_speaker), "ignore")
+
+        voice_transport = SpeechmaticsVoiceTransport(
+            api_key=api_key_from_env(),
+            preset=args.voice_preset,
+            focus_request=focus_request,
+        )
 
     started_wall = time.time()
     started_mono = time.monotonic()
@@ -407,15 +452,22 @@ def main(argv: list[str] | None = None) -> int:
                                             chunk_ms=args.chunk_ms,
                                             device=device)
         api_key_from_env()  # fail before opening a socket if the key is absent
-        print(f"[speechmatics] streaming {audio.description} at "
-              f"{audio.sample_rate} Hz to {config.url}")
+        if args.voice_api:
+            print(f"[speechmatics] Voice SDK preset={args.voice_preset}; "
+                  f"streaming {audio.description} at {audio.sample_rate} Hz")
+        else:
+            print(f"[speechmatics] streaming {audio.description} at "
+                  f"{audio.sample_rate} Hz to {config.url}")
         if args.mic:
             print("[speechmatics] speak now; Ctrl+C to stop")
         try:
-            receipt = asyncio.run(transport.run(
-                audio, sink, mapper, aggregator,
-                on_tick=accumulator.tick if accumulator else None,
-                on_close=accumulator.flush if accumulator else None))
+            if voice_transport is not None:
+                receipt = asyncio.run(voice_transport.run(audio, sink, mapper))
+            else:
+                receipt = asyncio.run(transport.run(
+                    audio, sink, mapper, aggregator,
+                    on_tick=accumulator.tick if accumulator else None,
+                    on_close=accumulator.flush if accumulator else None))
         except KeyboardInterrupt:
             print("\n[speechmatics] stopped by operator")
             # Order matters: the aggregator feeds the accumulator, so draining

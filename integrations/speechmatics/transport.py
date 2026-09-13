@@ -74,6 +74,11 @@ __all__ = [
 
 API_KEY_ENV = "SPEECHMATICS_API_KEY"
 DEFAULT_URL = "wss://eu.rt.speechmatics.com/v2"
+TURN_SIGNAL_MESSAGES = frozenset({
+    "endofturn",
+    "endofturnprediction",
+    "smartturnresult",
+})
 
 
 class SpeechmaticsError(RuntimeError):
@@ -334,7 +339,7 @@ class VoiceSink:
     """
 
     def __init__(self, adapter: Any, *,
-                 on_result: Callable[[MappedTranscript, Any], None] | None = None,
+                 on_result: Callable[[MappedTranscript | None, Any], None] | None = None,
                  final_kwargs: Mapping[str, Any] | None = None,
                  response_renderer: SpeechResponseRenderer | None = None,
                  speech_output: SpeechmaticsTTS | None = None,
@@ -400,13 +405,44 @@ class VoiceSink:
         if self.on_result is not None:
             self.on_result(mapped, result)
         if mapped.final and result is not None and self.speech_output is not None:
-            if self._response_executor is None:
-                self._speak(result)
-            else:
-                self._response_futures.append(
-                    self._response_executor.submit(self._speak, result)
-                )
+            self._emit_response(result)
         return result
+
+    def on_provider_event(self, message: Mapping[str, Any], **extra: Any) -> Any:
+        """Deliver a provider control event to the adapter.
+
+        A semantic turn can release a final already buffered by an
+        ``IntentAccumulator``. It therefore has no new transcript object to
+        pass to ``on_result``; ``None`` is intentional and keeps this result
+        tied to the provider control event rather than inventing a transcript.
+        """
+        try:
+            result = self.adapter.on_provider_event(
+                message, **{**self.final_kwargs, **extra}
+            )
+        except Exception as exc:  # adapter/runtime validation errors
+            self.rejected.append({
+                "final": True,
+                "provider_event": message.get("message", message.get("type")),
+                "error": f"{type(exc).__name__}: {exc}",
+            })
+            return None
+        if result is None:
+            return None
+        self.finals += 1
+        if self.on_result is not None:
+            self.on_result(None, result)
+        if self.speech_output is not None:
+            self._emit_response(result)
+        return result
+
+    def _emit_response(self, result: Any) -> None:
+        if self._response_executor is None:
+            self._speak(result)
+        else:
+            self._response_futures.append(
+                self._response_executor.submit(self._speak, result)
+            )
 
     def _speak(self, result: Any) -> None:
         """Render and play only a completed result from the real voice boundary.
@@ -793,6 +829,13 @@ def replay_messages(messages: Iterable[Mapping[str, Any]], sink: VoiceSink,
             continue
         if kind == "Error":
             raise SpeechmaticsError(_provider_error(message))
+        if _is_turn_signal(message):
+            # Close provider-level fragments before closing the semantic
+            # accumulator behind the sink.
+            if aggregator is not None:
+                aggregator.flush()
+            sink.on_provider_event(message)
+            continue
         mapped = mapper.map_message(message)
         if mapped is None:
             if aggregator is not None and kind == FINAL_MESSAGE:
@@ -821,6 +864,11 @@ def _provider_error(message: Mapping[str, Any]) -> str:
         f"Speechmatics error: type={message.get('type')} "
         f"code={message.get('code')} reason={message.get('reason')}"
     )
+
+
+def _is_turn_signal(message: Mapping[str, Any]) -> bool:
+    value = message.get("message", message.get("type", ""))
+    return str(value).strip().lower().replace("_", "") in TURN_SIGNAL_MESSAGES
 
 
 # ---------------------------------------------------------------------------
@@ -902,6 +950,11 @@ class SpeechmaticsTransport:
                         if kind == "EndOfTranscript":
                             end_of_transcript.set()
                             return
+                        if _is_turn_signal(message):
+                            if aggregator is not None:
+                                aggregator.flush()
+                            sink.on_provider_event(message)
+                            continue
                         if kind in (PARTIAL_MESSAGE, FINAL_MESSAGE):
                             mapped = mapper.map_message(message)
                             if mapped is None:

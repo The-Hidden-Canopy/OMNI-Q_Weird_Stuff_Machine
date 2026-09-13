@@ -555,6 +555,80 @@ def test_a_safety_word_is_never_held_waiting_for_more_speech():
     assert result.interruption is not None and result.interruption.detected
 
 
+def test_semantic_end_of_turn_releases_a_held_claim_through_transport():
+    from omni_q.voice import IntentAccumulator
+
+    runtime, _ = _runtime_with_operator("S1")
+    accumulator = IntentAccumulator(runtime)
+    sink = VoiceSink(SpeechmaticsRealtimeAdapter(accumulator))
+    results: list = []
+    sink.on_result = lambda mapped, result: results.append((mapped, result))
+    mapper = TranscriptMapper(session_id="session_01", org_id="org_a")
+
+    replay_messages(
+        [
+            {"message": "RecognitionStarted", "id": "turn-test"},
+            _message("AddTranscript", "keep", 0.0, 0.4),
+            {"message": "EndOfTurn", "speaker_id": "S1"},
+        ],
+        sink,
+        mapper,
+    )
+
+    assert sink.finals == 1
+    assert results[-1][0] is None
+    assert results[-1][1].claim.text == "keep"
+    assert accumulator.stats()["semantic_turns"] == 1
+    assert accumulator.stats()["holds_released_unexecuted"] == 1
+
+
+def test_prediction_only_turn_signal_does_not_release_or_mutate():
+    from omni_q.voice import IntentAccumulator
+
+    runtime, _ = _runtime_with_operator("S1")
+    accumulator = IntentAccumulator(runtime)
+    sink = VoiceSink(SpeechmaticsRealtimeAdapter(accumulator))
+    mapper = _mapper()
+
+    assert sink.deliver(mapper.map_message(
+        _message("AddTranscript", "keep", 0.0, 0.4))) is None
+    assert sink.on_provider_event({
+        "message": "EndOfTurnPrediction",
+        "speaker_id": "S1",
+        "predicted_wait": 0.8,
+    }) is None
+
+    assert sink.finals == 0
+    assert accumulator.stats()["utterances_held"] == 1
+    assert accumulator.stats()["semantic_turns"] == 0
+
+
+def test_semantic_turn_signal_cannot_close_another_speakers_hold():
+    from omni_q.voice import IntentAccumulator
+
+    runtime, _ = _runtime_with_operator("S1")
+    accumulator = IntentAccumulator(runtime)
+    sink = VoiceSink(SpeechmaticsRealtimeAdapter(accumulator))
+    mapper = _mapper()
+
+    assert sink.deliver(mapper.map_message(
+        _message("AddTranscript", "keep", 0.0, 0.4))) is None
+    assert sink.on_provider_event({
+        "message": "EndOfTurn",
+        "speaker_id": "S2",
+    }) is None
+    assert sink.finals == 0
+    assert accumulator.stats()["semantic_turns_ignored"] == 1
+
+    result = sink.on_provider_event({
+        "message": "SmartTurnResult",
+        "speaker_id": "S1",
+        "is_end_of_turn": True,
+    })
+    assert result is not None
+    assert sink.finals == 1
+
+
 def test_speech_that_never_becomes_an_instruction_is_still_recorded():
     from omni_q.voice import IntentAccumulator
 

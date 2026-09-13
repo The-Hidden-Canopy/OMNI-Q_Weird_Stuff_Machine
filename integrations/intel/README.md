@@ -155,10 +155,30 @@ alongside the YOLO perception node.
   updated to assert the *honest* outcome, not a success rate not yet
   achieved), full suite green (180/180 at this checkout after merging with the
   contact-handoff/perception work below).
-- [ ] LeRobot dataset/demonstration capture from the MuJoCo scene
+- [x] Command-level demonstration capture from governed world transitions —
+  `integrations/intel/demonstrations.py` records accepted and rejected
+  `TransitionRequest` attempts, before/after `WorldState`, and optional
+  MuJoCo qpos/qvel/ctrl/time telemetry as an exclusive JSONL intermediate
+  artifact. This is provenance-bearing input for a later LeRobot conversion;
+  it is **not** yet a motor-level LeRobot dataset, trained policy, or hardware
+  evidence.
+- [ ] Motor-level LeRobot dataset/demonstration conversion from the MuJoCo
+  scene
 - [ ] Train/fine-tune a VLA or imitation-learning policy (SmolVLA, Pi0.5, ACT, or other)
 - [ ] Capability-node wrappers for arm primitives
 - [ ] Policy/perception export to OpenVINO IR, run on Core Ultra Series 2/3
+
+### Current evidence index (2026-09-13)
+
+The historical investigation below contains superseded intermediate numbers.
+For the current manipulation state, use the v9 bundle:
+[`evidence/benchmark_results/intel_table_eval_2026-09-12-v9/README.md`](../../evidence/benchmark_results/intel_table_eval_2026-09-12-v9/README.md).
+`cup_1` and `plate_1` held in 10/10 trials under the expanded randomized
+axes; `plate_1` placed in 0/10 because its legitimate rim grasp still trips
+the separate carry-safety bound. `fork_1`, `spoon_1`, and `napkin_1` still
+need a physical pre-grasp manoeuvre. The command-level demonstration recorder
+is evidence plumbing, not a manipulation acceptance result.
+
 - [x] Bounded environment randomization + 10-seed evaluation harness —
   `IntelSceneConfig` applies explicit build-time tableware position/yaw jitter;
   `run_intel_table_evaluation_report(...)` retains one hashed receipt per seed

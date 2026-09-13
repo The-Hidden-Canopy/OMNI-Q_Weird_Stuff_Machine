@@ -1163,9 +1163,12 @@ class IntentAccumulator:
         self.min_command_words = int(min_command_words)
         self.sequence_source = sequence_source
         self._held: list[SpeechFinal] = []
+        self._held_kwargs: dict[str, Any] = {}
         self.held_count = 0
         self.joined_count = 0
         self.expired_count = 0
+        self.semantic_turn_count = 0
+        self.semantic_turn_ignored_count = 0
 
     # Runtime-shaped surface -------------------------------------------
     @property
@@ -1202,15 +1205,18 @@ class IntentAccumulator:
         candidate = self._joined_text(event)
         if self._complete(candidate):
             joined = self._merge(event, candidate)
+            dispatch_kwargs = dict(self._held_kwargs or kwargs)
             self._held = []
             self._held_since_ns = None
+            self._held_kwargs = {}
             if joined is not event:
                 self.joined_count += 1
-            return self.runtime.ingest_final(joined, **kwargs)
+            return self.runtime.ingest_final(joined, **dispatch_kwargs)
         self._held.append(event)
         self.held_count += 1
         if self._held_since_ns is None:
             self._held_since_ns = int(self.clock())
+            self._held_kwargs = dict(kwargs)
         self.bus.publish("voice.intent.incomplete", source=event.source,
                          speaker_id=event.speaker_id, text=candidate,
                          held_utterances=len(self._held))
@@ -1236,6 +1242,80 @@ class IntentAccumulator:
         if (now - self._held_since_ns) / 1_000_000.0 >= self.window_ms:
             return self._release(**kwargs)
         return None
+
+    def on_turn_signal(self, payload: Mapping[str, Any], **kwargs: Any):
+        """Close a hold when the provider declares a semantic turn end.
+
+        Provider predictions are deliberately not authority.  A predicted
+        wait or an unrecognised Smart Turn payload is telemetry only; the
+        accumulator keeps its existing completion and timeout fallbacks.
+        """
+        if not isinstance(payload, Mapping):
+            raise VoiceError("provider turn signal must be a mapping")
+
+        kind = _provider_event_kind(payload)
+        if kind == "endofturnprediction":
+            self.bus.publish(
+                "voice.intent.turn_prediction",
+                source="speechmatics",
+                predicted_wait=payload.get("predicted_wait"),
+            )
+            return None
+
+        if not self._turn_signal_complete(payload, kind):
+            return None
+        if not self._held:
+            return None
+
+        signal_speaker = _provider_speaker(payload)
+        held_speaker = self._held[-1].speaker_id
+        if signal_speaker is not None and signal_speaker != held_speaker:
+            self.semantic_turn_ignored_count += 1
+            self.bus.publish(
+                "voice.intent.turn_ignored",
+                source="speechmatics",
+                reason="speaker_mismatch",
+                signal_speaker_id=signal_speaker,
+                held_speaker_id=held_speaker,
+            )
+            return None
+
+        self.semantic_turn_count += 1
+        self.bus.publish(
+            "voice.intent.semantic_turn",
+            source="speechmatics",
+            provider_event=kind,
+            speaker_id=held_speaker,
+            held_utterances=len(self._held),
+        )
+        return self._release(**kwargs)
+
+    @staticmethod
+    def _turn_signal_complete(payload: Mapping[str, Any], kind: str) -> bool:
+        if kind == "endofturn":
+            return True
+        if kind != "smartturnresult":
+            return False
+        for key in (
+            "is_end_of_turn",
+            "end_of_turn",
+            "turn_complete",
+            "is_complete",
+            "complete",
+        ):
+            value = payload.get(key)
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, str):
+                normalized = value.strip().lower()
+                if normalized in {"true", "complete", "completed", "end_of_turn"}:
+                    return True
+                if normalized in {"false", "incomplete", "not_end_of_turn"}:
+                    return False
+        result = payload.get("result")
+        if isinstance(result, Mapping):
+            return IntentAccumulator._turn_signal_complete(result, "smartturnresult")
+        return False
 
     # Internals ---------------------------------------------------------
     def _complete(self, text: str) -> bool:
@@ -1324,6 +1404,8 @@ class IntentAccumulator:
         """Dispatch held speech as-is; it never became an instruction."""
         held, self._held = self._held, []
         self._held_since_ns = None
+        dispatch_kwargs = dict(self._held_kwargs or kwargs)
+        self._held_kwargs = {}
         text = ""
         for part in (h.text for h in held):
             part = part.strip()
@@ -1339,7 +1421,9 @@ class IntentAccumulator:
                                    "t_end_ns": held[-1].t_end_ns}
         if self.sequence_source is not None:
             changes["sequence"] = self.sequence_source()
-        return self.runtime.ingest_final(replace(held[-1], **changes), **kwargs)
+        return self.runtime.ingest_final(
+            replace(held[-1], **changes), **dispatch_kwargs
+        )
 
     def stats(self) -> dict[str, Any]:
         return {
@@ -1348,6 +1432,8 @@ class IntentAccumulator:
             "utterances_held": self.held_count,
             "instructions_completed_by_joining": self.joined_count,
             "holds_released_unexecuted": self.expired_count,
+            "semantic_turns": self.semantic_turn_count,
+            "semantic_turns_ignored": self.semantic_turn_ignored_count,
         }
 
 
@@ -1381,3 +1467,23 @@ class SpeechmaticsRealtimeAdapter:
 
     def on_final(self, payload: Mapping[str, Any], **kwargs: Any) -> VoiceDispatchResult:
         return self.runtime.ingest_final(self._event(payload, final=True), **kwargs)
+
+    def on_provider_event(self, payload: Mapping[str, Any], **kwargs: Any):
+        """Pass provider control events to an accumulation layer if present."""
+        handler = getattr(self.runtime, "on_turn_signal", None)
+        if handler is None:
+            return None
+        return handler(payload, **kwargs)
+
+
+def _provider_event_kind(payload: Mapping[str, Any]) -> str:
+    value = payload.get("message", payload.get("type", ""))
+    return str(value).strip().lower().replace("_", "")
+
+
+def _provider_speaker(payload: Mapping[str, Any]) -> str | None:
+    for key in ("speaker_id", "speaker", "speaker_label"):
+        value = payload.get(key)
+        if value is not None and str(value).strip():
+            return str(value)
+    return None

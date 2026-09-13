@@ -90,6 +90,12 @@
 > shifted from "grasping doesn't work at all" to "grasping works for one
 > object class, real physics confirmed, four to go."
 >
+> **Historical-note boundary (2026-09-13):** the v8 numbers in the addendum
+> below are retained as an audit trail. The later v9 bundle supersedes the
+> `plate_1` hold result with 10/10 under the expanded randomized axes, while
+> placement is 0/10 because the separate rim-grasp carry-safety bound remains
+> unresolved. Do not use the v8 paragraph as the current acceptance result.
+>
 > **Fifth addendum, 2026-09-11 (~6 days to submission):** two scheduling/
 > reporting fixes, no new grasp-physics work — the grasp-controller thread
 > hit clear diminishing returns this session (two negative results: a

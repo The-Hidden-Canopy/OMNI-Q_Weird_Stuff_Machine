@@ -37,6 +37,12 @@ intel = [
 speechmatics = [
     "websockets>=12",  # realtime v2 websocket client
 ]
+# Optional higher-level Voice SDK path: smart_turn, speaker focus, and
+# segmented Voice API events. The bridge imports this lazily so raw replay and
+# the existing websocket transport do not acquire the dependency.
+speechmatics-voice = [
+    "speechmatics-voice[smart]>=0.2.8",
+]
 # Microphone capture on top of the above; needs PortAudio present on the host,
 # which is why it is separate from the file/replay path.
 speechmatics-mic = [
