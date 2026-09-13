@@ -208,3 +208,54 @@ exactly this reason (they sat outside the reach envelope entirely).
 Note this does not conflict with the pad finding above: the fingertip cannot
 straddle an 8 mm object lying flat, so the object has to be *tipped* rather
 than pinched from above. Two arms are what make tipping possible.
+
+## CORRECTION: the gripper closes to 2.6 mm at the fingertip, not 21 mm
+
+The premise underneath this whole investigation was wrong, and the correction
+changes the conclusion.
+
+`intel_sim.py` justifies `plate_1`'s 32 mm rim by citing
+`so101_capability_map.md`: *"the SO-101 gripper's own fully-closed pad gap is
+21.3 mm ... a 14 mm rim is geometrically thinner than the gripper can ever close
+to."* Measured directly, in the fixed-jaw frame at the closed limit:
+
+| pad pair | along-finger offset | face gap when closed |
+| --- | --- | --- |
+| **pad_1 (fingertip)** | 3.1 mm | **2.6 mm** |
+| pad_2 | 2.6 mm | 8.3 mm |
+| pad_3 | 0.5 mm | 14.1 mm |
+| pad_4 (base) | 0.4 mm | 19.3 mm |
+
+The pads pair 1↔1 … 4↔4 (offsets under ~3 mm, so they genuinely oppose), and
+**the jaws close as a wedge**: near-touching at the tip, ~19 mm at the base.
+That is simply how a pivoting jaw closes — this is a pincer, not a parallel
+gripper. Independently corroborated by the collision meshes themselves, whose
+minimum jaw-to-jaw gap in the finger region at full close is **3.1–4.6 mm**.
+
+The 21.3 mm figure is the *base* of the wedge, not the tip.
+
+### What this changes
+
+1. **Thin objects are grippable** — at the fingertip. `fork_1`/`spoon_1` (8 mm)
+   and `napkin_1` (6 mm) all fit inside a 2.6 mm close.
+2. **`plate_1`'s 32 mm rim is unjustified.** A 14 mm rim was always graspable at
+   the tip. A real plate rim is ~5-10 mm, so the scene currently carries an
+   unrealistically thick plate that makes the task *easier* than reality —
+   worth reverting on realism grounds, separately from any grasp work.
+3. **It explains the grip failure completely.** `_do_pick` tracks
+   `fixed_jaw_pad_4` — the **wide end** of the wedge. At pad_4 the jaws close
+   only to 19.3 mm, so an 8 mm object cannot be pinched there *at any height*,
+   however good the IK is. Thin objects must be taken at the fingertip.
+
+That makes `_ik_reach_pad(track_tcp=True)` (tracking the pad_1 midpoint, added
+above) the correct fix rather than a workaround — it needs the downstream pinch
+constants re-tuned to the new tracked point, which is what the earlier naive
+attempt got wrong when it regressed `cup_1`.
+
+**Sources checked while resolving this:** the vendored asset is faithful — the
+`jaw_pad_*` geoms are in upstream menagerie `trs_so_arm100` at the pinned commit
+with identical sizes and positions (so `SOURCE.md`'s "verbatim copy" claim
+stands; an earlier suspicion that they were a local addition was wrong).
+Menagerie has no SO-101 model, and neither the LeRobot SO-101 page nor
+roboticscenter.ai publishes a jaw-gap figure, so the model's own geometry is the
+authority here.

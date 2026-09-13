@@ -46,8 +46,25 @@ Keyframes (rad, joint order as table): `home = [0, −1.57, 1.57, 1.57, −1.57,
 
 ## Gripper
 
-- Jaw travel −0.174 … 1.75 rad (110.3°); measured pad-tip gap **21.3 mm closed
-  → 77.1 mm fully open** (near-linear, ~0.29 mm per 0.01 rad).
+- Jaw travel −0.174 … 1.75 rad (110.3°).
+- **CORRECTED 2026-09-13.** This entry previously read "measured pad-tip gap
+  **21.3 mm closed → 77.1 mm fully open**". That measured the *base* of the
+  jaw, not the tip. The jaws close as a **wedge**, and the gap depends on
+  where along the finger you measure it (fixed-jaw frame, closed limit):
+
+  | pad pair | face gap closed |
+  | --- | --- |
+  | pad_1 (fingertip) | **2.6 mm** |
+  | pad_2 | 8.3 mm |
+  | pad_3 | 14.1 mm |
+  | pad_4 (base) | 19.3 mm |
+
+  Corroborated by the collision meshes: minimum jaw-to-jaw gap in the finger
+  region at full close is 3.1–4.6 mm. So the gripper **can** pinch thin
+  objects, at the fingertip — the 21.3 mm figure made an 8 mm fork look
+  impossible when it is not, and was the stated reason `plate_1`'s rim was
+  thickened from 14 mm to an unrealistic 32 mm. Evidence:
+  `evidence/benchmark_results/pad_friction_probe_2026-09-13/`.
 - Comfortably spans tableware: plates (~150–300 mm diameter are grasped at the
   rim, well under 77 mm jaw width), cups, cutlery.
 - LeRobot API works in 0–100 "percent open" on hardware; the sim joint is rad.
