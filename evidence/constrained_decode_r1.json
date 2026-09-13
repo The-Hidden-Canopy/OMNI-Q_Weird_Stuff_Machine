@@ -1,0 +1,382 @@
+{
+  "summary": {
+    "checkpoint": "models/omni_planner_r1_final.pt",
+    "held_out_prompts": 12,
+    "max_new_tokens": 64,
+    "wall_s": 1899.2,
+    "free": {
+      "acceptance": 0.12121212121212122,
+      "usable": 0.3333333333333333,
+      "exact": 0.0,
+      "proposed_per_prompt": 2.75
+    },
+    "fenced": {
+      "acceptance": 0.4634146341463415,
+      "usable": 0.6666666666666666,
+      "exact": 0.0,
+      "proposed_per_prompt": 3.4166666666666665
+    }
+  },
+  "rows": [
+    {
+      "index": 0,
+      "free": {
+        "proposed": 2,
+        "accepted": 1,
+        "usable": true,
+        "exact": false,
+        "rejected": [
+          "omni:move:setting_1"
+        ]
+      },
+      "fenced": {
+        "proposed": 4,
+        "accepted": 1,
+        "usable": true,
+        "exact": false,
+        "rejected": [
+          "omni:move:plate_1"
+        ]
+      },
+      "free_text": "PLAN\nSTEP PICK object=cup_1\nSTEP MOVE object=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_",
+      "fenced_text": "PLAN\nSTEP PICK object=cup_1\nSTEP MOVE object=plate_1 to=setting_2 to=setting_2\nSTEP MOVE object=plate_1 to=setting_2 to=setting_2\nSTEP MOVE object=plate_1 to=setting_2 to",
+      "legal_objects": [
+        "cup_1",
+        "napkin_1",
+        "plate_1"
+      ]
+    },
+    {
+      "index": 1,
+      "free": {
+        "proposed": 3,
+        "accepted": 0,
+        "usable": false,
+        "exact": false,
+        "rejected": [
+          "omni:pick:setting_1",
+          "omni:move:setting_1"
+        ]
+      },
+      "fenced": {
+        "proposed": 3,
+        "accepted": 1,
+        "usable": true,
+        "exact": false,
+        "rejected": [
+          "omni:pick:plate_1",
+          "omni:move:knife_1"
+        ]
+      },
+      "free_text": "PLAN\nSTEP PICK object=setting_1\nSTEP MOVE object=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1\nSTEP MOVE object=setting_1",
+      "fenced_text": "PLAN\nSTEP PICK object=plate_1\nSTEP MOVE object=knife_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1\nSTEP MOVE object=knife_1",
+      "legal_objects": [
+        "knife_1",
+        "napkin_1",
+        "plate_1"
+      ]
+    },
+    {
+      "index": 2,
+      "free": {
+        "proposed": 4,
+        "accepted": 0,
+        "usable": false,
+        "exact": false,
+        "rejected": [
+          "omni:pick:setting_1",
+          "omni:move:setting_1"
+        ]
+      },
+      "fenced": {
+        "proposed": 4,
+        "accepted": 3,
+        "usable": true,
+        "exact": false,
+        "rejected": [
+          "omni:move:knife_1"
+        ]
+      },
+      "free_text": "PLAN\nSTEP PICK object=setting_1\nSTEP MOVE object=setting_1 to=setting_1\nSTEP MOVE object=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1\nSTEP MOVE object=setting_1\n",
+      "fenced_text": "PLAN\nSTEP PICK object=knife_1\nSTEP MOVE object=knife_1 to=setting_1\nSTEP MOVE object=knife_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1\nSTEP MOVE object=knife_1\n",
+      "legal_objects": [
+        "cup_1",
+        "cup_2",
+        "knife_1",
+        "plate_1",
+        "plate_2",
+        "spoon_1"
+      ]
+    },
+    {
+      "index": 3,
+      "free": {
+        "proposed": 3,
+        "accepted": 0,
+        "usable": false,
+        "exact": false,
+        "rejected": [
+          "omni:pick:setting_1",
+          "omni:move:setting_1"
+        ]
+      },
+      "fenced": {
+        "proposed": 3,
+        "accepted": 2,
+        "usable": true,
+        "exact": false,
+        "rejected": [
+          "omni:move:knife_1"
+        ]
+      },
+      "free_text": "PLAN\nSTEP PICK object=setting_1\nSTEP MOVE object=setting_1\nSTEP MOVE object=setting_1 to=setting_1 to=setting_1 to=setting_1 to=knife_1 to=setting_1 to=setting_1 to=setting_1",
+      "fenced_text": "PLAN\nSTEP PICK object=knife_1\nSTEP MOVE object=knife_1\nSTEP MOVE object=knife_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1",
+      "legal_objects": [
+        "fork_1",
+        "knife_1",
+        "knife_2",
+        "plate_1",
+        "plate_2",
+        "spoon_1"
+      ]
+    },
+    {
+      "index": 4,
+      "free": {
+        "proposed": 2,
+        "accepted": 1,
+        "usable": true,
+        "exact": false,
+        "rejected": [
+          "omni:move:setting_1"
+        ]
+      },
+      "fenced": {
+        "proposed": 4,
+        "accepted": 4,
+        "usable": true,
+        "exact": false,
+        "rejected": []
+      },
+      "free_text": "PLAN\nSTEP PICK object=cup_1\nSTEP MOVE object=setting_1 to==setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting__1 to=setting_1 to=setting_1 to=setting_1 to=",
+      "fenced_text": "PLAN\nSTEP PICK object=cup_1\nSTEP MOVE object=spoon_1 to=setting_2\nSTEP MOVE object=plate_1 to=setting_2\nSTEP MOVE object=spoon_1 to=setting_2 to=setting_2 to=setting_2 to",
+      "legal_objects": [
+        "cup_1",
+        "fork_1",
+        "fork_2",
+        "plate_1",
+        "spoon_1"
+      ]
+    },
+    {
+      "index": 5,
+      "free": {
+        "proposed": 6,
+        "accepted": 0,
+        "usable": false,
+        "exact": false,
+        "rejected": [
+          "omni:pick:setting_1",
+          "omni:move:setting_1",
+          "omni:move:setting"
+        ]
+      },
+      "fenced": {
+        "proposed": 6,
+        "accepted": 3,
+        "usable": true,
+        "exact": false,
+        "rejected": [
+          "omni:move:plate_1",
+          "omni:move:knife_1",
+          "omni:move:knife"
+        ]
+      },
+      "free_text": "PLAN\nSTEP PICK object=setting_1\nSTEP MOVE object=setting_1 to=setting_1 to=knife_1\nSTEP PICK object=setting_1\nSTEP MOVE object=setting_1\nSTEP MOVE object=setting_1\nSTEP MOVE object=setting",
+      "fenced_text": "PLAN\nSTEP PICK object=knife_1\nSTEP MOVE object=knife_1 to=setting_1 to=setting_1\nSTEP PICK object=knife_1\nSTEP MOVE object=plate_1\nSTEP MOVE object=knife_1\nSTEP MOVE object=knife",
+      "legal_objects": [
+        "knife_1",
+        "plate_1"
+      ]
+    },
+    {
+      "index": 6,
+      "free": {
+        "proposed": 0,
+        "accepted": 0,
+        "usable": false,
+        "exact": false,
+        "rejected": []
+      },
+      "fenced": {
+        "proposed": 0,
+        "accepted": 0,
+        "usable": false,
+        "exact": false,
+        "rejected": []
+      },
+      "free_text": "PLA_1\nSTEP PICK object=cup_1\nSTEP MOVE object=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1\nSTEP MOVE object=setting_1 to=setting_",
+      "fenced_text": "PLA_1\nSTEP PICK object=cup_1\nSTEP MOVE object=knife_1 to=setting_2\nSTEP MOVE object=knife_1 to=setting_2\nSTEP MOVE object=cup_1 to=setting_2\nSTEP MOVE object=knife_1 to",
+      "legal_objects": [
+        "cup_1",
+        "fork_1",
+        "knife_1",
+        "knife_2",
+        "plate_1"
+      ]
+    },
+    {
+      "index": 7,
+      "free": {
+        "proposed": 2,
+        "accepted": 0,
+        "usable": false,
+        "exact": false,
+        "rejected": [
+          "omni:pick:knife_1",
+          "omni:move:setting_1"
+        ]
+      },
+      "fenced": {
+        "proposed": 5,
+        "accepted": 0,
+        "usable": false,
+        "exact": false,
+        "rejected": [
+          "omni:pick:plate_1",
+          "omni:move:plate_1"
+        ]
+      },
+      "free_text": "PLAN\nSTEP PICK object=knife_1\nSTEP MOVE object=setting_1 to=setting_1 to=_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1",
+      "fenced_text": "PLAN\nSTEP PICK object=plate_1\nSTEP MOVE object=plate_1 to=setting_4\nSTEP MOVE object=plate_1 to=setting_4\nSTEP PICK object=plate_1 to=setting_4\nSTEP MOVE object=plate_1 to=",
+      "legal_objects": [
+        "fork_1",
+        "plate_1"
+      ]
+    },
+    {
+      "index": 8,
+      "free": {
+        "proposed": 3,
+        "accepted": 0,
+        "usable": false,
+        "exact": false,
+        "rejected": [
+          "omni:pick:0",
+          "omni:mo:0",
+          "omni:move:setting_1"
+        ]
+      },
+      "fenced": {
+        "proposed": 3,
+        "accepted": 0,
+        "usable": false,
+        "exact": false,
+        "rejected": [
+          "omni:pick:0",
+          "omni:mo:0",
+          "omni:move:spoon_1"
+        ]
+      },
+      "free_text": "PLAN\nSTEP PICK objectsetting_1\nSTEP MO timers=setting_1\nSTEP MOVE object=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=",
+      "fenced_text": "PLAN\nSTEP PICK objectsetting_1\nSTEP MO timers=setting_1\nSTEP MOVE object=spoon_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=",
+      "legal_objects": [
+        "spoon_1",
+        "spoon_2"
+      ]
+    },
+    {
+      "index": 9,
+      "free": {
+        "proposed": 3,
+        "accepted": 1,
+        "usable": true,
+        "exact": false,
+        "rejected": [
+          "omni:pick:setting_1",
+          "omni:move:setting_1"
+        ]
+      },
+      "fenced": {
+        "proposed": 3,
+        "accepted": 3,
+        "usable": true,
+        "exact": false,
+        "rejected": []
+      },
+      "free_text": "PLAN\nSTEP PICK object=setting_1\nSTEP MOVE object=setting_1 to=setting_1 to=setting_1 to=setting_1\nSTEP MOVE object=knife_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1",
+      "fenced_text": "PLAN\nSTEP PICK object=cup_1\nSTEP MOVE object=knife_1 to=setting_1 to=setting_1 to=setting_1\nSTEP MOVE object=knife_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1",
+      "legal_objects": [
+        "cup_1",
+        "fork_1",
+        "knife_1",
+        "knife_2",
+        "napkin_1",
+        "plate_1"
+      ]
+    },
+    {
+      "index": 10,
+      "free": {
+        "proposed": 3,
+        "accepted": 1,
+        "usable": true,
+        "exact": false,
+        "rejected": [
+          "omni:move:setting_1",
+          "omni:move:knife_1"
+        ]
+      },
+      "fenced": {
+        "proposed": 4,
+        "accepted": 2,
+        "usable": true,
+        "exact": false,
+        "rejected": [
+          "omni:move:plate_1"
+        ]
+      },
+      "free_text": "PLAN\nSTEP PICK object=cup_1\nSTEP MOVE object=setting_1 to=setting_1 to=setting_1 to=setting_1\nSTEP MOVE object=knife_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1",
+      "fenced_text": "PLAN\nSTEP PICK object=cup_1\nSTEP MOVE object=plate_1 to=setting_2 to=setting_2 to=setting_2\nSTEP MOVE object=spoon_1 to=setting_2 to=setting_2\nSTEP MOVE object=plate_1 to",
+      "legal_objects": [
+        "cup_1",
+        "fork_1",
+        "napkin_1",
+        "plate_1",
+        "spoon_1",
+        "spoon_2"
+      ]
+    },
+    {
+      "index": 11,
+      "free": {
+        "proposed": 2,
+        "accepted": 0,
+        "usable": false,
+        "exact": false,
+        "rejected": [
+          "omni:move:setting_1"
+        ]
+      },
+      "fenced": {
+        "proposed": 2,
+        "accepted": 0,
+        "usable": false,
+        "exact": false,
+        "rejected": [
+          "omni:move:fork_1",
+          "omni:move:spoon_1"
+        ]
+      },
+      "free_text": "PLAN\nSTEP MOVE object=setting_1\nSTEP MOVE object=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_",
+      "fenced_text": "PLAN\nSTEP MOVE object=fork_1\nSTEP MOVE object=spoon_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_1 to=setting_",
+      "legal_objects": [
+        "fork_1",
+        "fork_2",
+        "spoon_1",
+        "spoon_2",
+        "spoon_3"
+      ]
+    }
+  ]
+}

@@ -629,6 +629,12 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     })
     ET.SubElement(worldbody, "camera", {"name": "third_person", "pos": "0 -1.15 .85", "euler": "1.05 0 0"})
     ET.SubElement(worldbody, "camera", {"name": "table_overhead", "pos": "0 -.10 1.20", "euler": "0 0 0"})
+    # Table-height side view. A grasp failure on a flat object is a few
+    # millimetres of fingertip-vs-table gap; from above or from the front that
+    # gap is invisible, which is why it took direct geom measurement to find.
+    # This camera puts it on screen.
+    ET.SubElement(worldbody, "camera", {"name": "table_grazing", "pos": "-.90 -.10 .035",
+                                        "euler": "1.5708 -1.5708 0", "fovy": "42"})
 
     base = source.find("./worldbody/body[@name='Base']")
     if base is None:  # static source validation, not a recoverable runtime state
@@ -668,6 +674,30 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
                 geom.set("friction", PAD_FRICTION)
                 geom.set("solref", ".050 1")
                 geom.set("solimp", ".80 .95 .010")
+        # Wrist camera, mounted on the fixed jaw looking down the finger at the
+        # pinch. The challenge allows up to 6 cameras and this scene used 2.
+        #
+        # Motivated by measurement, not decoration: the pinch solve lands within
+        # ~3.5 mm of its target (see _ik_reach_pad(track_tcp=True)) while fork
+        # and spoon are 8 mm thick and the napkin 6 mm, so the error budget and
+        # the object are the same size. That is the regime where a local visual
+        # loop earns its keep, and it is what the SO-101 RL write-up used an
+        # 84x84 wrist view for. Its author also found console coordinates
+        # insufficient to see a grasp-frame bug at all -- the same bug this file
+        # had -- and recommended looking at the grasp point directly.
+        #
+        # Purely additive: a camera has no collision geometry, no mass and no
+        # contype, so it cannot change the physics this scene is judged on.
+        # _prefixed() has already renamed every body, so the jaw is
+        # "<arm>_Fixed_Jaw" here, not "Fixed_Jaw".
+        jaw = arm_body.find(f".//body[@name='{arm}_Fixed_Jaw']")
+        if jaw is not None:
+            ET.SubElement(jaw, "camera", {
+                "name": f"{arm}_wrist",
+                "pos": ".045 -.055 0",
+                "euler": "0 1.5708 0",
+                "fovy": "58",
+            })
         worldbody.append(arm_body)
         for exclude in source_excludes:
             ET.SubElement(contact, "exclude", {

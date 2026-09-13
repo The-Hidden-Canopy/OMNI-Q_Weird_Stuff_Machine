@@ -155,3 +155,31 @@ same weights, real ids instead of `setting_1` -> 2 of 3 steps accepted.
 Only after that is it worth asking whether the model needs more data (3,300
 pairs exist, 1,000 were used), more epochs, or a better-initialized attention
 stack.
+
+### Constrained decoding measured on r1 (2026-09-13)
+
+Same weights (`omni_planner_r1_final.pt`), same prompts, same greedy rule; the
+only difference is whether identifier slots are fenced to the world's legal ids.
+12 held-out prompts, `evidence/constrained_decode_r1.json`:
+
+| | acceptance | usable | exact | proposed/prompt |
+| --- | --- | --- | --- | --- |
+| free | 0.121 | 0.333 | 0.000 | 2.75 |
+| **fenced** | **0.463** | **0.667** | 0.000 | 3.42 |
+
+**3.8x acceptance and 2x usable plans with no retraining.** For the demo that is
+the difference between one prompt in three producing an executable step and two
+in three.
+
+What it does **not** fix, stated plainly:
+
+- `exact` stays 0.000 — the oracle plan is never reproduced;
+- the fence supplies vocabulary, not coherence. One row reads
+  `PICK object=cup_1 / MOVE object=knife_1 ...` — every identifier legal, the
+  plan incoherent. Only training fixes that;
+- repetition persists (`to=setting_1 to=setting_1 ...`), exactly as the earlier
+  measurement predicted (removing it changes acceptance by nothing);
+- 12 prompts is a small sample.
+
+So: fencing converts a model that learned plan *shape* into one that emits
+*executable* steps. It does not make it a planner.
