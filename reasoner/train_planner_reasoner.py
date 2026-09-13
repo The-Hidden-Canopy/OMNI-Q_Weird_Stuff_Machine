@@ -226,13 +226,25 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--eval-limit", type=int, default=8)
     ap.add_argument("--final-eval-limit", type=int, default=40)
+    ap.add_argument("--eval-on-train", action="store_true",
+                    help="evaluate on the TRAINING rows instead of held-out ones. For an "
+                         "overfit probe: a setup that cannot reproduce examples it has "
+                         "already seen is mis-wired, and that is worth knowing in minutes "
+                         "rather than after a multi-hour run.")
     ap.add_argument("--train-embeddings", action="store_true",
                     help="also train the 197M-param tied vocab table (default frozen: it is the one "
                          "component the native pretraining initialized, and training it costs 1.57 GiB "
                          "of grad+optimizer state on a 6 GiB card)")
     ap.add_argument("--no-grad-checkpoint", action="store_true")
     args = ap.parse_args()
-    sys.stdout.reconfigure(line_buffering=True)
+    # The 256k byte-level BPE decodes to arbitrary Unicode, and an undertrained
+    # model emits plenty of it. Windows' cp1252 console raises
+    # UnicodeEncodeError mid-print and takes the whole run down for a display
+    # reason -- it killed a probe at its first eval after the metrics had
+    # already been computed. Same guard as roundtrip_check.py / omni_chat.py.
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
     torch.manual_seed(args.seed); random.seed(args.seed)
     device = torch.device("cuda")
     from transformers import AutoTokenizer
@@ -243,6 +255,8 @@ def main() -> int:
     heldout = [r for r in rows if r["split"] == "eval"]
     if args.max_train:
         train = train[:args.max_train]
+    if args.eval_on_train:
+        heldout = list(train)
     enc = []
     for r in train:
         p = tok(r["prompt"], add_special_tokens=False)["input_ids"]
