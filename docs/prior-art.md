@@ -1,6 +1,6 @@
 # Prior art — patterns lifted from sibling repos
 
-Four repos in the The-Hidden-Canopy org already solved pieces of what Omni Q
+Five repos in the The-Hidden-Canopy org already solved pieces of what Omni Q
 needs. This is what to borrow and where it lands on the [backlog](../BACKLOG.md).
 
 | Repo | What it is | Omni Q borrows |
@@ -9,6 +9,7 @@ needs. This is what to borrow and where it lands on the [backlog](../BACKLOG.md)
 | **Open-World-Model-Harness** | Engine-neutral harness: authoritative world ↔ JSON decision contract ↔ policy/replay/eval | World boundary (never mutate the world directly), append-only causal event log, knowledge-as-bounded-resource with `LIVE/STALE/FALLBACK` status |
 | **FALCON-DARPA** | Structured-ML → selective foundation-model → governed-LLM fusion, 1000 reproducible runs | Self-describing per-run evidence package, SHA-256 parent-chained `manifest.jsonl`, deterministic `run_id = sha256(config)[:12]`, provenance block |
 | **VIGIL** | RegOS-derived governance runtime: authority/evidence/policy/audit before consequential actions | Decision-receipt canonicalization + `verify_chain`, fail-closed pipeline (finalize receipt *before* the action returns), restrictive-only monotonic decisions, "intelligence interprets, governance authorizes" |
+| **IDA-TRAIN-V2** | Lineage training engine with packed low-bit master weights (MXFP8 resident masters, Lion on decode→update→re-pack) | Packed-master fine-tuning in `perception/finetune.py` (`--base *.mxfp8.npz`, `--w-master mxfp8` per-step RNE re-projection), the precision-contract resume gate, and the RNE-stable/SR-refuted rounding verdicts |
 
 ## SOCOM_REACT — the architecture to copy
 
@@ -257,6 +258,40 @@ metadata + counts) as `omni_q/evidence_bundle.py`
   `core.py:8070-8094`): `False` marks a hallucination-prone channel;
   consumers must weight accordingly. Vendored as `SensoryCue` with
   `reliable: bool = True`.
+
+## IDA-TRAIN-V2 — packed-master training pattern
+
+### 20. Master residency: decode → update → RNE re-pack (`native/kernels/mxfp8.cu:167-211`)
+
+`k_lion_mxfp8` keeps the master resident as an E4M3 payload × UE8M0 block
+scale and never lets it hold off-grid values: each step decodes the block to
+fp32, applies the Lion update, computes the new block scale, and RNE-re-packs
+the payload into the master. There is no STE and no fp32 optimizer shadow —
+the update itself is projected onto the grid. A CPU twin ships at
+`native/src/cpu_optimizer_thread.cpp:264`
+(`cpu_lion_step_mxfp8_bf16_state`). OMNI-Q's `--w-master mxfp8` now owns
+payload/scales plus BF16 momentum in `PackedMXFP8Lion`, and repacks inside the
+optimizer step. The stock YOLO graph still uses a floating-point compute view;
+native packed operators are required to remove that view. `--base` accepts a
+packaged `*.mxfp8.npz` master decoded through the same `decode_npz` as the
+emitted standalone loader.
+
+### 21. Precision contract at the master boundary + sim rounding verdicts (`native/include/ida_native/omni_precision.hpp:33-45`)
+
+`OmniMasterFormat` + `omni_master_format_valid`
+(`omni_precision.hpp:33-45`): the master format is a checked contract at the
+admission/checkpoint boundary, not a hint — a master presented under the
+wrong format is refused. Vendored shape as finetune's resume gate: the
+sibling manifest's `format` must equal the requested `--w-master`, else the
+run refuses to start. The rounding verdicts come from the MXFP4-master
+simulation ablation (`docs/mxfp4-master-sim-ablation-2026-09-09.md` in
+IDA-TRAIN-V2): per-step **RNE re-encode of the master is stable** (no
+projection bias, frozen scale lattice), **stochastic rounding on the master
+is a refuted unbounded random walk** (per-step SR noise energy is 10³–10⁴×
+the update energy, written into persistent state; SR is for gradients only),
+and **MXFP4/MXFP2 masters are sim-only** — schema-recognized but refused at
+three admission gates. Hence Omni Q refuses `--w-master mxfp4/mxfp2` for
+training while still packaging those tiers as residency-slider states.
 
 ## What changed in this pass
 

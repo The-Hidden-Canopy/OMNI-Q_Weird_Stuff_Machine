@@ -1,0 +1,2997 @@
+{
+  "format": "mxfp2",
+  "block_size": 32,
+  "code_bits": 2,
+  "tensors": [
+    {
+      "name": "model.0.conv.weight",
+      "shape": [
+        16,
+        3,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6990398132914871,
+      "packed_bytes": 122
+    },
+    {
+      "name": "model.0.bn.weight",
+      "shape": [
+        16
+      ],
+      "weight_cosine": 0.5956798804810337,
+      "packed_bytes": 5
+    },
+    {
+      "name": "model.0.bn.bias",
+      "shape": [
+        16
+      ],
+      "weight_cosine": 0.6764549838805228,
+      "packed_bytes": 5
+    },
+    {
+      "name": "model.0.bn.running_mean",
+      "shape": [
+        16
+      ],
+      "weight_cosine": 0.6951648053634653,
+      "packed_bytes": 5
+    },
+    {
+      "name": "model.0.bn.running_var",
+      "shape": [
+        16
+      ],
+      "weight_cosine": 0.6594577016791472,
+      "packed_bytes": 5
+    },
+    {
+      "name": "model.0.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.1.conv.weight",
+      "shape": [
+        32,
+        16,
+        3,
+        3
+      ],
+      "weight_cosine": 0.7136235596783916,
+      "packed_bytes": 1296
+    },
+    {
+      "name": "model.1.bn.weight",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.9312367420235211,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.1.bn.bias",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.5602172789567283,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.1.bn.running_mean",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.7378169727616315,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.1.bn.running_var",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.713240223108591,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.2.cv1.conv.weight",
+      "shape": [
+        32,
+        32,
+        1,
+        1
+      ],
+      "weight_cosine": 0.7584532149780473,
+      "packed_bytes": 288
+    },
+    {
+      "name": "model.2.cv1.bn.weight",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.7607578759070809,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.2.cv1.bn.bias",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.8073862253396266,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.2.cv1.bn.running_mean",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.7796014037842208,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.2.cv1.bn.running_var",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.5170948484666007,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.2.cv1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.2.cv2.conv.weight",
+      "shape": [
+        32,
+        48,
+        1,
+        1
+      ],
+      "weight_cosine": 0.717624431962755,
+      "packed_bytes": 432
+    },
+    {
+      "name": "model.2.cv2.bn.weight",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.5948331242838237,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.2.cv2.bn.bias",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.6545738198414425,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.2.cv2.bn.running_mean",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.6652608918127402,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.2.cv2.bn.running_var",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.7569744091516508,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.2.cv2.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.2.m.0.cv1.conv.weight",
+      "shape": [
+        16,
+        16,
+        3,
+        3
+      ],
+      "weight_cosine": 0.7611754496670633,
+      "packed_bytes": 648
+    },
+    {
+      "name": "model.2.m.0.cv1.bn.weight",
+      "shape": [
+        16
+      ],
+      "weight_cosine": 0.42605917768042795,
+      "packed_bytes": 5
+    },
+    {
+      "name": "model.2.m.0.cv1.bn.bias",
+      "shape": [
+        16
+      ],
+      "weight_cosine": 0.6850384573615428,
+      "packed_bytes": 5
+    },
+    {
+      "name": "model.2.m.0.cv1.bn.running_mean",
+      "shape": [
+        16
+      ],
+      "weight_cosine": 0.663985157802332,
+      "packed_bytes": 5
+    },
+    {
+      "name": "model.2.m.0.cv1.bn.running_var",
+      "shape": [
+        16
+      ],
+      "weight_cosine": 0.5861222312401566,
+      "packed_bytes": 5
+    },
+    {
+      "name": "model.2.m.0.cv1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.2.m.0.cv2.conv.weight",
+      "shape": [
+        16,
+        16,
+        3,
+        3
+      ],
+      "weight_cosine": 0.7113314084793053,
+      "packed_bytes": 648
+    },
+    {
+      "name": "model.2.m.0.cv2.bn.weight",
+      "shape": [
+        16
+      ],
+      "weight_cosine": 0.884062686908759,
+      "packed_bytes": 5
+    },
+    {
+      "name": "model.2.m.0.cv2.bn.bias",
+      "shape": [
+        16
+      ],
+      "weight_cosine": 0.5519638843647113,
+      "packed_bytes": 5
+    },
+    {
+      "name": "model.2.m.0.cv2.bn.running_mean",
+      "shape": [
+        16
+      ],
+      "weight_cosine": 0.5777460319902018,
+      "packed_bytes": 5
+    },
+    {
+      "name": "model.2.m.0.cv2.bn.running_var",
+      "shape": [
+        16
+      ],
+      "weight_cosine": 0.7961964350793255,
+      "packed_bytes": 5
+    },
+    {
+      "name": "model.2.m.0.cv2.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.3.conv.weight",
+      "shape": [
+        64,
+        32,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6711672339182242,
+      "packed_bytes": 5184
+    },
+    {
+      "name": "model.3.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.5725129030323758,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.3.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.614859979657126,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.3.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.6281391969510105,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.3.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.664420271894258,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.3.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.4.cv1.conv.weight",
+      "shape": [
+        64,
+        64,
+        1,
+        1
+      ],
+      "weight_cosine": 0.6708779833306303,
+      "packed_bytes": 1152
+    },
+    {
+      "name": "model.4.cv1.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.8346678222535628,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.4.cv1.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7939493695493675,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.4.cv1.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7519409169502079,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.4.cv1.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.4907412680215159,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.4.cv1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.4.cv2.conv.weight",
+      "shape": [
+        64,
+        128,
+        1,
+        1
+      ],
+      "weight_cosine": 0.6601431314596107,
+      "packed_bytes": 2304
+    },
+    {
+      "name": "model.4.cv2.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.4525583473930764,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.4.cv2.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.6033010692876378,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.4.cv2.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.5867968744026755,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.4.cv2.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7955130312729813,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.4.cv2.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.4.m.0.cv1.conv.weight",
+      "shape": [
+        32,
+        32,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6792664061169796,
+      "packed_bytes": 2592
+    },
+    {
+      "name": "model.4.m.0.cv1.bn.weight",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.2396048388201127,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.4.m.0.cv1.bn.bias",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.7306015511650925,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.4.m.0.cv1.bn.running_mean",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.5574575661645016,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.4.m.0.cv1.bn.running_var",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.6204756392297216,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.4.m.0.cv1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.4.m.0.cv2.conv.weight",
+      "shape": [
+        32,
+        32,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6573461423655659,
+      "packed_bytes": 2592
+    },
+    {
+      "name": "model.4.m.0.cv2.bn.weight",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.47126277517784665,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.4.m.0.cv2.bn.bias",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.6706424809460637,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.4.m.0.cv2.bn.running_mean",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.5854873365830843,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.4.m.0.cv2.bn.running_var",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.8600804425389873,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.4.m.0.cv2.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.4.m.1.cv1.conv.weight",
+      "shape": [
+        32,
+        32,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6646125558529821,
+      "packed_bytes": 2592
+    },
+    {
+      "name": "model.4.m.1.cv1.bn.weight",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.9823039640428587,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.4.m.1.cv1.bn.bias",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.4174202632982289,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.4.m.1.cv1.bn.running_mean",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.9075928403823414,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.4.m.1.cv1.bn.running_var",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.445312899005508,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.4.m.1.cv1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.4.m.1.cv2.conv.weight",
+      "shape": [
+        32,
+        32,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6663459201116174,
+      "packed_bytes": 2592
+    },
+    {
+      "name": "model.4.m.1.cv2.bn.weight",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.8940640461836585,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.4.m.1.cv2.bn.bias",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.44891512437131637,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.4.m.1.cv2.bn.running_mean",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.45160250448937445,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.4.m.1.cv2.bn.running_var",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.4905177160003072,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.4.m.1.cv2.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.5.conv.weight",
+      "shape": [
+        128,
+        64,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6815493709447127,
+      "packed_bytes": 20736
+    },
+    {
+      "name": "model.5.bn.weight",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.5728285417990117,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.5.bn.bias",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.6651237710472684,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.5.bn.running_mean",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.6993483877800238,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.5.bn.running_var",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.516075706502276,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.5.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.6.cv1.conv.weight",
+      "shape": [
+        128,
+        128,
+        1,
+        1
+      ],
+      "weight_cosine": 0.6595312756993377,
+      "packed_bytes": 4608
+    },
+    {
+      "name": "model.6.cv1.bn.weight",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.8286722460256983,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.6.cv1.bn.bias",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.7539396834965271,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.6.cv1.bn.running_mean",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.6333182427691418,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.6.cv1.bn.running_var",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.6642919388986852,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.6.cv1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.6.cv2.conv.weight",
+      "shape": [
+        128,
+        256,
+        1,
+        1
+      ],
+      "weight_cosine": 0.6697732549984597,
+      "packed_bytes": 9216
+    },
+    {
+      "name": "model.6.cv2.bn.weight",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.5031623501702797,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.6.cv2.bn.bias",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.7701756811607132,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.6.cv2.bn.running_mean",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.5769392404035772,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.6.cv2.bn.running_var",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.5772563860746039,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.6.cv2.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.6.m.0.cv1.conv.weight",
+      "shape": [
+        64,
+        64,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6722027478985799,
+      "packed_bytes": 10368
+    },
+    {
+      "name": "model.6.m.0.cv1.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.8913486745741537,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.6.m.0.cv1.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.627501130425057,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.6.m.0.cv1.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.5110140676034461,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.6.m.0.cv1.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.3938796081706684,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.6.m.0.cv1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.6.m.0.cv2.conv.weight",
+      "shape": [
+        64,
+        64,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6783630006370227,
+      "packed_bytes": 10368
+    },
+    {
+      "name": "model.6.m.0.cv2.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.6094054545268817,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.6.m.0.cv2.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.6216743195605877,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.6.m.0.cv2.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7355720399519422,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.6.m.0.cv2.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.6868900216386262,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.6.m.0.cv2.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.6.m.1.cv1.conv.weight",
+      "shape": [
+        64,
+        64,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6773086785980806,
+      "packed_bytes": 10368
+    },
+    {
+      "name": "model.6.m.1.cv1.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.6970772121136233,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.6.m.1.cv1.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7054368190365704,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.6.m.1.cv1.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.8317056547225412,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.6.m.1.cv1.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.430090215814644,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.6.m.1.cv1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.6.m.1.cv2.conv.weight",
+      "shape": [
+        64,
+        64,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6725803544476155,
+      "packed_bytes": 10368
+    },
+    {
+      "name": "model.6.m.1.cv2.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.6512731154421808,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.6.m.1.cv2.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.4723721796662533,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.6.m.1.cv2.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7319013270550297,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.6.m.1.cv2.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.6931888991814871,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.6.m.1.cv2.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.7.conv.weight",
+      "shape": [
+        256,
+        128,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6542184741250168,
+      "packed_bytes": 82944
+    },
+    {
+      "name": "model.7.bn.weight",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.6583107483625206,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.7.bn.bias",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.7454977547805096,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.7.bn.running_mean",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.6513432525161008,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.7.bn.running_var",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.4475765396266749,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.7.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.8.cv1.conv.weight",
+      "shape": [
+        256,
+        256,
+        1,
+        1
+      ],
+      "weight_cosine": 0.6828352248216105,
+      "packed_bytes": 18432
+    },
+    {
+      "name": "model.8.cv1.bn.weight",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.9059992232736757,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.8.cv1.bn.bias",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.49440259134483727,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.8.cv1.bn.running_mean",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.6676334121626373,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.8.cv1.bn.running_var",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.7126193097712001,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.8.cv1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.8.cv2.conv.weight",
+      "shape": [
+        256,
+        384,
+        1,
+        1
+      ],
+      "weight_cosine": 0.6664586268389057,
+      "packed_bytes": 27648
+    },
+    {
+      "name": "model.8.cv2.bn.weight",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.8317011918429705,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.8.cv2.bn.bias",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.7387396903628926,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.8.cv2.bn.running_mean",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.7402498942702003,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.8.cv2.bn.running_var",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.7025880683869595,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.8.cv2.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.8.m.0.cv1.conv.weight",
+      "shape": [
+        128,
+        128,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6522053028734021,
+      "packed_bytes": 41472
+    },
+    {
+      "name": "model.8.m.0.cv1.bn.weight",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.9247930852516674,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.8.m.0.cv1.bn.bias",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.5996371784900578,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.8.m.0.cv1.bn.running_mean",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.6530123105261615,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.8.m.0.cv1.bn.running_var",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.54727495155108,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.8.m.0.cv1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.8.m.0.cv2.conv.weight",
+      "shape": [
+        128,
+        128,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6515750261097288,
+      "packed_bytes": 41472
+    },
+    {
+      "name": "model.8.m.0.cv2.bn.weight",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.45985939946389115,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.8.m.0.cv2.bn.bias",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.7064312108136444,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.8.m.0.cv2.bn.running_mean",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.7087108449839462,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.8.m.0.cv2.bn.running_var",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.5858835308760609,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.8.m.0.cv2.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.9.cv1.conv.weight",
+      "shape": [
+        128,
+        256,
+        1,
+        1
+      ],
+      "weight_cosine": 0.6986663734175673,
+      "packed_bytes": 9216
+    },
+    {
+      "name": "model.9.cv1.bn.weight",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.4530975695803223,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.9.cv1.bn.bias",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.6038567107447621,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.9.cv1.bn.running_mean",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.7641123770475988,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.9.cv1.bn.running_var",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.49762986645154383,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.9.cv1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.9.cv2.conv.weight",
+      "shape": [
+        256,
+        512,
+        1,
+        1
+      ],
+      "weight_cosine": 0.6653096183931873,
+      "packed_bytes": 36864
+    },
+    {
+      "name": "model.9.cv2.bn.weight",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.773218259816932,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.9.cv2.bn.bias",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.7502709007697266,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.9.cv2.bn.running_mean",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.6502752953558145,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.9.cv2.bn.running_var",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.7459269781486975,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.9.cv2.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.12.cv1.conv.weight",
+      "shape": [
+        128,
+        384,
+        1,
+        1
+      ],
+      "weight_cosine": 0.6772171844472016,
+      "packed_bytes": 13824
+    },
+    {
+      "name": "model.12.cv1.bn.weight",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.6719017788900912,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.12.cv1.bn.bias",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.6968855818640428,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.12.cv1.bn.running_mean",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.6084568503701819,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.12.cv1.bn.running_var",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.7910178785157107,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.12.cv1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.12.cv2.conv.weight",
+      "shape": [
+        128,
+        192,
+        1,
+        1
+      ],
+      "weight_cosine": 0.663735663406118,
+      "packed_bytes": 6912
+    },
+    {
+      "name": "model.12.cv2.bn.weight",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.4113226655868805,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.12.cv2.bn.bias",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.7214222563026251,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.12.cv2.bn.running_mean",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.752598715965481,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.12.cv2.bn.running_var",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.7846974598469026,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.12.cv2.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.12.m.0.cv1.conv.weight",
+      "shape": [
+        64,
+        64,
+        3,
+        3
+      ],
+      "weight_cosine": 0.683462925666877,
+      "packed_bytes": 10368
+    },
+    {
+      "name": "model.12.m.0.cv1.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.3700169432033202,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.12.m.0.cv1.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7185777795108765,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.12.m.0.cv1.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.5528272097799922,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.12.m.0.cv1.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.3637752737166109,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.12.m.0.cv1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.12.m.0.cv2.conv.weight",
+      "shape": [
+        64,
+        64,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6703844291804848,
+      "packed_bytes": 10368
+    },
+    {
+      "name": "model.12.m.0.cv2.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.4968713569669583,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.12.m.0.cv2.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7029446854409843,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.12.m.0.cv2.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.780766627588289,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.12.m.0.cv2.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.33957803737084646,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.12.m.0.cv2.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.15.cv1.conv.weight",
+      "shape": [
+        64,
+        192,
+        1,
+        1
+      ],
+      "weight_cosine": 0.6674860079198782,
+      "packed_bytes": 3456
+    },
+    {
+      "name": "model.15.cv1.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7455581704931041,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.15.cv1.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.5572470770167613,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.15.cv1.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.5731954459298075,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.15.cv1.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.6989066912541686,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.15.cv1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.15.cv2.conv.weight",
+      "shape": [
+        64,
+        96,
+        1,
+        1
+      ],
+      "weight_cosine": 0.6683022730104375,
+      "packed_bytes": 1728
+    },
+    {
+      "name": "model.15.cv2.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.5272045737963565,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.15.cv2.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.5101476858923134,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.15.cv2.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.5599874393590827,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.15.cv2.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.3954353184176171,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.15.cv2.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.15.m.0.cv1.conv.weight",
+      "shape": [
+        32,
+        32,
+        3,
+        3
+      ],
+      "weight_cosine": 0.67268728524099,
+      "packed_bytes": 2592
+    },
+    {
+      "name": "model.15.m.0.cv1.bn.weight",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.9817293494861947,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.15.m.0.cv1.bn.bias",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.6563074591618315,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.15.m.0.cv1.bn.running_mean",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.678735171594992,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.15.m.0.cv1.bn.running_var",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.5672396785908626,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.15.m.0.cv1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.15.m.0.cv2.conv.weight",
+      "shape": [
+        32,
+        32,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6959153434756493,
+      "packed_bytes": 2592
+    },
+    {
+      "name": "model.15.m.0.cv2.bn.weight",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.24033165268338133,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.15.m.0.cv2.bn.bias",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.8609232575356679,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.15.m.0.cv2.bn.running_mean",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.4682761018264376,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.15.m.0.cv2.bn.running_var",
+      "shape": [
+        32
+      ],
+      "weight_cosine": 0.5433445921112926,
+      "packed_bytes": 9
+    },
+    {
+      "name": "model.15.m.0.cv2.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.16.conv.weight",
+      "shape": [
+        64,
+        64,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6668729187100794,
+      "packed_bytes": 10368
+    },
+    {
+      "name": "model.16.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.5579922617617251,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.16.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7053112079483966,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.16.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7188778855794766,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.16.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.8672034927962209,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.16.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.18.cv1.conv.weight",
+      "shape": [
+        128,
+        192,
+        1,
+        1
+      ],
+      "weight_cosine": 0.6734583482095123,
+      "packed_bytes": 6912
+    },
+    {
+      "name": "model.18.cv1.bn.weight",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.5955748741216483,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.18.cv1.bn.bias",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.6905689162769388,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.18.cv1.bn.running_mean",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.7055603012834536,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.18.cv1.bn.running_var",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.37557736050403406,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.18.cv1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.18.cv2.conv.weight",
+      "shape": [
+        128,
+        192,
+        1,
+        1
+      ],
+      "weight_cosine": 0.6820305611976327,
+      "packed_bytes": 6912
+    },
+    {
+      "name": "model.18.cv2.bn.weight",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.6102820738219211,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.18.cv2.bn.bias",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.6567746450742331,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.18.cv2.bn.running_mean",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.6872063635797651,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.18.cv2.bn.running_var",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.5700601029630418,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.18.cv2.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.18.m.0.cv1.conv.weight",
+      "shape": [
+        64,
+        64,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6721765576521386,
+      "packed_bytes": 10368
+    },
+    {
+      "name": "model.18.m.0.cv1.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.48049661933347027,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.18.m.0.cv1.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7568444058147878,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.18.m.0.cv1.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.6271336681343501,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.18.m.0.cv1.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.5630534681308372,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.18.m.0.cv1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.18.m.0.cv2.conv.weight",
+      "shape": [
+        64,
+        64,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6852142585045022,
+      "packed_bytes": 10368
+    },
+    {
+      "name": "model.18.m.0.cv2.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.9319864870497221,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.18.m.0.cv2.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.5382964275696971,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.18.m.0.cv2.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.6398740259697917,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.18.m.0.cv2.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.6882834669704982,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.18.m.0.cv2.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.19.conv.weight",
+      "shape": [
+        128,
+        128,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6855977624634289,
+      "packed_bytes": 41472
+    },
+    {
+      "name": "model.19.bn.weight",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.5671866816596269,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.19.bn.bias",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.6011958660781218,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.19.bn.running_mean",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.5964624827722077,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.19.bn.running_var",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.7895321869161015,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.19.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.21.cv1.conv.weight",
+      "shape": [
+        256,
+        384,
+        1,
+        1
+      ],
+      "weight_cosine": 0.6699542636905278,
+      "packed_bytes": 27648
+    },
+    {
+      "name": "model.21.cv1.bn.weight",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.8815777837539567,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.21.cv1.bn.bias",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.6107858044260249,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.21.cv1.bn.running_mean",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.5575876018878043,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.21.cv1.bn.running_var",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.6609571677587215,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.21.cv1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.21.cv2.conv.weight",
+      "shape": [
+        256,
+        384,
+        1,
+        1
+      ],
+      "weight_cosine": 0.6688921987646742,
+      "packed_bytes": 27648
+    },
+    {
+      "name": "model.21.cv2.bn.weight",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.6513991225785737,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.21.cv2.bn.bias",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.680388352854529,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.21.cv2.bn.running_mean",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.5243662354099089,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.21.cv2.bn.running_var",
+      "shape": [
+        256
+      ],
+      "weight_cosine": 0.7010865726247907,
+      "packed_bytes": 72
+    },
+    {
+      "name": "model.21.cv2.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.21.m.0.cv1.conv.weight",
+      "shape": [
+        128,
+        128,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6715736265700807,
+      "packed_bytes": 41472
+    },
+    {
+      "name": "model.21.m.0.cv1.bn.weight",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.883013824465531,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.21.m.0.cv1.bn.bias",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.6801459678342407,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.21.m.0.cv1.bn.running_mean",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.544730995830166,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.21.m.0.cv1.bn.running_var",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.6822949905914554,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.21.m.0.cv1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.21.m.0.cv2.conv.weight",
+      "shape": [
+        128,
+        128,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6749534275301741,
+      "packed_bytes": 41472
+    },
+    {
+      "name": "model.21.m.0.cv2.bn.weight",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.3220133401094041,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.21.m.0.cv2.bn.bias",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.6344856357724548,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.21.m.0.cv2.bn.running_mean",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.7162893760658244,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.21.m.0.cv2.bn.running_var",
+      "shape": [
+        128
+      ],
+      "weight_cosine": 0.38979413240720434,
+      "packed_bytes": 36
+    },
+    {
+      "name": "model.21.m.0.cv2.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.22.cv2.0.0.conv.weight",
+      "shape": [
+        64,
+        64,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6714663074546905,
+      "packed_bytes": 10368
+    },
+    {
+      "name": "model.22.cv2.0.0.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7041216241416455,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.0.0.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.829288252911362,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.0.0.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7542622393648358,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.0.0.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.5239623428744498,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.0.0.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.22.cv2.0.1.conv.weight",
+      "shape": [
+        64,
+        64,
+        3,
+        3
+      ],
+      "weight_cosine": 0.730021132997421,
+      "packed_bytes": 10368
+    },
+    {
+      "name": "model.22.cv2.0.1.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.5160077890795167,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.0.1.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.6710604200388787,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.0.1.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.4709538058584815,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.0.1.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.6418563091793624,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.0.1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.22.cv2.0.2.weight",
+      "shape": [
+        64,
+        64,
+        1,
+        1
+      ],
+      "weight_cosine": 0.7750690609927052,
+      "packed_bytes": 1152
+    },
+    {
+      "name": "model.22.cv2.0.2.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.8984068427486015,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.1.0.conv.weight",
+      "shape": [
+        64,
+        128,
+        3,
+        3
+      ],
+      "weight_cosine": 0.7070023730655324,
+      "packed_bytes": 20736
+    },
+    {
+      "name": "model.22.cv2.1.0.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.5460108991935797,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.1.0.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7909810522557789,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.1.0.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.48479742448613705,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.1.0.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.3233487163728841,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.1.0.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.22.cv2.1.1.conv.weight",
+      "shape": [
+        64,
+        64,
+        3,
+        3
+      ],
+      "weight_cosine": 0.7584427808509026,
+      "packed_bytes": 10368
+    },
+    {
+      "name": "model.22.cv2.1.1.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.48687782915678074,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.1.1.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.8582645508943905,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.1.1.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.8119991276641719,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.1.1.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.6089123317189341,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.1.1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.22.cv2.1.2.weight",
+      "shape": [
+        64,
+        64,
+        1,
+        1
+      ],
+      "weight_cosine": 0.7925066378603317,
+      "packed_bytes": 1152
+    },
+    {
+      "name": "model.22.cv2.1.2.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.8494761526179424,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.2.0.conv.weight",
+      "shape": [
+        64,
+        256,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6911766300749871,
+      "packed_bytes": 41472
+    },
+    {
+      "name": "model.22.cv2.2.0.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.5392777942973599,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.2.0.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.626899182781396,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.2.0.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.8170177484309937,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.2.0.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.4888519381426567,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.2.0.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.22.cv2.2.1.conv.weight",
+      "shape": [
+        64,
+        64,
+        3,
+        3
+      ],
+      "weight_cosine": 0.7412817140480253,
+      "packed_bytes": 10368
+    },
+    {
+      "name": "model.22.cv2.2.1.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.4415105315064914,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.2.1.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.8961455678574206,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.2.1.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7185018041509205,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.2.1.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.788985578784753,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv2.2.1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.22.cv2.2.2.weight",
+      "shape": [
+        64,
+        64,
+        1,
+        1
+      ],
+      "weight_cosine": 0.7528301270504681,
+      "packed_bytes": 1152
+    },
+    {
+      "name": "model.22.cv2.2.2.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.8161641239991673,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.0.0.conv.weight",
+      "shape": [
+        64,
+        64,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6796148321725299,
+      "packed_bytes": 10368
+    },
+    {
+      "name": "model.22.cv3.0.0.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7854960560360761,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.0.0.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7011949328145207,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.0.0.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.76227985559988,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.0.0.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7395520333492406,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.0.0.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.22.cv3.0.1.conv.weight",
+      "shape": [
+        64,
+        64,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6663577107778744,
+      "packed_bytes": 10368
+    },
+    {
+      "name": "model.22.cv3.0.1.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7119631791371105,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.0.1.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.9311403263851791,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.0.1.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7046012864699102,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.0.1.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.5575728216490233,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.0.1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.22.cv3.0.2.weight",
+      "shape": [
+        7,
+        64,
+        1,
+        1
+      ],
+      "weight_cosine": 0.6083247824582733,
+      "packed_bytes": 126
+    },
+    {
+      "name": "model.22.cv3.0.2.bias",
+      "shape": [
+        7
+      ],
+      "weight_cosine": 0.9999942224996278,
+      "packed_bytes": 3
+    },
+    {
+      "name": "model.22.cv3.1.0.conv.weight",
+      "shape": [
+        64,
+        128,
+        3,
+        3
+      ],
+      "weight_cosine": 0.663661953888573,
+      "packed_bytes": 20736
+    },
+    {
+      "name": "model.22.cv3.1.0.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7448275588651748,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.1.0.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.8145398632742575,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.1.0.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.8210789389088246,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.1.0.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7441496133345121,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.1.0.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.22.cv3.1.1.conv.weight",
+      "shape": [
+        64,
+        64,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6763935593970262,
+      "packed_bytes": 10368
+    },
+    {
+      "name": "model.22.cv3.1.1.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.9796796590803567,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.1.1.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.8778238842404955,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.1.1.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.6619148804886944,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.1.1.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.6297625938468582,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.1.1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.22.cv3.1.2.weight",
+      "shape": [
+        7,
+        64,
+        1,
+        1
+      ],
+      "weight_cosine": 0.6016829812914904,
+      "packed_bytes": 126
+    },
+    {
+      "name": "model.22.cv3.1.2.bias",
+      "shape": [
+        7
+      ],
+      "weight_cosine": 0.9999960944340627,
+      "packed_bytes": 3
+    },
+    {
+      "name": "model.22.cv3.2.0.conv.weight",
+      "shape": [
+        64,
+        256,
+        3,
+        3
+      ],
+      "weight_cosine": 0.666771985750182,
+      "packed_bytes": 41472
+    },
+    {
+      "name": "model.22.cv3.2.0.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.8948852044192643,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.2.0.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7653624880533452,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.2.0.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7092823870938754,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.2.0.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.6783146125498887,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.2.0.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.22.cv3.2.1.conv.weight",
+      "shape": [
+        64,
+        64,
+        3,
+        3
+      ],
+      "weight_cosine": 0.6564715144937049,
+      "packed_bytes": 10368
+    },
+    {
+      "name": "model.22.cv3.2.1.bn.weight",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.9568039010531169,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.2.1.bn.bias",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.8934205433212167,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.2.1.bn.running_mean",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.7982052758636884,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.2.1.bn.running_var",
+      "shape": [
+        64
+      ],
+      "weight_cosine": 0.6352667669060158,
+      "packed_bytes": 18
+    },
+    {
+      "name": "model.22.cv3.2.1.bn.num_batches_tracked",
+      "shape": [],
+      "weight_cosine": 1.0,
+      "dtype_passthrough": "int64",
+      "packed_bytes": 8
+    },
+    {
+      "name": "model.22.cv3.2.2.weight",
+      "shape": [
+        7,
+        64,
+        1,
+        1
+      ],
+      "weight_cosine": 0.6240194295166951,
+      "packed_bytes": 126
+    },
+    {
+      "name": "model.22.cv3.2.2.bias",
+      "shape": [
+        7
+      ],
+      "weight_cosine": 0.9999954842239309,
+      "packed_bytes": 3
+    },
+    {
+      "name": "model.22.dfl.conv.weight",
+      "shape": [
+        1,
+        16,
+        1,
+        1
+      ],
+      "weight_cosine": 0.9016114605562927,
+      "packed_bytes": 5
+    }
+  ],
+  "totals": {
+    "params": 3022670,
+    "packed_bytes": 850576,
+    "fp32_bytes": 12090680,
+    "ratio": 0.07034972391958104,
+    "mean_weight_cosine": 0.6674950313047987
+  },
+  "model": {
+    "source_file": "table_yolo_yolov8n_ft50_2026-09-11.pt",
+    "param_count": 3022670
+  },
+  "honesty": {
+    "label": "weight-only RNE, software dequantize; mxfp4/mxfp2 collapse this detector's mAP \u2014 see stats",
+    "arms_ref": "evidence/benchmark_results/yolo_2bit_map_20260911_071815-*"
+  }
+}

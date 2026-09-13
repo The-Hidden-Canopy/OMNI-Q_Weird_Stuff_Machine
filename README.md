@@ -99,6 +99,35 @@ Try it:
 PYTHONPATH=src python -m omni_q.demo_yolo_wired   # synthetic tabletop frames
 ```
 
+### Training from packed masters
+
+`perception/finetune.py` accepts a packaged low-bit master as `--base` —
+produce one with `perception/package_quant_weights.py`:
+
+```
+python perception/finetune.py \
+    --base masters/table_yolo_v2_ft_2026-09-11.mxfp8.npz \
+    --w-master mxfp8 --epochs 4
+```
+
+With `--w-master mxfp8` the trainer keeps the authoritative weight state as
+MXFP8 E4M3 payload plus UE8M0 K32 scales, and Lion momentum as BF16. Repacking
+happens inside every successful optimizer step, matching the
+IDA-TRAIN-V2 `k_lion_mxfp8` decode→update→RNE-repack equation. The stock YOLO
+Conv2d/Linear graph still retains a floating-point compute view; this mode
+removes FP32 Adam moments but does not claim zero floating-point model
+residency. Removing that compute view requires native packed operators.
+
+The design is evidence-backed by the IDA-TRAIN-V2 MXFP4-master simulation
+ablation (`docs/mxfp4-master-sim-ablation-2026-09-09.md` in IDA-TRAIN-V2):
+per-step RNE re-encode of the master is stable, while stochastic rounding
+*on the master* is a refuted unbounded random walk (SR belongs on gradients
+only). Consequently `--w-master mxfp4` / `mxfp2` are **refused at admission**
+with a clear error — those tiers are sim-only residency states, not
+trainable masters. Loading a master whose sibling manifest disagrees with the
+requested `--w-master` is likewise refused (precision contract at the
+checkpoint boundary, per IDA-TRAIN-V2 `omni_precision.hpp`).
+
 ## Layout
 
 ```
@@ -231,7 +260,7 @@ evidence-bundle receipts) · `demo/residency_slider.py` (walks 8 → 6 → 3 →
   [`docs/providers.md`](docs/providers.md) (Intel + Qualcomm as one Omni graph) ·
   [`docs/datasets.md`](docs/datasets.md) (YOLO real-image haul + synthetic depth; Omni policy/planner data)
 - [`docs/strategy-notes.md`](docs/strategy-notes.md) — track analysis and rubric strategy
-- [`docs/prior-art.md`](docs/prior-art.md) — patterns borrowed from sibling THC repos (SOCOM_REACT, Open-World-Model-Harness, FALCON-DARPA, VIGIL)
+- [`docs/prior-art.md`](docs/prior-art.md) — patterns borrowed from sibling THC repos (SOCOM_REACT, Open-World-Model-Harness, FALCON-DARPA, VIGIL, IDA-TRAIN-V2)
 - [`docs/challenge-briefs/intel-online-physical-ai-challenge.md`](docs/challenge-briefs/intel-online-physical-ai-challenge.md) —
   official Intel Online Challenge brief (transcription + [source PDF](docs/challenge-briefs/intel-online-physical-ai-challenge.pdf))
 - [`docs/challenge-briefs/intel-online-getting-started.md`](docs/challenge-briefs/intel-online-getting-started.md) —
