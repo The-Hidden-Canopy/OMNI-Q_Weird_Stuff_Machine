@@ -1,0 +1,444 @@
+{
+  "kind": "exploratory randomized legacy table-setting report; not a promotion claim",
+  "mode": "simulation-scripted-manipulation",
+  "outcomes": {
+    "collision": 0,
+    "grasp_failure": 0,
+    "placement_failure": 1,
+    "success": 9,
+    "timeout": 0,
+    "transition_failure": 0,
+    "unresolved": 0
+  },
+  "per_object_summary": {
+    "held_in_trials": {
+      "cup_1": 10,
+      "fork_1": 10,
+      "napkin_1": 10,
+      "plate_1": 10,
+      "spoon_1": 10
+    },
+    "placed_in_trials": {
+      "cup_1": 10,
+      "fork_1": 10,
+      "napkin_1": 9,
+      "plate_1": 10,
+      "spoon_1": 10
+    }
+  },
+  "receipts": [
+    {
+      "content_hash": "sha256:96052682b055b609253b1da3adf3694b349d1b77897359054570781c3f2d2d3b",
+      "goal": "set the table",
+      "outcome": "success",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": true,
+          "placed": true
+        },
+        "napkin_1": {
+          "held": true,
+          "placed": true
+        },
+        "plate_1": {
+          "held": true,
+          "placed": true
+        },
+        "spoon_1": {
+          "held": true,
+          "placed": true
+        }
+      },
+      "receipt": "trial-00-seed-900.json",
+      "resolved": true,
+      "run_id": "cfeb7d9d9600",
+      "scene": {
+        "color_jitter": 0.12,
+        "light_angle_jitter_rad": 0.35,
+        "light_diffuse_jitter": 0.3,
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 900,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 900,
+      "trial": 0
+    },
+    {
+      "content_hash": "sha256:7aa281e2bc1b9eaaf0f94906e48a0b1b83c30fae16b03a15cabc026905b9fd56",
+      "goal": "please set the table for dinner",
+      "outcome": "success",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": true,
+          "placed": true
+        },
+        "napkin_1": {
+          "held": true,
+          "placed": true
+        },
+        "plate_1": {
+          "held": true,
+          "placed": true
+        },
+        "spoon_1": {
+          "held": true,
+          "placed": true
+        }
+      },
+      "receipt": "trial-01-seed-901.json",
+      "resolved": true,
+      "run_id": "4c41ee47527e",
+      "scene": {
+        "color_jitter": 0.12,
+        "light_angle_jitter_rad": 0.35,
+        "light_diffuse_jitter": 0.3,
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 901,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 901,
+      "trial": 1
+    },
+    {
+      "content_hash": "sha256:5f0032771adbbafc77513e002db0d1679afb5b1e4a89aa8519b532a5e8b72d79",
+      "goal": "set up the table now",
+      "outcome": "placement_failure",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": true,
+          "placed": true
+        },
+        "napkin_1": {
+          "held": true,
+          "placed": false
+        },
+        "plate_1": {
+          "held": true,
+          "placed": true
+        },
+        "spoon_1": {
+          "held": true,
+          "placed": true
+        }
+      },
+      "receipt": "trial-02-seed-902.json",
+      "resolved": false,
+      "run_id": "8f8ef3425d1d",
+      "scene": {
+        "color_jitter": 0.12,
+        "light_angle_jitter_rad": 0.35,
+        "light_diffuse_jitter": 0.3,
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 902,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 902,
+      "trial": 2
+    },
+    {
+      "content_hash": "sha256:b865783175ceffab355e86a83767a32d794faa6479bb0e181f896f79865c616d",
+      "goal": "can you set the table",
+      "outcome": "success",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": true,
+          "placed": true
+        },
+        "napkin_1": {
+          "held": true,
+          "placed": true
+        },
+        "plate_1": {
+          "held": true,
+          "placed": true
+        },
+        "spoon_1": {
+          "held": true,
+          "placed": true
+        }
+      },
+      "receipt": "trial-03-seed-903.json",
+      "resolved": true,
+      "run_id": "2485bb5ecbcd",
+      "scene": {
+        "color_jitter": 0.12,
+        "light_angle_jitter_rad": 0.35,
+        "light_diffuse_jitter": 0.3,
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 903,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 903,
+      "trial": 3
+    },
+    {
+      "content_hash": "sha256:51e1749b605e48e8240c7146c31788dce2ff35a3cbfeab6c270232bd9b1e5bf0",
+      "goal": "time to set the table",
+      "outcome": "success",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": true,
+          "placed": true
+        },
+        "napkin_1": {
+          "held": true,
+          "placed": true
+        },
+        "plate_1": {
+          "held": true,
+          "placed": true
+        },
+        "spoon_1": {
+          "held": true,
+          "placed": true
+        }
+      },
+      "receipt": "trial-04-seed-904.json",
+      "resolved": true,
+      "run_id": "5132589a32d4",
+      "scene": {
+        "color_jitter": 0.12,
+        "light_angle_jitter_rad": 0.35,
+        "light_diffuse_jitter": 0.3,
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 904,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 904,
+      "trial": 4
+    },
+    {
+      "content_hash": "sha256:d5cfa553a20bf28fe085a065190127a20c21ed7e2ee7d1a55f31b1b5a47d97c5",
+      "goal": "set the table for the meal",
+      "outcome": "success",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": true,
+          "placed": true
+        },
+        "napkin_1": {
+          "held": true,
+          "placed": true
+        },
+        "plate_1": {
+          "held": true,
+          "placed": true
+        },
+        "spoon_1": {
+          "held": true,
+          "placed": true
+        }
+      },
+      "receipt": "trial-05-seed-905.json",
+      "resolved": true,
+      "run_id": "9501631c85f0",
+      "scene": {
+        "color_jitter": 0.12,
+        "light_angle_jitter_rad": 0.35,
+        "light_diffuse_jitter": 0.3,
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 905,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 905,
+      "trial": 5
+    },
+    {
+      "content_hash": "sha256:3d4fd840c61d9678cb1cd9ebc53cf68d9b03e4df857f0455cba0d66e2117edd5",
+      "goal": "go ahead and set the table",
+      "outcome": "success",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": true,
+          "placed": true
+        },
+        "napkin_1": {
+          "held": true,
+          "placed": true
+        },
+        "plate_1": {
+          "held": true,
+          "placed": true
+        },
+        "spoon_1": {
+          "held": true,
+          "placed": true
+        }
+      },
+      "receipt": "trial-06-seed-906.json",
+      "resolved": true,
+      "run_id": "ac4ab9a55ab7",
+      "scene": {
+        "color_jitter": 0.12,
+        "light_angle_jitter_rad": 0.35,
+        "light_diffuse_jitter": 0.3,
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 906,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 906,
+      "trial": 6
+    },
+    {
+      "content_hash": "sha256:6696ac883dcc78924687b9ac312e3d367cb2b0fa2d83d8775fc3f4829f905211",
+      "goal": "set the dinner table",
+      "outcome": "success",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": true,
+          "placed": true
+        },
+        "napkin_1": {
+          "held": true,
+          "placed": true
+        },
+        "plate_1": {
+          "held": true,
+          "placed": true
+        },
+        "spoon_1": {
+          "held": true,
+          "placed": true
+        }
+      },
+      "receipt": "trial-07-seed-907.json",
+      "resolved": true,
+      "run_id": "47acc85747c8",
+      "scene": {
+        "color_jitter": 0.12,
+        "light_angle_jitter_rad": 0.35,
+        "light_diffuse_jitter": 0.3,
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 907,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 907,
+      "trial": 7
+    },
+    {
+      "content_hash": "sha256:7e5ec193528d96003b9793d03ecf181e0457155addf814d862a6df07aa25237c",
+      "goal": "set the table, thanks",
+      "outcome": "success",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": true,
+          "placed": true
+        },
+        "napkin_1": {
+          "held": true,
+          "placed": true
+        },
+        "plate_1": {
+          "held": true,
+          "placed": true
+        },
+        "spoon_1": {
+          "held": true,
+          "placed": true
+        }
+      },
+      "receipt": "trial-08-seed-908.json",
+      "resolved": true,
+      "run_id": "c750d00f1580",
+      "scene": {
+        "color_jitter": 0.12,
+        "light_angle_jitter_rad": 0.35,
+        "light_diffuse_jitter": 0.3,
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 908,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 908,
+      "trial": 8
+    },
+    {
+      "content_hash": "sha256:6cafd8f87dc79e5fbe03eb694388b29d0a09ce762a20e2bce18184dc01c21af3",
+      "goal": "could you please go ahead and set the table for us",
+      "outcome": "success",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": true,
+          "placed": true
+        },
+        "napkin_1": {
+          "held": true,
+          "placed": true
+        },
+        "plate_1": {
+          "held": true,
+          "placed": true
+        },
+        "spoon_1": {
+          "held": true,
+          "placed": true
+        }
+      },
+      "receipt": "trial-09-seed-909.json",
+      "resolved": true,
+      "run_id": "105bd8c1b49b",
+      "scene": {
+        "color_jitter": 0.12,
+        "light_angle_jitter_rad": 0.35,
+        "light_diffuse_jitter": 0.3,
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 909,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 909,
+      "trial": 9
+    }
+  ],
+  "schema_version": 3,
+  "seed_start": 900,
+  "trials": 10
+}

@@ -390,7 +390,7 @@ lease path (`engine.report_fleet_fault`) -- the Intel engine uses
 `IntelTablePlanner` directly, so that path would HOLD; wiring the fleet into the
 Intel engine is the proper follow-up.
 
-### Next: both arms moving at once (scoped 2026-09-14 evening, not built)
+### Both arms moving at once (built 2026-09-14 evening — the scope below is what was implemented)
 
 Today only the plate moves both arms simultaneously; every other object is one
 arm at a time, because `OmniQ.run` executes one revision-bound transition per
@@ -412,3 +412,26 @@ against the same revision). To run e.g. `PICK cup (right)` and `PICK fork
 Re-gate the 10-trial harness afterwards. Until then the claim on camera is:
 plate = coordinated two-arm lift; hand-off = two-arm pass; the rest of the
 table alternates arms, and a failed arm's work is re-routed.
+
+**Built and measured** (`86d4a98` +): the engine pairs the next ready step
+with a ready step on the other arm (different object, independent, and only
+once every two-arm step is done — pairing before the plate let one arm pick
+the cup and the plate's pinch then dropped it); the pair is one
+revision-checked composite (`IntelTableWorld.apply_transitions_parallel`),
+both primitives run in threads under a cooperative stepper (one real
+`mj_step` per barrier round, each thread writing only its own actuators).
+`OMNIQ_PARALLEL_ARMS=0` restores strict one-at-a-time.
+
+What it exposed, fixed on the way: the retry rollback rewound the *whole*
+world (per-arm/object now); the cup's diameter pinch only ever held because
+the MOVE followed the PICK immediately — a held cup slid out within ~10 s —
+so the cup is now a **wall pinch** (jaw part-open on descent, moving
+fingertip inside the rim, 3 mm wall clamped; release opens only to the
+descent angle until clear of the rim, because a full open from inside shoved
+the cup 60–120 mm). Cup placement error is now 5–9 mm.
+
+**Harness, both arms simultaneous, seeds 900–909**
+(`evidence/benchmark_results/parallel_arms_2026-09-14/harness_seed900_x10/`):
+9/10 trials fully successful, **49/50 placements**; a trial now takes
+12–45 s of wall time. Sequence on camera: plate (both arms together) →
+cup + fork at the same time → spoon + napkin at the same time.

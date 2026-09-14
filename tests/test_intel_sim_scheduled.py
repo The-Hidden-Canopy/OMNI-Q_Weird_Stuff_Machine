@@ -25,11 +25,14 @@ def test_scheduled_planner_wraps_intel_planner_and_still_steps_real_physics():
     scheduled = ScheduledPlanner(engine.planner)
     engine.planner = scheduled
 
-    engine.run("set the table")
+    receipt = engine.run("set the table")
 
     assert scheduled.last_error is None
     assert scheduled.last_schedule is not None
-    arms_used = {arm for arm in scheduled.last_schedule.assignment.values() if arm}
+    # Over the whole run, not the last replan: since 2026-09-14 the engine
+    # pairs steps across arms and a run's final graph is often a one-object
+    # retry, whose schedule names a single arm.
+    arms_used = {a["arm"] for a in receipt.actions if a.get("arm") and a["op"] in {"PICK", "MOVE", "PLACE"}}
     assert arms_used == {"left", "right"}
     assert engine.world.simulation_summary()["time"] > 0.0
 
@@ -44,11 +47,12 @@ def test_distinct_object_zones_let_both_arms_work_concurrently():
     scheduled = ScheduledPlanner(engine.planner)
     engine.planner = scheduled
 
-    engine.run("set the table")
-
-    sch = scheduled.last_schedule
+    # The initial schedule is the claim under test (distinct zones -> waves
+    # with both arms); the run's last replan may be a single-object retry.
+    sch = scheduled.plan("set the table", engine.world.state()) and scheduled.last_schedule
     assert sch is not None
     assert sch.metrics["max_parallelism"] >= 2
+    engine.run("set the table")
     # The original OQ-007 bug this test guards against was a *false*
     # conflict from every item sharing one literal zone. It was never a
     # claim that real physics can produce zero workspace conflicts ever --
@@ -60,5 +64,9 @@ def test_distinct_object_zones_let_both_arms_work_concurrently():
     # bound would catch a regression back toward the old collapse
     # (max_parallelism drops or conflicts spike) without asserting an
     # unrealistic "never any real conflict" guarantee.
-    assert sch.metrics["serialized_conflicts"] <= 1
+    # 2026-09-14: a second real conflict -- the napkin's zone now sits in the
+    # shared band above the plate (so a failed arm's napkin can be re-routed
+    # to the other arm), and the scheduler correctly serialises it against
+    # the plate's centre work.
+    assert sch.metrics["serialized_conflicts"] <= 2
     assert not any(b.kind == "reach" for b in sch.barriers)

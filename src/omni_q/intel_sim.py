@@ -1720,7 +1720,9 @@ class IntelTableWorld(MockWorld):
             elif op == "OPEN" and not info.get("opened", True):
                 ok = False
             detail = {**symbolic.detail, **info, "parallel_with": [r.step_id for r in requests if r is not request],
-                      "parallel_physics_steps": stepper.steps}
+                      "parallel_physics_steps": stepper.steps,
+                      "sim_time": round(float(self.data.time), 4), "controller_steps": self._controller_steps,
+                      "simulation_mode": self.mode}
             out.append(TransitionResult(request.step_id, ok, self.revision, detail))
         return out
 
