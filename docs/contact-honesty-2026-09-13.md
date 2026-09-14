@@ -324,8 +324,14 @@ overhead camera could not see the napkin under the left gripper.
 | seed | camera says in target | controller says placed | agree |
 |---|---|---|---|
 | 903 | **5/5** | 5/5 | yes — `resolved: true`, fully camera-verified |
-| 905 | 2/5 (plate, cup) | 3/5 (+ napkin) | napkin: camera has it 5–6 cm off |
-| 911 | 4/5 | 3/5 | spoon: camera sees it at "right", controller's MOVE failed its own check |
+| 905 | 4/5 | 4/5 | full agreement; napkin set down >60 mm off (controller) |
+| 911 | 4/5 | 5/5 — `resolved: true` | napkin: camera has it ~6 cm off, just outside its 50 mm bar |
+
+(905/911 re-run after one more fix: `_go_home`'s arrival check was position-only,
+so a 4.3 rad wrist-roll swing was declared "arrived" as it crossed HOME at speed
+and momentum carried it 1.25 rad past into its hard limit — the next place then
+failed "joint-limit proximity" on an arm commanded to HOME. Arrival now also
+requires low joint velocity.)
 
 Where they disagree the receipt shows both sides. Regression suites after all
 of today's changes: 63 passed, 0 failed.

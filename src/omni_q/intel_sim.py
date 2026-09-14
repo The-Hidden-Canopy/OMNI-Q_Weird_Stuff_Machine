@@ -2127,9 +2127,15 @@ class IntelTableWorld(MockWorld):
         # posture (cup after spoon: reach error 66 mm vs 38 mm, slipped at
         # 9 mm; measured 2026-09-14). Bounded: up to 0.8 s more.
         import numpy as np
-        for _ in range(400):
+        # Arrival = at the target AND slow. Position alone declared "arrived"
+        # the instant a 4.3 rad roll swing crossed HOME at speed, and momentum
+        # carried the wrist 1.25 rad past it into its hard limit during the
+        # next settle (seed 905 spoon place, 2026-09-14: "joint-limit
+        # proximity" on an arm that was commanded to HOME).
+        for _ in range(600):
             err = np.abs(self.data.qpos[arm_offset:arm_offset + 5] - target[:5]).max()
-            if err < 0.02:
+            speed = np.abs(self.data.qvel[arm_offset:arm_offset + 5]).max()
+            if err < 0.02 and speed < 0.3:
                 break
             self._mujoco.mj_step(self.model, self.data)
             self._controller_steps += 1
