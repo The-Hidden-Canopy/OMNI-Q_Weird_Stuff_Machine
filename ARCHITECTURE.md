@@ -108,6 +108,24 @@ Deploy: `best.pt → ONNX → OpenVINO IR` (Intel, run at **MXFP2** for the swar
 `→ QAIRT` (Qualcomm bonus). Real thermal-model OpenVINO benchmark:
 `evidence/benchmark_results/openvino_inference_2026-09-10/`.
 
+### Embodied camera hierarchy
+
+`intel.perception` is a provenance-preserving broker rather than seven planner
+devices or one synthetic camera. Six subordinate joint/link cameras each own a
+YOLO runtime and report the captured frame's joint position and world camera
+pose; `omni.global` supplies scene context through a seventh runtime. The nodes
+run concurrently, can be enabled independently by stable source ID, and retain
+their source packets for cross-camera association and confidence arbitration.
+Every YOLO result is a `CameraDetection`: its box is combined with calibrated,
+aligned depth and pinhole intrinsics to produce metric `(x, y, z)` in that
+camera's optical frame (`+x` right, `+y` down, `+z` forward). Plain RGB YOLO
+boxes are rejected because they cannot provide physical depth. OMNI may use the
+packet's capture-time camera pose to transform that local measurement to world
+coordinates without discarding its camera-relative value or provenance.
+Only the broker's resolved, compact result crosses the frozen `Observation`
+boundary; raw video does not travel into the planner. See
+`omni_q.perception_broker`.
+
 ## Intel online stack (the entry track)
 
 Per the official brief
