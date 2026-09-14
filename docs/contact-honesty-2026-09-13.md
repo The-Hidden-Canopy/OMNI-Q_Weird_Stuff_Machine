@@ -389,3 +389,26 @@ What the brief scores here: "adapts plan as scene state changes" (reasoning,
 lease path (`engine.report_fleet_fault`) -- the Intel engine uses
 `IntelTablePlanner` directly, so that path would HOLD; wiring the fleet into the
 Intel engine is the proper follow-up.
+
+### Next: both arms moving at once (scoped 2026-09-14 evening, not built)
+
+Today only the plate moves both arms simultaneously; every other object is one
+arm at a time, because `OmniQ.run` executes one revision-bound transition per
+control boundary (`_next_step` → `_run_step` → `world.apply_transition`, and
+`TransitionRequest.expected_revision` refuses a second transition compiled
+against the same revision). To run e.g. `PICK cup (right)` and `PICK fork
+(left)` at the same time honestly:
+
+1. Engine: `_next_steps_parallel` returns up to one ready step per arm whose
+   regions do not conflict (the scheduler's barrier/region data already exists),
+   and a composite `PARALLEL` transition carries both under one revision.
+2. World: a cooperative stepper — each primitive runs in its own thread, its
+   `mj_step` calls block on a barrier, and one real physics step advances when
+   every active primitive has asked for one; a primitive that finishes
+   deregisters. Each thread writes only its own arm's six `ctrl` entries.
+3. Receipts: the composite step records both children's results; the
+   evidence-driven retry stays per arm.
+
+Re-gate the 10-trial harness afterwards. Until then the claim on camera is:
+plate = coordinated two-arm lift; hand-off = two-arm pass; the rest of the
+table alternates arms, and a failed arm's work is re-routed.
