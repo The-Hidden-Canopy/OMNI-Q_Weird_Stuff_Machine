@@ -160,12 +160,68 @@ def camera_e2e(seed: int):
     return world, run
 
 
+def handshake(seed: int):
+    """Both arms meet over the table's shared band, fingers horizontal and
+    pointing at each other, close on each other's fingertips and pump
+    together. Real contact, real servos -- just not a table-setting step."""
+    import numpy as np
+    from omni_q.intel_sim import GRIPPER_OPEN, IntelSceneConfig, IntelTableWorld
+
+    def world():
+        return IntelTableWorld(IntelSceneConfig(randomized=True, seed=seed))
+
+    def run(w):
+        meet = np.array([0.0, 0.02, 0.16])
+        tips = {a: w.model.geom(f"{'left' if a == 0 else 'right'}_fixed_jaw_pad_1").id for a in (0, 6)}
+        for a in (0, 6):
+            w._go_home(a)
+            w._set_gripper(a, 0.6)
+        # approach: each tip stops 35 mm short of the meeting point on its own side
+        targets = {0: meet + np.array([-0.035, 0.0, 0.0]), 6: meet + np.array([0.035, 0.0, 0.0])}
+        plans = {}
+        for a in (0, 6):
+            base = w.data.xpos[w.model.body("left_Base" if a == 0 else "right_Base").id][:2]
+            outward = targets[a][:2] - base
+            q, _ = w._edge_seed_joints(a, targets[a] + np.array([0, 0, 0.05]), outward / np.linalg.norm(outward))
+            plans[a] = q
+        w._drive_joints_both(plans, steps=400)
+        for a in (0, 6):
+            w._ik_reach_pad(a, targets[a], iters=200, roll=0.0, track_tcp=False, geom_id=tips[a], tol=0.004, max_dq=0.02)
+        # slide in so the fingertips overlap by ~25 mm, then close on each other
+        for k in range(1, 7):
+            for a, sign in ((0, 1.0), (6, -1.0)):
+                goal = targets[a] + np.array([sign * 0.01 * k, 0.0, 0.0])
+                w._ik_reach_pad(a, goal, iters=30, roll=0.0, track_tcp=False, geom_id=tips[a], tol=0.003, max_dq=0.015)
+        for a in (0, 6):
+            w.data.ctrl[a + 5] = 0.05
+        for _ in range(150):
+            w._mujoco.mj_step(w.model, w.data)
+        # pump: three shakes, both arms together, 25 mm amplitude
+        base_q = {a: w.data.ctrl[a:a + 5].copy() for a in (0, 6)}
+        for cycle in range(3):
+            for dz in (-0.025, 0.025):
+                for _ in range(4):
+                    for a in (0, 6):
+                        cur = w.data.geom_xpos[tips[a]].copy()
+                        w._ik_reach_pad(a, cur + np.array([0, 0, dz / 4]), iters=12, roll=0.0, track_tcp=False,
+                                        geom_id=tips[a], tol=0.003, max_dq=0.015)
+        for _ in range(100):
+            w._mujoco.mj_step(w.model, w.data)
+        for a in (0, 6):
+            w._set_gripper(a, GRIPPER_OPEN, settle_steps=40)
+        for a in (0, 6):
+            w._go_home(a)
+        return "handshake"
+    return world, run
+
+
 RUNS = {
     "table_903": (table_trial, 903, [("third_person", "third_person"), ("grid", GRID), ("director", DIRECTOR), ("six_cameras", SIX)]),
     "table_911": (table_trial, 911, [("overhead", "table_overhead"), ("wrists", WRIST_GRID), ("director", DIRECTOR)]),
     "plate_901": (plate_only, 901, [("third_person", "third_person"), ("grid", GRID), ("director", DIRECTOR)]),
     "authority_901": (authority, 901, [("third_person", "third_person"), ("grid", GRID), ("director", DIRECTOR)]),
     "handoff_19": (handoff, 19, [("third_person", "handoff_third_person"), ("director", "free:160,-25,0.8,0,-0.10,0.08")]),
+    "handshake_903": (handshake, 903, [("director", "free:180,-15,0.7,0,0.02,0.12"), ("grid", GRID)]),
     "camera_e2e_903": (camera_e2e, 903, [("third_person", "third_person"), ("grid", GRID), ("director_grid", DIRECTOR_GRID), ("six_cameras", SIX),
                                          ("vision_grid", [DIRECTOR, "table_overhead", "left_flank", "right_flank"]),
                                          ("vision_overhead", "table_overhead")]),

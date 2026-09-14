@@ -941,8 +941,12 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     # body. Verified empirically: the real orientation-aware grasp (see
     # this file's module docstring) still works correctly with full
     # collision, no jamming observed.
+    # The floor is 0.75 m below the tabletop (a table height). It used to be
+    # the plane z=0, coplanar with the table's top face: the renderer
+    # z-fought between them (torn table edges, moire in every recording) and
+    # contacts were being booked against "floor" on the tabletop.
     ET.SubElement(worldbody, "geom", {
-        "name": "floor", "type": "plane", "size": "0 0 .05", "rgba": ".08 .12 .12 1",
+        "name": "floor", "type": "plane", "pos": "0 0 -.75", "size": "0 0 .05", "rgba": ".08 .12 .12 1",
     })
     # pos.z -0.05 puts the box's top face at world z = 0 -- a real surface
     # flush with the floor plane. The previous -0.055 sank the top to
