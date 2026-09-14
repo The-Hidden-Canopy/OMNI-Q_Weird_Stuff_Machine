@@ -84,19 +84,57 @@ the next loop iteration. The UI only renders events from the active session; it
 does not call hardware directly. See [`docs/ui.md`](docs/ui.md) for the full
 screen map and scope boundary.
 
+### The MuJoCo table setting — what to record (2026-09-14)
+
+Real contact physics, two SO-101 arms, realistic tableware built from
+primitives (rimmed soup plate, hollow cup, bent-handle fork and spoon, folded
+napkin). The two-arm plate is the visible thing: both grippers come in
+sideways from opposite sides, slide a fingertip under the rim, close, lift
+level, carry, set down. Numbers behind it are in
+[`docs/contact-honesty-2026-09-13.md`](docs/contact-honesty-2026-09-13.md)
+(harness seeds 900–909: 47/50 placements; seeds 910–919: 50/50).
+
+Everything below opens a live MuJoCo viewer paced to real time; screen-record
+that window. Close it to exit.
+
+```
+# 1. Full engine-driven table setting: two-arm plate first, then cup, fork,
+#    spoon, napkin. Seeds 901, 903, 911-919 are known-good 5/5 runs.
+.venv/Scripts/python integrations/intel/scripts/watch_sim.py --live --trial --seed 903
+
+# 2. Just the two-arm plate pick, carry and place.
+.venv/Scripts/python integrations/intel/scripts/watch_sim.py --live --pick plate_1 --move --seed 900
+
+# 3. Mid-run change of authority. After the plate is set, the operator's
+#    "don't use the left arm anymore" goes through the voice NLU into the
+#    engine; the graph recompiles, the right arm finishes cup + spoon, fork
+#    and napkin are dropped from the plan WITH REASONS in the receipt.
+.venv/Scripts/python integrations/intel/scripts/demo_authority_change.py --seed 901 --live
+
+# 4. Two-arm cup handoff (isolated contact scene): left grasps, lifts to the
+#    shared point, right takes it while left still holds, left releases.
+.venv/Scripts/python integrations/intel/scripts/watch_sim.py --live --handoff --seed 19
+
+# GIF instead of a window (for slides): swap --live for
+#    --record tmp/name.gif --camera third_person --every 40
+```
+
+What the sim is and is not: the arms, joint limits, servo torque limits and
+gripper are the vendored MuJoCo Menagerie SO-ARM100 (unchanged); every grasp
+is a real contact event (no welds, no teleports, no collision exemptions —
+see the no-cheating rule in `src/omni_q/intel_sim.py`); a failed placement
+leaves the object where it fell. Perception in these runs is the simulator's
+own object state, not a camera; the camera/perception seam is the opt-in
+YOLO/OpenVINO integration in
+[`docs/oq-omni-vision-integration-2026-09-11.md`](docs/oq-omni-vision-integration-2026-09-11.md),
+and the trained Omni checkpoint on HF is the reasoner (intent and authority),
+not a motor policy — say it that way on camera.
+
 Intel simulation smoke (OQ-006 seed):
 
 ```
 PYTHONPATH=src .venv/Scripts/python -m pytest tests/test_intel_sim.py -q
 ```
-
-This is a real MuJoCo dual-arm/controller step using the pinned SO-ARM100
-mechanical proxy, but tableware placement remains an explicitly labelled
-scripted transition. The camera/perception seam is now available as an opt-in
-YOLO/OpenVINO integration and is documented in
-[`docs/oq-omni-vision-integration-2026-09-11.md`](docs/oq-omni-vision-integration-2026-09-11.md).
-The remaining boundary is the complete live-camera-to-full-table-setting
-benchmark, contact-rich grasping, screen recording, and hardware evidence.
 
 ## Presentation timing (≤ 5 min)
 
