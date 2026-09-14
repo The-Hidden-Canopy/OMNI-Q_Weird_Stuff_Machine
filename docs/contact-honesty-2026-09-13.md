@@ -311,12 +311,27 @@ its spawn zone, because the two-arm carry ends ~3 cm short and spawn and
 target are only 6 cm apart. That is a true statement about the placement.
 
 Camera end-to-end with the v4 detector and four-camera fusion, seeds 903/905/911
-(`evidence/benchmark_results/camera_e2e_2026-09-14/`): the fused cameras now see
-all five objects before the run (the spoon via the flank cameras). Camera verdict
-vs controller receipt per object — 903: camera 4/5 in target, controller 4/5,
-disagreeing on napkin (camera lost it after the run) and spoon (controller's
-MOVE failed, camera sees it at "right"); 905: camera 2/5, controller 4/5 (camera
-misses the cup at its zone and the fork); 911: camera 4/5 = controller 4/5,
-full agreement. The overhead-frame zone map is coarse for objects near the
-arms; the disagreement rows are recorded, not smoothed over. Regression suites
-after all of today's changes: 63 passed, 0 failed.
+(`evidence/benchmark_results/camera_e2e_2026-09-14/`, with the four post-run
+camera frames per seed). Two more fixes came out of the first pass: the fused
+position is now the confidence-weighted mean over agreeing cameras (one
+oblique view was 3–4 cm off), the camera's verdict is "within 50 mm of the
+target zone" rather than nearest-zone argmin (a cup set down 3 cm short of a
+zone 6 cm from its spawn zone read as "not moved"), and — the one that
+mattered — **the arm now withdraws to HOME after every single-arm place**: it
+used to stay parked right above the object it had just set down, and the
+overhead camera could not see the napkin under the left gripper.
+
+| seed | camera says in target | controller says placed | agree |
+|---|---|---|---|
+| 903 | **5/5** | 5/5 | yes — `resolved: true`, fully camera-verified |
+| 905 | 2/5 (plate, cup) | 3/5 (+ napkin) | napkin: camera has it 5–6 cm off |
+| 911 | 4/5 | 3/5 | spoon: camera sees it at "right", controller's MOVE failed its own check |
+
+Where they disagree the receipt shows both sides. Regression suites after all
+of today's changes: 63 passed, 0 failed.
+
+Relationship to `src/omni_q/perception_broker.py` (teammate PR #3, merged
+2026-09-14): the broker keeps every detection attached to its camera, link
+pose and robot-state sample and deliberately does not fuse; `MultiCameraFusion`
+is the resolver above it that associates across cameras into the compact
+observation. They compose; nothing in one replaces the other.
