@@ -870,7 +870,8 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
             root.append(copy.deepcopy(node))
 
     visual = ET.SubElement(root, "visual")
-    ET.SubElement(visual, "global", {"azimuth": "125", "elevation": "-28"})
+    # offwidth/offheight: offscreen buffer for 1280x720 demo recordings (render-only)
+    ET.SubElement(visual, "global", {"azimuth": "125", "elevation": "-28", "offwidth": "1280", "offheight": "720"})
     worldbody = ET.SubElement(root, "worldbody")
     # A real, physics-inert "different lighting condition" axis: the light's
     # own base position/direction/intensity are fixed above, but a
@@ -3513,7 +3514,8 @@ def contact_handoff_xml(config: ContactHandoffConfig | None = None) -> str:
             root.append(copy.deepcopy(node))
 
     visual = ET.SubElement(root, "visual")
-    ET.SubElement(visual, "global", {"azimuth": "125", "elevation": "-28"})
+    # offwidth/offheight: offscreen buffer for 1280x720 demo recordings (render-only)
+    ET.SubElement(visual, "global", {"azimuth": "125", "elevation": "-28", "offwidth": "1280", "offheight": "720"})
     worldbody = ET.SubElement(root, "worldbody")
     ET.SubElement(worldbody, "light", {
         "name": "key", "pos": "0 -0.25 1.2", "dir": "0 0 -1", "directional": "true",
