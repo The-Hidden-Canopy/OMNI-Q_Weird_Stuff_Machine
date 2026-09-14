@@ -40,11 +40,28 @@ class Recorder:
         self.frames = 0
         self._count = 0
 
+    @staticmethod
+    def _free_camera(spec: str):
+        """'free:az,el,dist,lx,ly,lz' -> MjvCamera. A render-only director view;
+        not a model camera, so it does not count against the sensor budget."""
+        import mujoco  # noqa: PLC0415
+
+        az, el, dist, lx, ly, lz = (float(v) for v in spec.split(":", 1)[1].split(","))
+        cam = mujoco.MjvCamera()
+        cam.type = mujoco.mjtCamera.mjCAMERA_FREE
+        cam.azimuth, cam.elevation, cam.distance = az, el, dist
+        cam.lookat[:] = (lx, ly, lz)
+        return cam
+
     def _render(self, camera: str):
-        self._renderer.update_scene(self.world.data, camera=camera)
+        if camera.startswith("free:"):
+            self._renderer.update_scene(self.world.data, camera=self._free_camera(camera))
+        else:
+            self._renderer.update_scene(self.world.data, camera=camera)
         bgr = self._cv2.cvtColor(self._renderer.render(), self._cv2.COLOR_RGB2BGR)
         if len(self.cameras) > 1:
-            self._cv2.putText(bgr, camera, (10, 24), self._cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, self._cv2.LINE_AA)
+            name = "director" if camera.startswith("free:") else camera
+            self._cv2.putText(bgr, name, (10, 24), self._cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, self._cv2.LINE_AA)
         return bgr
 
     def frame(self) -> None:
@@ -80,4 +97,9 @@ class Recorder:
 
     def close(self) -> str:
         self._writer.release()
+        # free the GL context: a second live Renderer in the process renders black
+        try:
+            self._renderer.close()
+        except Exception:  # noqa: BLE001
+            pass
         return f"{self.path} ({self.frames} frames, {self.frames / 25:.0f} s)"

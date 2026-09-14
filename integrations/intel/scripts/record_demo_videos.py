@@ -22,6 +22,9 @@ from _recording import Recorder  # noqa: E402
 DEFAULT_OUT = Path.home() / "OneDrive" / "Desktop" / "OMNI-Q_demo_videos"
 GRID = ["third_person", "table_overhead", "left_flank", "right_flank"]
 WRIST_GRID = ["third_person", "table_overhead", "left_wrist", "right_wrist"]
+# render-only free camera, front-left and closer than the fixed third_person view
+DIRECTOR = "free:150,-30,0.95,0,-0.12,0.05"
+DIRECTOR_GRID = [DIRECTOR, "table_overhead", "left_flank", "right_flank"]
 
 
 def _with_recorders(world, out: Path, stem: str, run, views):
@@ -147,12 +150,12 @@ def camera_e2e(seed: int):
 
 
 RUNS = {
-    "table_903": (table_trial, 903, [("third_person", "third_person"), ("grid", GRID)]),
-    "table_911": (table_trial, 911, [("overhead", "table_overhead"), ("wrists", WRIST_GRID)]),
-    "plate_901": (plate_only, 901, [("third_person", "third_person"), ("grid", GRID)]),
-    "authority_901": (authority, 901, [("third_person", "third_person"), ("grid", GRID)]),
-    "handoff_19": (handoff, 19, [("third_person", "handoff_third_person")]),
-    "camera_e2e_903": (camera_e2e, 903, [("third_person", "third_person"), ("grid", GRID)]),
+    "table_903": (table_trial, 903, [("third_person", "third_person"), ("grid", GRID), ("director", DIRECTOR)]),
+    "table_911": (table_trial, 911, [("overhead", "table_overhead"), ("wrists", WRIST_GRID), ("director", DIRECTOR)]),
+    "plate_901": (plate_only, 901, [("third_person", "third_person"), ("grid", GRID), ("director", DIRECTOR)]),
+    "authority_901": (authority, 901, [("third_person", "third_person"), ("grid", GRID), ("director", DIRECTOR)]),
+    "handoff_19": (handoff, 19, [("third_person", "handoff_third_person"), ("director", "free:160,-25,0.8,0,-0.10,0.08")]),
+    "camera_e2e_903": (camera_e2e, 903, [("third_person", "third_person"), ("grid", GRID), ("director_grid", DIRECTOR_GRID)]),
 }
 
 
@@ -160,12 +163,17 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
     ap.add_argument("--only", nargs="*", default=None)
+    ap.add_argument("--views", nargs="*", default=None, help="record only these view tags (e.g. director)")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     for name, (factory, seed, views) in RUNS.items():
         if args.only and name not in args.only:
             continue
         world, run = factory(seed)
+        if args.views:
+            views = [v for v in views if v[0] in args.views]
+        if not views:
+            continue
         print(f"== {name}", flush=True)
         for line in _with_recorders(world, args.out, name, run, views):
             print("   ", line, flush=True)
