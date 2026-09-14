@@ -486,7 +486,7 @@ GRASP_CLEARANCE = 0.015  # m -- gap kept above an object's top surface before cl
 # register as held because the arm was never asked to lift it far enough.
 # Measured 2026-09-13: fork lifting 12.8 mm of a possible 18.5 and counted as
 # a failure. Verification height is now a floor independent of object size.
-LIFT_VERIFY_MIN = 0.040  # m
+LIFT_VERIFY_MIN = 0.060  # m
 # Legacy-path safety bounds.  These are controller stop bounds, not hardware
 # force limits: the contact-handoff path owns the promotion-grade force gate.
 LEGACY_MAX_CARRY_OFFSET_M = 0.100
@@ -543,7 +543,7 @@ def _body(name: str, pos: str, geom: dict[str, str], *, euler: str | None = None
 
 
 def _cutlery(name: str, pos: str, *, handle: dict[str, str], head: dict[str, str],
-             head_offset: str, mass: str, friction: str, rgba: str,
+             handle_offset: str, head_offset: str, mass: str, friction: str, rgba: str,
              euler: str | None = None) -> ET.Element:
     """A piece of cutlery as a narrow HANDLE plus a wider HEAD.
 
@@ -555,9 +555,12 @@ def _cutlery(name: str, pos: str, *, handle: dict[str, str], head: dict[str, str
     The handle is ~10 mm wide and the head ~25 mm, so the jaws close squarely
     on a handle a fraction of their travel wide, with clearance to the table.
 
-    The body origin is the handle's centre, so the freejoint position -- which
-    is what the pick targets -- is the grasp point. The head geom carries the
-    ``<name>_head`` suffix; contact accounting matches on the prefix.
+    The body origin -- which is what the pick targets -- is the handle's
+    centre. (Moving it to the neck was tried on 2026-09-13 to reduce the
+    seesaw pivot seen on lift: it did not change the spoon and it broke the
+    fork's grasp outright, so the mid-handle origin stays.) The head geom
+    carries the ``<name>_head`` suffix; contact accounting matches on the
+    prefix.
     """
     attrs = {"name": name, "pos": pos}
     if euler is not None:
@@ -565,7 +568,8 @@ def _cutlery(name: str, pos: str, *, handle: dict[str, str], head: dict[str, str
     body = ET.Element("body", attrs)
     ET.SubElement(body, "freejoint", {"name": f"{name}_free"})
     common = {"rgba": rgba, "friction": friction}
-    ET.SubElement(body, "geom", {"name": name, "type": "box", "mass": mass, **handle, **common})
+    ET.SubElement(body, "geom", {"name": name, "type": "box", "mass": mass,
+                                 "pos": handle_offset, **handle, **common})
     ET.SubElement(body, "geom", {"name": f"{name}_head", "type": "box", "pos": head_offset,
                                  "mass": "0", **head, **common})
     return body
@@ -805,12 +809,12 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
         # Handle 10 mm wide x 100 mm x 7 mm; head 25 mm x 50 mm x 6 mm at the
         # +y end. Same 150 mm overall length and 40 g as the old slab.
         _cutlery("fork_1", fork_pos,
-                 handle={"size": ".005 .05 .0035"},
+                 handle={"size": ".005 .05 .0035"}, handle_offset="0 0 0",
                  head={"size": ".0125 .025 .003"}, head_offset="0 .075 0",
                  mass=".04", friction="1.20 .006 .0002",
                  rgba=tableware_rgba(".72 .73 .75 1"), euler=fork_euler),
         _cutlery("spoon_1", spoon_pos,
-                 handle={"size": ".005 .05 .0035"},
+                 handle={"size": ".005 .05 .0035"}, handle_offset="0 0 0",
                  head={"size": ".013 .02 .004"}, head_offset="0 .07 0",
                  mass=".04", friction="1.20 .006 .0002",
                  rgba=tableware_rgba(".72 .73 .75 1"), euler=spoon_euler),
@@ -1354,6 +1358,13 @@ class IntelTableWorld(MockWorld):
 
         yaw = self._object_yaw(obj)
         if obj in {"fork_1", "spoon_1"}:
+            # A box-section handle is the same grasp rotated 180 deg. Feeding
+            # the raw yaw through unchanged flipped the wrist-roll hint by pi
+            # whenever scene jitter left the piece pointing the other way, and
+            # the jaw then closed on nothing (harness seeds 903/904, 2026-09-13:
+            # roll +1.65 on an arm whose base roll is -1.65, zero contacts).
+            # Fold the symmetry so yaw and yaw+pi describe one grasp.
+            yaw = math.atan2(math.sin(2.0 * yaw), math.cos(2.0 * yaw)) / 2.0
             opening_angle = yaw
         elif obj == "napkin_1":
             opening_angle = yaw + math.pi / 2.0
@@ -1679,6 +1690,31 @@ class IntelTableWorld(MockWorld):
         cur = self.data.body(self._tcp_body[arm_offset]).xpos.copy()
         return self._ik_track_line(arm_offset, cur, (x, y, z))
 
+    def _go_home(self, arm_offset: int, *, steps: int = 150) -> None:
+        """Return one arm to its verified HOME posture with the gripper open.
+
+        Every pick used to start from wherever the previous action left the
+        arm. _move_to is an up-over-down waypoint move, so the *fingertip*
+        arrives at the right place -- but the joint posture behind it (elbow,
+        wrist) is inherited, and the descent then settles in a different IK
+        basin. Measured 2026-09-13: spoon_1 held 10/10 in isolation and 3/10
+        in the harness, where the right arm had just done the cup; the
+        failing picks showed reach error 0.047 vs 0.032 and zero lift.
+        Starting each manipulation from the same ready pose is ordinary robot
+        practice and makes the harness behave like the isolated case.
+        Interpolated, not slammed, so nothing gets flung.
+        """
+        import numpy as np
+
+        target = np.array(HOME, dtype=float)
+        target[5] = GRIPPER_OPEN
+        start = self.data.ctrl[arm_offset:arm_offset + 6].copy()
+        for k in range(1, steps + 1):
+            self.data.ctrl[arm_offset:arm_offset + 6] = start + (target - start) * (k / steps)
+            self._mujoco.mj_step(self.model, self.data)
+        self._mujoco.mj_step(self.model, self.data, nstep=40)
+        self._controller_steps += steps + 40
+
     def _do_pick(self, arm_offset: int, obj: str) -> dict[str, Any]:
         """Approach from above (via a safe transit height, unweighted-vs-table
         motion), then switch to the fixed-wrist-roll pad-tracking solve for
@@ -1713,6 +1749,7 @@ class IntelTableWorld(MockWorld):
                 "safety": {"approach": approach_safety},
             }
 
+        self._go_home(arm_offset)          # same ready pose for every pick; see _go_home
         self._set_gripper(arm_offset, GRIPPER_OPEN)
         self._move_to(arm_offset, (grasp_xy[0], grasp_xy[1], clear_z))
 
