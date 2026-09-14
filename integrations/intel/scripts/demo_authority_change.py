@@ -74,9 +74,9 @@ def main() -> int:
     # picks it up at its next control boundary, exactly as a live utterance.
     injected = {"at": None}
     orig_apply = world.apply_transition
+    orig_parallel = world.apply_transitions_parallel
 
-    def apply_and_listen(request):
-        result = orig_apply(request)
+    def after(request, result):
         if (injected["at"] is None and request.op in {"MOVE", "PLACE"}
                 and request.args.get("object") == args.after and result.ok):
             parsed = nlu.parse(args.phrase)
@@ -87,8 +87,20 @@ def main() -> int:
             print(f"\n>>> operator: {args.phrase!r}  ->  {parsed.constraints}  (queued after {request.step_id})\n", flush=True)
         state = "ok" if result.ok else "FAIL"
         print(f"   {request.op:5s} {str(request.args.get('object') or ''):9s} {str(request.actor)[-9:]:9s} {state}", flush=True)
+
+    def apply_one(request):
+        result = orig_apply(request)
+        after(request, result)
         return result
-    world.apply_transition = apply_and_listen
+
+    def apply_pair(requests):
+        results = orig_parallel(requests)
+        print("   [both arms at once]", flush=True)
+        for request, result in zip(requests, results):
+            after(request, result)
+        return results
+    world.apply_transition = apply_one
+    world.apply_transitions_parallel = apply_pair
 
     goal = TABLE_SETTING_PHRASINGS[0]
     print(f"goal: {goal!r}  seed {args.seed}\n")

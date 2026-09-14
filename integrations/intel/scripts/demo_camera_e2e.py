@@ -108,12 +108,20 @@ def main() -> int:
     before = look()
     print("camera before:", before, flush=True)
     orig_apply = world.apply_transition
+    orig_parallel = world.apply_transitions_parallel
 
     def apply_and_print(request):
         result = orig_apply(request)
         print(f"   {request.op:5s} {str(request.args.get('object') or ''):9s} {str(request.actor)[-9:]:9s} {'ok' if result.ok else 'FAIL'}", flush=True)
         return result
+
+    def apply_pair_and_print(requests):
+        results = orig_parallel(requests)
+        print("   [both arms at once] " + " | ".join(
+            f"{r.op} {r.args.get('object')} {str(r.actor)[-9:]} {'ok' if o.ok else 'FAIL'}" for r, o in zip(requests, results)), flush=True)
+        return results
     world.apply_transition = apply_and_print
+    world.apply_transitions_parallel = apply_pair_and_print
 
     goal = TABLE_SETTING_PHRASINGS[0]
     receipt = engine.run(goal)

@@ -96,16 +96,25 @@ def authority(seed: int):
     def run(w):
         eng = w._engine
         orig = w.apply_transition
+        orig_par = w.apply_transitions_parallel
         done = {"x": False}
 
-        def apply(req):
-            res = orig(req)
+        def after(req, res):
             if not done["x"] and req.op == "MOVE" and req.args.get("object") == "plate_1" and res.ok:
                 done["x"] = True
                 for k, v in nlu.parse("don't use the left arm anymore").constraints:
                     eng.add_constraint(k, v, source="operator", justification="voice: don't use the left arm anymore")
-            return res
+
+        def apply(req):
+            res = orig(req); after(req, res); return res
+
+        def apply_pair(reqs):
+            out = orig_par(reqs)
+            for req, res in zip(reqs, out):
+                after(req, res)
+            return out
         w.apply_transition = apply
+        w.apply_transitions_parallel = apply_pair
         r = eng.run(TABLE_SETTING_PHRASINGS[0])
         arms = [a.get("arm") for a in r.as_dict()["actions"] if a["op"] in ("PICK", "MOVE")]
         return f"arms in order: {arms}"
@@ -123,17 +132,26 @@ def arm_failure(seed: int):
     def run(w):
         eng = w._engine
         orig = w.apply_transition
+        orig_par = w.apply_transitions_parallel
         done = {"x": False}
 
-        def apply(req):
-            res = orig(req)
+        def after(req, res):
             if not done["x"] and req.op == "MOVE" and req.args.get("object") == "fork_1" and res.ok:
                 done["x"] = True
                 w.fail_arm(0, reason="left arm servo bus: no response")
                 eng.add_constraint("prefer_arm", "right", source="operator",
                                    justification="fault handler: left arm servo bus no response; withdrawn from authority")
-            return res
+
+        def apply(req):
+            res = orig(req); after(req, res); return res
+
+        def apply_pair(reqs):
+            out = orig_par(reqs)
+            for req, res in zip(reqs, out):
+                after(req, res)
+            return out
         w.apply_transition = apply
+        w.apply_transitions_parallel = apply_pair
         r = eng.run(TABLE_SETTING_PHRASINGS[0])
         po = _per_object_pick_place_outcomes(r)
         return "placed " + "".join("P" if v["placed"] else "-" for v in po.values()) + f" resolved={r.metrics.get('resolved')}"

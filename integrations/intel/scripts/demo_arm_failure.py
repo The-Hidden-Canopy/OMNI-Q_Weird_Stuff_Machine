@@ -65,9 +65,10 @@ def main() -> int:
 
     failure = {"at": None}
     orig_apply = world.apply_transition
+    orig_parallel = world.apply_transitions_parallel
 
-    def apply_and_fail(request):
-        result = orig_apply(request)
+    def after(request, result):
+        """Runs after every transition, single or paired (both arms at once)."""
         if (failure["at"] is None and request.op in {"MOVE", "PLACE"}
                 and request.args.get("object") == args.fail_after and result.ok):
             info = world.fail_arm(0, reason="left arm servo bus: no response")
@@ -81,8 +82,20 @@ def main() -> int:
             failure["at"] = {"after_step": request.step_id, "revision": world.revision, "fault": info}
             print(f"\n!!! LEFT ARM FAILED after {request.step_id}: {info['reason']} (commands frozen) -> withdrawn from authority\n", flush=True)
         print(f"   {request.op:5s} {str(request.args.get('object') or ''):9s} {str(request.actor)[-9:]:9s} {'ok' if result.ok else 'FAIL'}", flush=True)
+
+    def apply_one(request):
+        result = orig_apply(request)
+        after(request, result)
         return result
-    world.apply_transition = apply_and_fail
+
+    def apply_pair(requests):
+        results = orig_parallel(requests)
+        print("   [both arms at once]", flush=True)
+        for request, result in zip(requests, results):
+            after(request, result)
+        return results
+    world.apply_transition = apply_one
+    world.apply_transitions_parallel = apply_pair
 
     goal = TABLE_SETTING_PHRASINGS[0]
     print(f"goal: {goal!r}  seed {args.seed}\n")
