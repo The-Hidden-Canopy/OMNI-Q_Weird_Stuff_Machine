@@ -63,7 +63,7 @@ alongside the YOLO perception node.
 
 - [x] SO-101 capability map + measurement probe — [`so101_capability_map.md`](so101_capability_map.md),
   [`scripts/probe_so101.py`](scripts/probe_so101.py), vendored MJCF in [`assets/menagerie_so_arm100/`](assets/menagerie_so_arm100/SOURCE.md) (OQ-003)
-- [x] MuJoCo dual SO-101 scene + controller smoke — `src/omni_q/intel_sim.py` builds a pinned two-arm proxy (`nu=12`) with tableware and two cameras; the legacy table-setting route remains explicitly scripted
+- [x] MuJoCo dual SO-101 scene + controller smoke — `src/omni_q/intel_sim.py` builds a pinned two-arm proxy (`nu=12`) with tableware and two cameras; the table-setting route still contains a bounded deterministic controller, while the public OMNI model-composed route is documented below
 - [x] Bimanual scheduler wired into the Intel sim path (zero-touch decorator, no
   edits to `intel_sim.py`/`scheduler.py`) — `src/omni_q/demo_intel_sim.py`
   (`PYTHONPATH=src python -m omni_q.demo_intel_sim` or `omni-q-intel-demo` once
@@ -159,12 +159,17 @@ alongside the YOLO perception node.
   `integrations/intel/demonstrations.py` records accepted and rejected
   `TransitionRequest` attempts, before/after `WorldState`, and optional
   MuJoCo qpos/qvel/ctrl/time telemetry as an exclusive JSONL intermediate
-  artifact. This is provenance-bearing input for a later LeRobot conversion;
-  it is **not** yet a motor-level LeRobot dataset, trained policy, or hardware
-  evidence.
+  artifact. This remains provenance-bearing input for a later motor-level
+  LeRobot conversion; it is separate from the published OMNI reasoner
+  checkpoint and is **not** hardware evidence.
 - [ ] Motor-level LeRobot dataset/demonstration conversion from the MuJoCo
   scene
-- [ ] Train/fine-tune a VLA or imitation-learning policy (SmolVLA, Pi0.5, ACT, or other)
+- [x] Published multimodal OMNI reasoner runtime — HF artifact, identity-gated
+  loader, constrained `OmniPlanner`, and governed Intel rollout path documented
+  below
+- [ ] Train/fine-tune a motor-level VLA or imitation-learning policy (SmolVLA,
+  Pi0.5, ACT, or other); this remains distinct from the published OMNI
+  reasoner and is not silently claimed here
 - [ ] Capability-node wrappers for arm primitives
 - [ ] Policy/perception export to OpenVINO IR, run on Core Ultra Series 2/3
 
@@ -451,9 +456,11 @@ is evidence plumbing, not a manipulation acceptance result.
   scrutiny. See `intel_sim.py`'s module docstring, "Ninth update", and
   the v9 evidence README. `BACKLOG.md` (OQ-010) updated.
 
-### Legacy table-setting follow-up (2026-09-10)
+### Deterministic table-setting controller follow-up (2026-09-10)
 
-The legacy `simulation-scripted-manipulation` route now has a bounded,
+The `simulation-scripted-manipulation` route is the bounded deterministic
+table-setting controller, not the definition of the whole Intel capability.
+It now has a bounded,
 object-aware contact primitive in `IntelTableWorld`: it derives a live grasp
 frame from each object's observed yaw, tracks a named fingertip pad with a
 6D damped-least-squares solve, preserves joint-limit margins, and retries only
@@ -466,8 +473,10 @@ shoving other tableware before its own governed PICK is now explicit named
 
 This is a capability improvement, not a completed table-setting claim.  The
 latest local probes show physically grounded isolated grasps for the calibrated
-cup and some of the other objects, while the full legacy sequence still has
-shared-workspace/order sensitivity and unresolved cutlery/placement failures.
+cup and some of the other objects, while the full deterministic sequence still
+has shared-workspace/order sensitivity and unresolved cutlery/placement
+failures. That controller evidence is intentionally kept separate from the
+trained OMNI reasoner path below.
 The engine therefore continues to report failed transitions and replan/hold;
 it does not convert those failures into a success score.  The separate
 `simulation-contact-handoff` path remains the only OQ-010/OQ-011 promotion
@@ -478,19 +487,72 @@ placement failures); the [v6 report](../../evidence/benchmark_results/intel_tabl
 above is the current state. Both are exploratory diagnostic evidence, not a
 promotion score.
 
+### Public multimodal OMNI and model provenance
+
+The published multimodal OMNI artifact is
+[`KissTheHabit/IDA_OMNI_Q`](https://huggingface.co/KissTheHabit/IDA_OMNI_Q),
+specifically the `students/PRISM/omni_state_transition_v3/` checkpoint and its
+matching receipt/manifest. The public runtime chain is:
+
+```text
+KissTheHabit/IDA_OMNI_Q
+  -> src/omni_q/omni_reasoner.py::OmniReferenceReasoner
+  -> integrations/intel/vendor/omni_reference/omni_inference.py::load_omni_reference
+  -> src/omni_q/demo_intel_reasoner.py::OmniPlanner
+  -> governed Intel MuJoCo engine
+  -> receipt and optional render trace
+```
+
+Run the model-composed route with `OMNIQ_OMNI_REASONER=omni`, an
+artifact-matched `OMNIQ_OMNI_CHECKPOINT`, and an artifact-matched
+`OMNIQ_OMNI_RECEIPT`; the loader fails closed on digest, architecture,
+execution-revision, precision, and completed-example mismatches. The
+`demo_intel_reasoner.py --render-dir <dir>` entry point is the traceable route
+for connecting the HF artifact to planner decisions and a rendered rollout.
+
+This checkpoint is a trained multimodal OMNI reasoner used to produce
+constrained planning advice. It is not being represented as a monolithic
+end-to-end motor policy: OMNI owns intent and authority, while the governed
+controller/provider owns bounded motion and verification. That distinction is
+why the repository can contain both strong deterministic/contact controllers
+and a real trained OMNI runtime without conflating their evidence.
+
+`integrations/intel/scripts/watch_sim.py` is a controller/physics viewer and
+can produce useful GIFs, but a GIF from that script alone does not prove that
+the HF checkpoint was used. A public model-path claim must retain the receipt
+from `demo_intel_reasoner.py`, including the planner backend and any explicit
+`fallback` label. This is the provenance link:
+
+```text
+HF artifact -> identity-gated model loader -> OmniPlanner decision
+  -> governed rollout receipt -> render trace / handoff evidence
+```
+
 ### Contact-handoff evidence boundary
 
 The OQ-010/OQ-011 contact tranche is available through
 `src/omni_q/intel_sim.py` as the separate `simulation-contact-handoff` mode.
 It uses the pinned SO-ARM100 proxy, real joint interpolation and named MuJoCo
 pad contacts for one `cup_1` transfer. The deterministic acceptance gate is
-the pinned controller seed `19` (10/10 in the test suite). The
-`run_randomized_contact_handoff_report(root, trials=20)` helper retains every
-seeded receipt and labels the summary exploratory, not a promotion claim.
-The current retained artifacts are the [deterministic gate](../../evidence/benchmark_results/contact_handoff_deterministic_2026-09-10/report.json)
-and the [20-trial randomized report](../../evidence/benchmark_results/contact_handoff_2026-09-10/report.json).
+the pinned controller seed `19` (10/10 in the test suite). That is a
+calibrated repeatability gate, not the width of the operating envelope. The
+retained wider-variation result is [6/20 across seeds 700–719](../../evidence/benchmark_results/handoff_variation_2026-09-13/README.md),
+with receiving-arm IK timeouts, receiver joint-limit failures, and three
+unstable final releases. It is the current robustness target for the handoff
+controller and its future model-composed deployment, not evidence that
+bimanual capability is absent.
+
+The `run_randomized_contact_handoff_report(root, trials=20)` helper retains
+every seeded receipt and labels the summary exploratory, not a promotion claim.
+The current retained artifacts are the [deterministic gate](../../evidence/benchmark_results/contact_handoff_deterministic_2026-09-10/report.json),
+the [earlier 20-trial report](../../evidence/benchmark_results/contact_handoff_2026-09-10/report.json),
+and the [current wider-variation report](../../evidence/benchmark_results/handoff_variation_2026-09-13/README.md).
 
 This path never writes the cup free-joint pose, uses weld/equality attachment,
-or changes the existing `simulation-scripted-manipulation` table-setting
-route. It is MuJoCo-only evidence and does not claim camera perception, VLA
-control, hardware, complete table setting, or concurrent execution.
+or changes the deterministic table-setting route. It is MuJoCo-only contact and
+handoff evidence. The current handoff perception is still world-state driven,
+not a camera-closed-loop claim; mid-step engine reauthorization for a newly
+spoken arm exclusion also remains an explicit follow-up boundary. The ugly
+napkin/flat-deformable case is tracked as an object-manipulation robustness
+problem in [the flat-object evidence](../../evidence/benchmark_results/flat_object_grasp_2026-09-13/README.md),
+not as missing fleet architecture.

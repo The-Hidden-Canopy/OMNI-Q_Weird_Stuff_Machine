@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass, field
+from inspect import signature
 from typing import Callable
 from uuid import uuid4
 
@@ -20,13 +21,14 @@ class SessionError(ValueError):
 class RunSession:
     session_id: str
     engine: OmniQ
+    profile: str | None = None
     status: str = "queued"  # queued | running | finished | failed
     receipt: ReceiptRecord | None = None
     error: str | None = None
     done: threading.Event = field(default_factory=threading.Event)
 
 
-EngineFactory = Callable[[EventBus], OmniQ]
+EngineFactory = Callable[..., OmniQ]
 
 
 class SessionManager:
@@ -37,10 +39,29 @@ class SessionManager:
         self._sessions: dict[str, RunSession] = {}
         self._lock = threading.RLock()
 
-    def create(self) -> RunSession:
+    def create(self, profile: str | None = None) -> RunSession:
         session_id = uuid4().hex[:12]
         bus = EventBus()
-        session = RunSession(session_id=session_id, engine=self._factory(bus))
+        # Keep the existing one-argument factory contract working for callers
+        # outside the UI while allowing the product surface to select a
+        # validated event profile.  Do not infer support from arity: the
+        # existing mock factory also accepts optional recorder/planner args.
+        factory_parameters = signature(self._factory).parameters
+        accepts_profile = "profile" in factory_parameters or any(
+            parameter.kind is parameter.VAR_KEYWORD
+            for parameter in factory_parameters.values()
+        )
+        if profile is not None and accepts_profile:
+            engine = self._factory(bus, profile=profile)
+        elif profile is not None:
+            raise SessionError("selected profile is unsupported by this session factory")
+        else:
+            engine = self._factory(bus)
+        session = RunSession(
+            session_id=session_id,
+            engine=engine,
+            profile=profile,
+        )
         with self._lock:
             self._sessions[session_id] = session
         return session
@@ -91,6 +112,12 @@ class SessionManager:
     def summary(self, session_id: str) -> dict[str, object]:
         session = self.get(session_id)
         receipt = session.receipt
+        profile = getattr(session.engine, "profile", None)
+        profile_payload = None
+        if profile is not None and callable(getattr(profile, "as_dict", None)):
+            profile_payload = profile.as_dict()
+        elif session.profile is not None:
+            profile_payload = {"profile": session.profile}
         return {
             "session_id": session.session_id,
             "status": session.status,
@@ -98,6 +125,7 @@ class SessionManager:
             "run_id": receipt.run_id if receipt else None,
             "content_hash": receipt.content_hash if receipt else None,
             "error": session.error,
+            "profile": profile_payload,
             "runtime": runtime_metadata(session.engine),
             "receipt_ready": receipt is not None,
         }
@@ -133,7 +161,10 @@ def runtime_metadata(engine: OmniQ) -> dict[str, object]:
     configured seams without inventing a route that the session did not use.
     """
     world_mode = str(getattr(engine.world, "mode", "mock"))
-    simulated = world_mode == "mock"
+    simulated = (
+        world_mode in {"mock", "tableops-profile"}
+        or world_mode.startswith("simulation-")
+    )
     observer = getattr(engine, "observer", None)
     planner = getattr(engine, "planner", None)
     reasoner = getattr(planner, "reasoner", None)
@@ -186,13 +217,28 @@ def runtime_metadata(engine: OmniQ) -> dict[str, object]:
         }
         for spec in specs
     ]
+    if world_mode == "mock":
+        environment = "Mock session · no hardware"
+    elif world_mode == "tableops-profile":
+        environment = "TableOps profile simulation · no hardware"
+    elif simulated:
+        environment = f"Intel MuJoCo simulation · {world_mode} · no hardware"
+    else:
+        environment = world_mode
+
+    profile = getattr(engine, "profile", None)
+    profile_payload = None
+    if profile is not None and callable(getattr(profile, "as_dict", None)):
+        profile_payload = profile.as_dict()
+
     return {
         "mode": world_mode,
-        "environment": "mock session · no hardware" if simulated else world_mode,
+        "environment": environment,
         "execution": "simulated" if simulated else "configured",
         "observer": type(observer).__name__,
         "planner": type(planner).__name__,
         "reasoner": reasoner_name,
+        "profile": profile_payload,
         "safety": "Mission envelope ready",
         "capabilities": capabilities,
         "placement_devices": placement_devices,

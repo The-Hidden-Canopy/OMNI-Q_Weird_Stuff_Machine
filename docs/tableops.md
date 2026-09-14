@@ -60,9 +60,15 @@ constraints:
   human_zone: protected
 ```
 
-The profile format is a product contract for the next evaluator/configuration
-slice. It is not evidence that the current mock or Intel path already meets
-these tolerances.
+The profile is now an executable product contract in the judge surface:
+`profiles/formal_dinner_v3.yaml` is loaded by `src/omni_q/profiles.py`,
+diffed against the observed world, and carried through the existing OMNI-Q
+graph/execution/verification loop into the chained receipt. The checked-in
+profile has six enabled item classes for four seats, so its desired state is
+24 placements. The current mock observer proves symbolic zones only; it does
+not provide metric poses for the declared millimetre tolerances. Those gaps
+remain explicit in the profile report. An Intel profile session does not
+invent absent inventory: missing profile objects remain unresolved.
 
 ## Demo story
 
@@ -124,6 +130,7 @@ claim.
 
 | Capability | Current status | Evidence boundary |
 | --- | --- | --- |
+| profile loading, residual diff, and profile receipt report | executable mock path | symbolic zones; metric pose gaps retained |
 | bimanual graph planning and routing | prototype | mock and bounded Intel simulation |
 | post-action verification | prototype | existing evaluator/receipt paths |
 | generic expressive slack | prototype | bounded simulation; not hardware evidence |

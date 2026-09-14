@@ -45,6 +45,23 @@ repo does not claim universal ROI, room-scale inventory, or live household
 capability yet. See [`docs/tableops.md`](docs/tableops.md) for the product
 ladder, demo story, pilot metrics, and evidence boundary.
 
+The product surface is now profile-first:
+
+```text
+venue / event profile → current-state observation → residual diff
+                    → OMNI-Q graph → authorized execution → verification
+                    → exception / recovery → hash-chained report
+```
+
+The checked-in [`formal_dinner_v3`](profiles/formal_dinner_v3.yaml) profile is
+selectable from the UI or through `POST /sessions` with a `profile` field. It
+defines six enabled item classes for four seats (24 required placements). The
+UI exposes profile status, first-pass placements, self-corrections, replans,
+unresolved residuals, final compliance, and the underlying graph/audit/receipt
+evidence. This is an executable symbolic-zone workflow, not a claim that the
+mock observer has metric camera pose or has physically met a millimetre
+tolerance.
+
 ## Hackathon context
 
 Built for a LabLab hackathon. **We qualify to enter only the Intel Online
@@ -67,6 +84,48 @@ Perception starts from an already-published artifact:
 [`KissTheHabit/yolov8n-hituav-thermal-finetune`](https://huggingface.co/KissTheHabit/yolov8n-hituav-thermal-finetune)
 — YOLOv8 thermal detector, HIT-UAV, 0.825 mAP50 / 0.538 mAP50-95. See
 [`models/`](models/).
+
+### Public multimodal OMNI path
+
+The published multimodal OMNI artifact is
+[`KissTheHabit/IDA_OMNI_Q`](https://huggingface.co/KissTheHabit/IDA_OMNI_Q).
+The strict checkpoint is 977 MB and is intentionally not committed to GitHub;
+the repository's `.gitignore` reserves `models/hf_ida_omni_q/` for a local
+download:
+
+```bash
+hf download KissTheHabit/IDA_OMNI_Q --local-dir models/hf_ida_omni_q
+```
+
+The public runtime path is explicit:
+
+```text
+HF: KissTheHabit/IDA_OMNI_Q
+  → artifact-matched checkpoint + receipt
+  → OmniReferenceReasoner
+      (src/omni_q/omni_reasoner.py)
+  → identity-gated load_omni_reference
+      (integrations/intel/vendor/omni_reference/omni_inference.py)
+  → OmniPlanner constrained advice
+  → governed Intel MuJoCo engine
+  → validated controller actions, receipt, and optional render trace
+```
+
+Run it with `OMNIQ_OMNI_REASONER=omni`, an artifact-matched
+`OMNIQ_OMNI_CHECKPOINT`, and `OMNIQ_OMNI_RECEIPT`, then use
+`python -m omni_q.demo_intel_reasoner --render-dir <dir>`. The loader checks
+the checkpoint digest, architecture, execution revision, precision, and
+completed-example boundary before generation; a missing or mismatched receipt
+is refused. The checkpoint is the trained OMNI reasoner, not a monolithic
+motor policy: OMNI advises intent and authority while governed providers own
+bounded motion.
+
+For public provenance, `demo_intel_reasoner.py` is the model-composed rollout
+entry point. `integrations/intel/scripts/watch_sim.py` is a controller/physics
+viewer and recorder; its GIFs are useful physical evidence but are not by
+themselves proof that the HF reasoner selected the actions. The rollout receipt
+must retain the planner decision backend and any `fallback` label alongside the
+GIF.
 
 ### Real eyes (wired)
 
@@ -166,14 +225,14 @@ PYTHONPATH=src .venv/Scripts/python -m pytest tests/test_intel_sim.py -q
 
 The current Intel slice loads a real dual-arm MuJoCo scene from the pinned
 SO-ARM100 mechanical proxy, moves both controller stacks, and records
-explicitly labelled `simulation-scripted-manipulation` state transitions. Its
-contact evidence is object-specific: `cup_1` and `plate_1` have measured grasp
-results, while complete placement and the thin cutlery path remain open.
-This is not yet a complete table-setting result, a trained VLA, OpenVINO policy
-inference, or hardware evidence. Governed command-level demonstrations can now
-be captured with optional MuJoCo telemetry through
+contact- and verification-backed state transitions. The table-setting route
+still contains a bounded deterministic controller, while the public trained
+OMNI path is the reasoner/controller composition described above; those are
+separate claims and are labelled separately in receipts. Governed command-level
+demonstrations can now be captured with optional MuJoCo telemetry through
 [`integrations/intel/demonstrations.py`](integrations/intel/demonstrations.py),
-but motor-level LeRobot conversion remains open.
+but the current trained artifact is not an end-to-end motor policy and there is
+no hardware or OpenVINO policy-deployment claim here.
 
 ### Bimanual handoff
 
@@ -192,9 +251,14 @@ SO-101 B: receive object and continue the plan
 The current retained evidence is the separate
 [`simulation-contact-handoff`](integrations/intel/README.md#contact-handoff-evidence-boundary)
 MuJoCo path: a contact-grounded `cup_1` transfer with a deterministic 10/10
-acceptance gate and retained randomized receipts. This proves the handoff
-mechanism, not general table setting, camera-driven perception, hardware
-execution, or transfer of every tableware class.
+acceptance gate and retained randomized receipts. The wider variation sweep is
+now a robustness result: **6/20** successful handoffs under position,
+orientation, handoff-point, and receiving-posture variation. That is an
+engineering envelope for recovery and receiver targeting, not an absence of
+bimanual capability. The remaining ugly physical corner is flat/deformable
+napkin handling; it is an object-manipulation problem, not a missing
+architecture. See the [contact-honesty note](docs/contact-honesty-2026-09-13.md)
+and [handoff variation evidence](evidence/benchmark_results/handoff_variation_2026-09-13/README.md).
 
 ### Closed-loop demo acceptance
 
@@ -252,19 +316,25 @@ Set `OMNIQ_RECEIPTS_DIR` to keep per-run evidence bundles (inputs, graph,
 actions, metrics, hashes — verifiable via `verify_ledger`) instead of the
 default temp location.
 
-To run the judge-facing UI and its mock session event stream:
+To run the judge-facing UI and its default mock session event stream:
 
 ```bash
 PYTHONPATH=src python -m omni_q.server
 # open http://127.0.0.1:8770
 ```
 
-The UI is deliberately labelled **MOCK / NO HARDWARE**. It renders runtime
-metadata, current table-setting observations, planner decisions, dependency-
-aware graph steps, reconnectable event streams, and the full receipt summary.
-See
-[`docs/ui.md`](docs/ui.md) for the screen map, live constraint behavior, and
-the boundary between the frontend event surface and real provider work.
+The default objective-only UI is deliberately labelled **MOCK / NO HARDWARE**.
+Selecting a profile shows **TABLEOPS PROFILE / SIMULATED** and keeps the same
+no-hardware boundary while adding desired-state diff and profile-report
+evidence. To wire the same front end to the Intel MuJoCo session factory, set
+`OMNIQ_UI_RUNTIME=intel`; add `OMNIQ_OMNI_REASONER=omni` plus the matched
+checkpoint and receipt to use the identity-gated OMNI reasoner. This remains
+simulation-only and does not activate hardware. The UI renders runtime
+metadata, profile/current-state residuals, table-setting observations, planner
+decisions, dependency-aware graph steps, reconnectable event streams, and the
+full receipt summary. See [`docs/ui.md`](docs/ui.md) for the profile API,
+screen map, live constraint behavior, and the boundary between the frontend
+event surface and real provider work.
 
 ## Working the backlog
 
@@ -277,6 +347,15 @@ the boundary between the frontend event surface and real provider work.
   measured SO-101 joint limits, gripper range, wrist-roll travel, and reach from the pinned MuJoCo model (OQ-003)
 - [`integrations/intel/flourish_envelope.md`](integrations/intel/flourish_envelope.md) —
   measured joint-velocity, grip-force, and bimanual shared-workspace bounds, with the OQ-014 spin trial protocol (OQ-026 pre-work)
+- [`docs/contact-honesty-2026-09-13.md`](docs/contact-honesty-2026-09-13.md) —
+  current contact defaults, the 6/20 handoff robustness envelope, the HF OMNI
+  checkpoint provenance, and the remaining camera/re-authorization boundary
+- [`evidence/benchmark_results/handoff_variation_2026-09-13/README.md`](evidence/benchmark_results/handoff_variation_2026-09-13/README.md) —
+  20 retained handoff receipts showing the wider-variation success/failure
+  envelope rather than only the tuned 10/10 case
+- [`evidence/benchmark_results/flat_object_grasp_2026-09-13/README.md`](evidence/benchmark_results/flat_object_grasp_2026-09-13/README.md) —
+  evidence for the thin, flat, and deformable-object manipulation corner,
+  including the remaining napkin gap
 - [`evidence/benchmark_results/intel_table_eval_2026-09-10-v2/README.md`](evidence/benchmark_results/intel_table_eval_2026-09-10-v2/README.md) —
   ten seeded legacy table-setting trials with retained, hash-checked receipts; all grasp failures are preserved as exploratory evidence
 - [`evidence/benchmark_results/yolo_host_baseline_2026-09-10/README.md`](evidence/benchmark_results/yolo_host_baseline_2026-09-10/README.md) —

@@ -2384,6 +2384,7 @@ def build_intel_sim_engine(
     *,
     recorder: Any | None = None,
     envelope: MissionEnvelope | None = None,
+    bus: Any | None = None,
 ) -> OmniQ:
     """Construct the explicitly labelled Intel simulation path."""
     scene_config = scene_config or IntelSceneConfig()
@@ -2402,6 +2403,7 @@ def build_intel_sim_engine(
         device=intel_devices(),
         recorder=recorder or FakeRecorder(),
         envelope=envelope,
+        bus=bus,
     )
 
 

@@ -1,0 +1,28 @@
+profile: formal_dinner_v3
+venue: example_banquet_room
+guest_count: 4
+place_setting:
+  plate:
+    relationship: seat_datum
+    tolerance_mm: 3
+  fork:
+    relationship: plate_left
+    spacing_mm: 22
+    tolerance_mm: 3
+  knife:
+    relationship: plate_right
+    blade: inward
+    tolerance_mm: 3
+  water_glass:
+    enabled: true
+    relationship: plate_upper_right
+  wine_glass:
+    enabled: true
+    relationship: water_glass
+  napkin:
+    style: folded
+    relationship: seat_datum
+    tolerance_mm: 5
+constraints:
+  preserve_guest_customizations: true
+  human_zone: protected

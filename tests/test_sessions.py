@@ -52,3 +52,10 @@ def test_unknown_session_cannot_receive_a_constraint():
     manager = SessionManager(build_mock_engine)
     with pytest.raises(SessionError, match="unknown session"):
         manager.add_constraint("not-a-session", "keep_local", None, justification="operator request")
+
+
+def test_profile_selection_fails_closed_when_a_factory_does_not_implement_profiles():
+    manager = SessionManager(build_mock_engine)
+
+    with pytest.raises(SessionError, match="profile is unsupported"):
+        manager.create(profile="formal_dinner_v3")

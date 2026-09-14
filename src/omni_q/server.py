@@ -1,16 +1,23 @@
 """Session-scoped SSE bridge for the judge-facing Omni Q UI.
 
-``POST /sessions`` starts one explicit mock session. Constraints are scoped to
-that session and require an operator justification. ``GET /sessions/<id>/events``
-replays causal events after a numeric cursor so a browser can reconnect without
-silently dropping or duplicating state. ``GET /sessions/<id>/receipt`` returns
-the full parent-chained receipt once the run is terminal.
+``POST /sessions`` starts one explicit session. The safe default is the mock
+runtime; ``OMNIQ_UI_RUNTIME=intel`` selects the Intel MuJoCo runtime, and the
+existing ``OMNIQ_OMNI_REASONER`` setting selects rule, mock-reasoner, or the
+identity-gated OMNI reasoner within that runtime. Constraints are scoped to
+the session and require an operator justification. ``GET
+/sessions/<id>/events`` replays causal events after a numeric cursor so a
+browser can reconnect without silently dropping or duplicating state.
+``GET /sessions/<id>/receipt`` returns the full parent-chained receipt once the
+run is terminal. ``GET /profiles`` exposes the checked-in venue/event profile
+catalog used by the product UI; a selected profile is passed in the
+``POST /sessions`` body as ``profile``.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -21,7 +28,124 @@ from .nlu import parse
 from .sessions import SessionError, SessionManager
 
 
-_sessions = SessionManager(build_mock_engine)
+def _configured_runtime() -> str:
+    value = os.environ.get("OMNIQ_UI_RUNTIME", "mock").strip().lower()
+    aliases = {
+        "": "mock",
+        "mock": "mock",
+        "intel": "intel",
+        "intel-sim": "intel",
+        "intel_sim": "intel",
+    }
+    return aliases.get(value, value)
+
+
+def _intel_engine_factory(bus):
+    """Build the opt-in Intel session without importing MuJoCo by default."""
+    from .intel_sim import IntelSimulationUnavailable, build_intel_sim_engine
+
+    try:
+        engine = build_intel_sim_engine(bus=bus)
+    except IntelSimulationUnavailable as exc:
+        raise ValueError(f"Intel MuJoCo runtime unavailable: {exc}") from exc
+
+    from .scheduler import ScheduledPlanner
+
+    fallback = ScheduledPlanner(engine.planner)
+    reasoner_mode = os.environ.get("OMNIQ_OMNI_REASONER", "off").strip().lower()
+    if reasoner_mode in {"", "0", "off", "rule"}:
+        engine.planner = fallback
+        return engine
+
+    from .omni_planner import OmniPlanner
+
+    if reasoner_mode == "mock":
+        from .omni_reasoner import MockReasoner
+
+        reasoner = MockReasoner()
+    elif reasoner_mode == "omni":
+        from .omni_reasoner import OmniReferenceReasoner
+
+        checkpoint = os.environ.get("OMNIQ_OMNI_CHECKPOINT")
+        receipt = os.environ.get("OMNIQ_OMNI_RECEIPT")
+        if not checkpoint or not receipt:
+            raise ValueError(
+                "OMNIQ_OMNI_REASONER=omni requires OMNIQ_OMNI_CHECKPOINT "
+                "and OMNIQ_OMNI_RECEIPT"
+            )
+        reasoner = OmniReferenceReasoner(
+            checkpoint,
+            receipt,
+            device=os.environ.get("OMNIQ_OMNI_DEVICE", "cpu"),
+        )
+    else:
+        raise ValueError(f"unknown OMNIQ_OMNI_REASONER mode: {reasoner_mode!r}")
+
+    engine.planner = OmniPlanner(reasoner, fallback=fallback)
+    return engine
+
+
+def _ui_engine_factory(bus, *, profile=None):
+    """Build the selected runtime, optionally wrapped in a TableOps profile.
+
+    The profile wrapper adds desired-state diff and report evidence around the
+    existing OMNI-Q engine.  It does not replace the planner, authorization,
+    transition, verification, or receipt seams.
+    """
+    runtime = _configured_runtime()
+    if profile is None:
+        if runtime == "mock":
+            return build_mock_engine(bus)
+        if runtime == "intel":
+            return _intel_engine_factory(bus)
+        raise ValueError(
+            f"unknown OMNIQ_UI_RUNTIME={runtime!r}; expected 'mock' or 'intel'"
+        )
+
+    from .profiles import attach_profile, build_profile_engine, load_profile
+
+    reasoner_mode = os.environ.get("OMNIQ_OMNI_REASONER", "off").strip().lower()
+    checkpoint = os.environ.get("OMNIQ_OMNI_CHECKPOINT")
+    receipt = os.environ.get("OMNIQ_OMNI_RECEIPT")
+    device = os.environ.get("OMNIQ_OMNI_DEVICE", "cpu")
+    if runtime == "mock":
+        return build_profile_engine(
+            profile,
+            bus,
+            reasoner_mode=reasoner_mode,
+            checkpoint=checkpoint,
+            receipt=receipt,
+            device=device,
+        )
+    if runtime == "intel":
+        # Intel profile execution is intentionally an evidence wrapper around
+        # the existing simulation world.  Any profile items absent from that
+        # world remain unresolved in the receipt; we do not synthesize them.
+        return attach_profile(_intel_engine_factory(bus), load_profile(profile))
+    raise ValueError(
+        f"unknown OMNIQ_UI_RUNTIME={runtime!r}; expected 'mock' or 'intel'"
+    )
+
+
+def _health_payload() -> dict[str, object]:
+    runtime = _configured_runtime()
+    if runtime == "mock":
+        environment = "Mock session · no hardware"
+    elif runtime == "intel":
+        environment = "Intel MuJoCo simulation · no hardware"
+    else:
+        environment = f"Unrecognized runtime · {runtime}"
+    return {
+        "ok": runtime in {"mock", "intel"},
+        "runtime": runtime,
+        "environment": environment,
+        "execution": "simulated",
+        "hardware": False,
+        "reasoner": os.environ.get("OMNIQ_OMNI_REASONER", "off").strip().lower() or "off",
+    }
+
+
+_sessions = SessionManager(_ui_engine_factory)
 _UI_ROOT = Path(__file__).resolve().parents[2] / "ui"
 _STATIC_FILES = {
     "/": ("index.html", "text/html; charset=utf-8"),
@@ -62,7 +186,20 @@ class Handler(BaseHTTPRequestHandler):
         if self._static(parsed.path):
             return
         if parsed.path == "/health":
-            return self._json(200, {"ok": True, "mode": "mock"})
+            payload = _health_payload()
+            return self._json(200 if payload["ok"] else 503, {
+                **payload,
+                "mode": payload["runtime"],
+            })
+
+        if parsed.path == "/profiles":
+            try:
+                from .profiles import list_profiles
+
+                profiles = [profile.as_dict() for profile in list_profiles()]
+            except ValueError as exc:
+                return self._json(500, {"error": str(exc)})
+            return self._json(200, {"profiles": profiles})
 
         segments = [part for part in parsed.path.split("/") if part]
         if len(segments) == 2 and segments[0] == "sessions":
@@ -155,9 +292,15 @@ class Handler(BaseHTTPRequestHandler):
         goal = body.get("goal", "set the table")
         if not isinstance(goal, str) or not goal.strip():
             return self._json(400, {"error": "goal must be a non-empty string"})
+        profile = body.get("profile")
+        if profile == "":
+            profile = None
+        if profile is not None and not isinstance(profile, str):
+            return self._json(400, {"error": "profile must be a string or null"})
         instruction = parse(goal)
-        session = _sessions.create()
+        session = None
         try:
+            session = _sessions.create(profile=profile)
             for kind, value in instruction.constraints:
                 _sessions.add_constraint(
                     session.session_id,
@@ -176,7 +319,10 @@ class Handler(BaseHTTPRequestHandler):
                 )
             _sessions.start(session.session_id, instruction.goal)
         except (SessionError, ValueError) as exc:
-            return self._json(400, {"error": str(exc), "session_id": session.session_id})
+            payload = {"error": str(exc)}
+            if session is not None:
+                payload["session_id"] = session.session_id
+            return self._json(400, payload)
         return self._json(202, {
             **_sessions.summary(session.session_id),
             "instruction": instruction.as_dict(),
@@ -200,7 +346,11 @@ def main() -> None:
     ap.add_argument("--port", type=int, default=8770)
     args = ap.parse_args()
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    print(f"omni-q SSE bridge on http://127.0.0.1:{args.port}  (mock mode)")
+    config = _health_payload()
+    print(
+        f"omni-q SSE bridge on http://127.0.0.1:{args.port}  "
+        f"({config['runtime']} runtime; {config['reasoner']} reasoner)"
+    )
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

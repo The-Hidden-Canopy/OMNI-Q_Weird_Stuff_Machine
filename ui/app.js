@@ -16,6 +16,9 @@ const state = {
   verifiedSteps: new Set(),
   hash: "",
   runtime: {},
+  profile: null,
+  profiles: [],
+  profileDiff: null,
   observation: null,
   constraints: [],
   latestDecision: null,
@@ -91,6 +94,115 @@ function humanObject(objectId) {
   return item ? `${label(item.cls)} / ${objectId}` : objectId || "workspace";
 }
 
+function profileTitle(profile) {
+  if (!profile) return "No profile selected";
+  const guestCount = profile.guest_count ? ` · ${profile.guest_count} guest${profile.guest_count === 1 ? "" : "s"}` : "";
+  return `${label(profile.profile || profile.profile_id)}${guestCount}`;
+}
+
+function selectedProfile() {
+  const id = $("#profile")?.value;
+  return state.profiles.find((profile) => (profile.profile || profile.profile_id) === id) || null;
+}
+
+function updateProfileHeader() {
+  const profile = state.profile || selectedProfile();
+  setText("#profile-label", profileTitle(profile));
+  setText("#mission-title", profile ? profileTitle(profile) : "Set the table.");
+  const report = state.receipt?.metrics?.profile_report;
+  let status = "STANDBY";
+  if (report?.status) status = report.status;
+  else if (state.status === "running") status = state.profileDiff?.residual_count ? "RECONFIGURING" : "VERIFYING";
+  else if (state.status === "failed") status = "ATTENTION REQUIRED";
+  setText("#profile-status", status);
+}
+
+function profileDiffFromObservation(observation) {
+  const profile = state.profile;
+  if (!profile || !observation) return null;
+  const detections = new Map((observation.detections || []).map((detection) => [detection.object_id, detection]));
+  const residuals = [];
+  let satisfied = 0;
+  const items = profile.place_setting || {};
+  for (let seat = 1; seat <= Number(profile.guest_count || 0); seat += 1) {
+    for (const [cls, item] of Object.entries(items)) {
+      if (item?.enabled === false) continue;
+      const objectId = `${cls}_${seat}`;
+      const requirementId = `seat_${seat}.${cls}`;
+      const targetZone = `setting_${seat}`;
+      const detection = detections.get(objectId);
+      if (!detection) {
+        residuals.push({ kind: "missing", requirement_id: requirementId, object_id: objectId, cls, seat, current_zone: null, target_zone: targetZone, reason: "required object was not observed", actionable: false });
+      } else if (statusValue(detection.status) !== "LIVE") {
+        residuals.push({ kind: "stale", requirement_id: requirementId, object_id: objectId, cls, seat, current_zone: detection.zone, target_zone: targetZone, reason: `observation status is ${statusValue(detection.status)}`, actionable: false });
+      } else if (detection.zone !== targetZone) {
+        residuals.push({ kind: "misplaced", requirement_id: requirementId, object_id: objectId, cls, seat, current_zone: detection.zone, target_zone: targetZone, reason: "observed zone differs from desired seat zone", actionable: true });
+      } else {
+        satisfied += 1;
+      }
+    }
+  }
+  return {
+    profile_id: profile.profile || profile.profile_id,
+    required_count: Number(profile.required_count || satisfied + residuals.length),
+    satisfied_count: satisfied,
+    residual_count: residuals.length,
+    actionable_count: residuals.filter((residual) => residual.actionable).length,
+    resolved: residuals.length === 0,
+    residuals,
+    metric_verification_gaps: [],
+  };
+}
+
+function renderProfileDiff(diff) {
+  if (!diff) return;
+  state.profileDiff = diff;
+  setText("#profile-progress", `${diff.satisfied_count ?? 0}/${diff.required_count ?? 0}`);
+  const target = $("#profile-exceptions");
+  if (!target) return;
+  const residuals = Array.isArray(diff.residuals) ? diff.residuals : [];
+  target.hidden = residuals.length === 0;
+  target.innerHTML = residuals.length
+    ? `<span class="profile-exceptions-label">CURRENT EXCEPTIONS</span>${residuals.slice(0, 4).map((residual) => `<div><strong>Seat ${escapeHtml(residual.seat)} · ${escapeHtml(label(residual.cls))}</strong><span>${escapeHtml(label(residual.kind))} · ${escapeHtml(residual.reason || "requires attention")}</span></div>`).join("")}${residuals.length > 4 ? `<small>+ ${residuals.length - 4} more in the mission diff</small>` : ""}`
+    : "";
+}
+
+function renderProfileReport(report) {
+  const target = $("#profile-report");
+  if (!target) return;
+  if (!report) {
+    target.hidden = true;
+    updateProfileHeader();
+    return;
+  }
+  target.hidden = false;
+  const statusNode = $("#profile-report-status");
+  if (statusNode) {
+    const symbolic = report.verification_scope && report.verification_scope !== "metric";
+    statusNode.textContent = report.status === "COMPLETE" && symbolic ? "COMPLETE · SYMBOLIC" : (report.status || "REVIEW");
+    statusNode.className = report.status === "COMPLETE" ? (symbolic ? "warn" : "success") : "danger";
+  }
+  setText("#report-required", report.required_placements ?? "—");
+  setText("#report-first-pass", report.first_pass_correct ?? "—");
+  setText("#report-corrected", report.self_corrected ?? "—");
+  setText("#report-interventions", report.human_interventions ?? "—");
+  setText("#report-replans", report.replans ?? "—");
+  setText("#report-retries", report.grasp_retries ?? "—");
+  setText("#report-unresolved", report.unresolved ?? "—");
+  setText("#report-compliance", report.final_compliance ?? "—");
+  const gaps = Array.isArray(report.metric_verification_gaps) ? report.metric_verification_gaps : [];
+  setText("#profile-report-gap", gaps.length ? `Metric verification limits remain: ${gaps.join("; ")}` : "");
+  const residuals = report.final_diff?.residuals || [];
+  const exceptions = $("#profile-report-exceptions");
+  if (exceptions) {
+    exceptions.innerHTML = residuals.length
+      ? `<span class="profile-exceptions-label">UNRESOLVED</span>${residuals.map((residual) => `<div>${escapeHtml(residual.object_id)} · ${escapeHtml(residual.reason || residual.kind)}</div>`).join("")}`
+      : "No unresolved profile residuals.";
+  }
+  if (report.final_diff) renderProfileDiff(report.final_diff);
+  updateProfileHeader();
+}
+
 function setConnection(text, tone = "") {
   const bar = $("#connection");
   if (!bar) return;
@@ -118,13 +230,23 @@ function setMode(mode, runtime = state.runtime) {
   const badge = $("#mode");
   if (!badge) return;
   const raw = String(mode || runtime?.mode || "mock");
-  const isMock = raw.toLowerCase() === "mock" || runtime?.execution === "simulated";
-  const text = isMock ? "MOCK / NO HARDWARE" : `${label(raw).toUpperCase()} MODE`;
+  const isMock = raw.toLowerCase() === "mock";
+  const isSimulated = runtime?.execution === "simulated";
+  const displayMode = raw.toLowerCase().startsWith("simulation-")
+    ? "INTEL MUJOCO"
+    : label(raw).toUpperCase();
+  const text = isMock
+    ? "MOCK / NO HARDWARE"
+    : isSimulated
+      ? `${displayMode} / SIMULATED`
+      : `${displayMode} MODE`;
   badge.innerHTML = `<span class="mode-dot"></span> ${escapeHtml(text)}`;
-  badge.className = `mode-badge ${isMock ? "mock" : ""}`.trim();
+  badge.className = `mode-badge ${isMock ? "mock" : isSimulated ? "simulated" : ""}`.trim();
   badge.title = isMock
     ? "This judge surface is connected to a synthetic session; no hardware is being controlled."
-    : `Runtime mode: ${raw}`;
+    : isSimulated
+      ? `Runtime mode: ${raw}; simulation only, no hardware is being controlled.`
+      : `Runtime mode: ${raw}`;
 }
 
 function runtimeDefaults() {
@@ -205,9 +327,8 @@ function setRuntime(runtime = {}) {
   renderCapabilityRows(state.runtime.capabilities, $("#sidebar-capabilities"));
   setText("#sidebar-node-count", state.runtime.capabilities.length);
   renderDevices(state.runtime);
-  const environment = state.runtime.execution === "simulated"
-    ? "Mock session · no hardware"
-    : state.runtime.environment || "Configured runtime";
+  const environment = state.runtime.environment
+    || (state.runtime.execution === "simulated" ? "Simulated session · no hardware" : "Configured runtime");
   setText("#environment-label", environment);
   setText("#safety-label", state.runtime.safety || "Mission envelope ready");
   setMode(state.runtime.mode, state.runtime);
@@ -228,6 +349,8 @@ function resetView() {
   state.verifiedSteps.clear();
   state.hash = "";
   state.runtime = {};
+  state.profile = null;
+  state.profileDiff = null;
   state.observation = null;
   state.constraints = [];
   state.latestDecision = null;
@@ -262,11 +385,16 @@ function resetView() {
   setText("#receipt-run-id", "RUN —");
   setText("#receipt-parent", "PARENT GENESIS");
   setText("#receipt-provenance", "PROVENANCE PENDING");
+  $("#profile-report").hidden = true;
+  $("#profile-report-exceptions").innerHTML = "";
+  $("#profile-exceptions").hidden = true;
+  setText("#profile-progress", "—");
   setText("#run-clock", "00:00");
   $(".live-clock")?.classList.add("running");
   $("#apply-constraint").disabled = false;
   $("#reconnect").hidden = true;
   setRuntime(runtimeDefaults());
+  updateProfileHeader();
   setReason("Waiting for the first observation.");
   updateConstraintControl();
   updatePhases();
@@ -318,6 +446,7 @@ function updateProgress() {
     : total ? Math.min(96, Math.round((done / total) * 100)) : 0;
   $("#progress-bar").style.width = `${percent}%`;
   setText("#progress-label", `${percent}% COMPLETE`);
+  updateProfileHeader();
 }
 
 function objectPosition(detection, index, observation = {}) {
@@ -368,6 +497,7 @@ function renderObservation(data) {
   const observation = data.observation || {};
   const detections = Array.isArray(observation.detections) ? observation.detections : [];
   state.observation = observation;
+  if (state.profile) renderProfileDiff(profileDiffFromObservation(observation));
   state.objectById = new Map(detections.map((item) => [item.object_id, item]));
   updateObjectOptions(detections);
   const misplaced = detections.filter(isMisplaced);
@@ -488,7 +618,7 @@ function setReason(text) {
 
 function eventTone(kind, data = {}) {
   if (["run.finished", "step.finished"].includes(kind) || (kind === "verified" && data.ok)) return "ok";
-  if (["graph.recompiled", "constraint.queued", "constraint.added", "mode.changed", "plan.decision", "world.perturbed"].includes(kind)) return "warn";
+  if (["profile.loaded", "mission.diff", "graph.recompiled", "constraint.queued", "constraint.added", "mode.changed", "plan.decision", "world.perturbed"].includes(kind)) return "warn";
   if (["step.denied", "capability.lost", "placement.failed", "authorization.failed", "execution.interrupt.requested"].includes(kind) || (kind === "verified" && !data.ok)) return "danger";
   return "";
 }
@@ -546,7 +676,17 @@ function handleEvent(event) {
   const data = event.data || {};
   state.events.push(event);
   const tone = eventTone(event.kind, data);
-  if (event.kind === "run.started") {
+  if (event.kind === "profile.loaded") {
+    state.profile = data.profile || null;
+    renderProfileDiff(state.profileDiff);
+    updateProfileHeader();
+    appendTrace(`${profileTitle(state.profile)} loaded; the desired state is now the mission boundary.`, "warn", "profile loaded");
+  } else if (event.kind === "mission.diff") {
+    renderProfileDiff(data.diff || null);
+    const residualCount = data.diff?.residual_count ?? data.diff?.residuals?.length ?? 0;
+    setReason(residualCount ? `${residualCount} profile residual${residualCount === 1 ? "" : "s"} require a governed route.` : "The observed workspace already matches the selected profile.");
+    appendTrace(residualCount ? `${residualCount} profile residual${residualCount === 1 ? "" : "s"} found before execution.` : "Profile diff is clear before execution.", residualCount ? "warn" : "ok", "mission diff");
+  } else if (event.kind === "run.started") {
     setConnection(`Session ${state.sessionId} is executing a governed mission.`, "running");
     setReason("Mission envelope accepted. OMNI-Q is observing before it commits a plan.");
     appendTrace(`Mission committed: “${data.goal || "operator objective"}”.`, "ok", "run started");
@@ -602,12 +742,14 @@ function renderReceipt(receipt) {
   if (!receipt) return;
   state.receipt = receipt;
   const metrics = receipt.metrics || {};
+  const profileReport = metrics.profile_report;
   state.hash = receipt.content_hash || receipt.hashes?.content || state.hash;
-  const resolved = metrics.resolved === true;
+  const resolved = metrics.resolved === true && (!profileReport || profileReport.status === "COMPLETE");
   const review = metrics.resolved === false;
   setStatus("#receipt-state", resolved ? "FINALIZED" : review ? "REVIEW" : "PENDING", resolved ? "success" : review ? "danger" : "warn");
-  setText("#receipt-title", resolved ? "Mission verified" : review ? "Mission needs review" : "Mission receipt available");
-  setText("#receipt-copy", resolved ? "The final state passed verification and the receipt was sealed." : "The run ended without a fully resolved workspace; inspect the evidence.");
+  const symbolic = profileReport?.verification_scope && profileReport.verification_scope !== "metric";
+  setText("#receipt-title", resolved ? symbolic ? "Mission complete · symbolic zones" : "Mission verified" : review ? "Mission needs review" : "Mission receipt available");
+  setText("#receipt-copy", resolved ? symbolic ? "The selected profile is complete at symbolic-zone scope; metric tolerance remains unverified." : "The final state passed verification and the receipt was sealed." : "The run ended without a fully resolved workspace; inspect the evidence.");
   $("#receipt-icon").className = `receipt-icon ${resolved ? "success" : review ? "failed" : ""}`.trim();
   $("#receipt-icon").textContent = resolved ? "✓" : review ? "!" : "◌";
   setText("#receipt-hash", shortHash(state.hash));
@@ -622,18 +764,23 @@ function renderReceipt(receipt) {
   setText("#receipt-parent", `PARENT ${shortHash(receipt.parent_hash || "GENESIS")}`);
   const provenance = receipt.provenance || {};
   setText("#receipt-provenance", `PROVENANCE ${provenance.component || provenance.source || "RECORDED"}`);
+  renderProfileReport(metrics.profile_report);
   updateProgress();
 }
 
 function finishRun(data) {
   state.status = "finished";
   const metrics = data.metrics || {};
+  const profileReport = metrics.profile_report;
+  const profileComplete = !profileReport || profileReport.status === "COMPLETE";
+  const resolved = metrics.resolved === true && profileComplete;
   state.hash = data.content_hash || state.hash;
-  setConnection(metrics.resolved ? "Mission finished. The workspace is resolved." : "Mission finished with unresolved state; review the audit trail.", metrics.resolved ? "running" : "failed");
+  setConnection(resolved ? "Mission finished. The selected profile is resolved." : "Mission finished with unresolved state; review the audit trail.", resolved ? "running" : "failed");
   setText("#run-clock", "COMPLETE");
   $(".live-clock")?.classList.remove("running");
-  setReason(metrics.resolved ? "Closed-loop verification passed. This mission is complete." : "The loop closed, but the final state needs operator review.");
-  appendTrace(metrics.resolved ? "Receipt finalized · mission resolved." : "Receipt finalized · unresolved state recorded.", metrics.resolved ? "ok" : "danger", "run finished");
+  setReason(resolved ? profileReport?.verification_scope === "metric" ? "Closed-loop verification passed with metric pose evidence." : profileReport ? "The profile is complete at symbolic-zone scope; metric tolerance remains unverified." : "Closed-loop verification passed. This mission is complete." : "The loop closed, but the final state needs operator review.");
+  appendTrace(resolved ? "Receipt finalized · mission resolved." : "Receipt finalized · unresolved state recorded.", resolved ? "ok" : "danger", "run finished");
+  renderProfileReport(metrics.profile_report);
   renderReceipt({ metrics, content_hash: state.hash, run_id: data.run_id, parent_hash: data.parent_hash, provenance: data.provenance });
   void loadReceipt();
 }
@@ -724,6 +871,55 @@ async function loadReceipt() {
   }
 }
 
+async function loadHealth() {
+  try {
+    const response = await fetch("/health");
+    const payload = await response.json();
+    if (!response.ok) {
+      setText("#environment-label", payload.environment || "Runtime unavailable");
+      setText("#safety-label", "Runtime configuration needs attention");
+      return;
+    }
+    const runtime = {
+      mode: payload.runtime || payload.mode || "mock",
+      execution: payload.execution || "simulated",
+      environment: payload.environment,
+      reasoner: payload.reasoner,
+    };
+    state.runtime = { ...state.runtime, ...runtime };
+    setText("#environment-label", runtime.environment || "Configured runtime");
+    setMode(runtime.mode, runtime);
+    setText("#safety-label", payload.hardware === false
+      ? "Simulation only · no hardware control"
+      : "Mission envelope ready");
+  } catch {
+    setText("#environment-label", "Server health unavailable");
+    setText("#safety-label", "Start the session server to connect");
+  }
+}
+
+async function loadProfiles() {
+  const select = $("#profile");
+  if (!select) return;
+  try {
+    const response = await fetch("/profiles");
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "profile catalog unavailable");
+    state.profiles = Array.isArray(payload.profiles) ? payload.profiles : [];
+    select.innerHTML = `<option value="">Objective only</option>${state.profiles.map((profile) => {
+      const id = profile.profile || profile.profile_id;
+      return `<option value="${escapeHtml(id)}">${escapeHtml(profileTitle(profile))}</option>`;
+    }).join("")}`;
+    if (state.profiles.some((profile) => (profile.profile || profile.profile_id) === "formal_dinner_v3")) {
+      select.value = "formal_dinner_v3";
+    }
+    updateProfileHeader();
+  } catch (error) {
+    appendTrace(`Profile catalog unavailable: ${error.message}`, "warn", "profiles");
+    setText("#profile-help", "No profile catalog is available; objective-only mode remains usable.");
+  }
+}
+
 async function start(event) {
   event?.preventDefault();
   const button = $("#start");
@@ -742,11 +938,17 @@ async function start(event) {
     const response = await fetch("/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ goal: $("#goal").value.trim(), constraints: constraint ? [constraint] : [] }),
+      body: JSON.stringify({
+        goal: $("#goal").value.trim(),
+        profile: $("#profile")?.value || null,
+        constraints: constraint ? [constraint] : [],
+      }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "session failed to start");
     state.sessionId = payload.session_id;
+    state.profile = payload.profile || payload.runtime?.profile || selectedProfile();
+    updateProfileHeader();
     setText("#session-label", state.sessionId);
     setRuntime(payload.runtime || {});
     setMode(payload.mode || state.runtime.mode, state.runtime);
@@ -811,5 +1013,14 @@ $("#apply-constraint").addEventListener("click", applyConstraint);
 $("#reconnect").addEventListener("click", reconnect);
 $("#copy-hash").addEventListener("click", copyHash);
 $("#constraint-kind").addEventListener("change", updateConstraintControl);
+$("#profile").addEventListener("change", () => {
+  state.profile = selectedProfile();
+  state.profileDiff = null;
+  $("#profile-exceptions").hidden = true;
+  setText("#profile-progress", "—");
+  updateProfileHeader();
+});
 setRuntime(runtimeDefaults());
+void loadProfiles();
+void loadHealth();
 setInterval(updateClock, 1000);
