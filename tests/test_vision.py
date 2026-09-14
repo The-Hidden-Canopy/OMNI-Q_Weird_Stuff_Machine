@@ -82,10 +82,14 @@ def test_mujoco_camera_source_renders_a_real_frame():
     assert rot.shape == (3, 3)
 
 
-_MODEL_XML = Path(os.environ.get(
-    "OMNIQ_TEST_OPENVINO_MODEL",
-    "does-not-exist/model.xml",
-))
+def _default_model_xml() -> str:
+    # 2026-09-14: the detector trained on this scene, if it has been built
+    # (integrations/intel/scripts/train_table_yolo.py); newest first.
+    cands = sorted(Path("models").glob("table_yolo_v3_*_openvino_model/*.xml"))
+    return str(cands[-1]) if cands else "does-not-exist/model.xml"
+
+
+_MODEL_XML = Path(os.environ.get("OMNIQ_TEST_OPENVINO_MODEL", _default_model_xml()))
 
 
 @pytest.mark.skipif(not _MODEL_XML.exists(), reason=(

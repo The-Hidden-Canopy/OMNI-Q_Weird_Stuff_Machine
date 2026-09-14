@@ -556,3 +556,26 @@ spoken arm exclusion also remains an explicit follow-up boundary. The ugly
 napkin/flat-deformable case is tracked as an object-manipulation robustness
 problem in [the flat-object evidence](../../evidence/benchmark_results/flat_object_grasp_2026-09-13/README.md),
 not as missing fleet architecture.
+
+
+## Scene-trained detector (2026-09-14)
+
+The published `table_yolo_v2` detector finds nothing on the current overhead
+render — legacy proxies or realistic tableware, even at conf 0.05. The
+detector the demo runs is regenerated from the scene itself:
+
+```
+.venv/Scripts/python integrations/intel/scripts/make_table_yolo_dataset.py --out data/table_yolo_v3 --n 400
+.venv/Scripts/python integrations/intel/scripts/train_table_yolo.py --data data/table_yolo_v3/data.yaml --epochs 30
+.venv/Scripts/python integrations/intel/scripts/demo_camera_e2e.py --seed 903 --live
+```
+
+Every image is a render of the simulator (overhead + third-person camera,
+seed-varied positions/yaw/colour/lighting, random subsets of objects already
+set, an arm sometimes over the table); every label is the projection of the
+object's own geometry through that camera. Dataset and `.pt` weights are
+git-ignored; the OpenVINO IR lands in `models/table_yolo_v3_<date>_openvino_model/`
+with a `receipt.json` (val mAP, dataset size, IR sha256). Requires the CUDA
+`torchvision` matching the CUDA `torch` in the venv (`pip install
+--index-url https://download.pytorch.org/whl/cu126 torchvision==0.26.0+cu126`
+— the CPU wheel makes GPU NMS fail during validation).
