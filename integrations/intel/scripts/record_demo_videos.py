@@ -25,6 +25,7 @@ WRIST_GRID = ["third_person", "table_overhead", "left_wrist", "right_wrist"]
 # render-only free camera, front-left and closer than the fixed third_person view
 DIRECTOR = "free:150,-30,0.95,0,-0.12,0.05"
 DIRECTOR_GRID = [DIRECTOR, "table_overhead", "left_flank", "right_flank"]
+SIX = ["third_person", "table_overhead", "left_flank", "right_flank", "left_wrist", "right_wrist"]
 
 
 def _with_recorders(world, out: Path, stem: str, run, views):
@@ -150,12 +151,12 @@ def camera_e2e(seed: int):
 
 
 RUNS = {
-    "table_903": (table_trial, 903, [("third_person", "third_person"), ("grid", GRID), ("director", DIRECTOR)]),
+    "table_903": (table_trial, 903, [("third_person", "third_person"), ("grid", GRID), ("director", DIRECTOR), ("six_cameras", SIX)]),
     "table_911": (table_trial, 911, [("overhead", "table_overhead"), ("wrists", WRIST_GRID), ("director", DIRECTOR)]),
     "plate_901": (plate_only, 901, [("third_person", "third_person"), ("grid", GRID), ("director", DIRECTOR)]),
     "authority_901": (authority, 901, [("third_person", "third_person"), ("grid", GRID), ("director", DIRECTOR)]),
     "handoff_19": (handoff, 19, [("third_person", "handoff_third_person"), ("director", "free:160,-25,0.8,0,-0.10,0.08")]),
-    "camera_e2e_903": (camera_e2e, 903, [("third_person", "third_person"), ("grid", GRID), ("director_grid", DIRECTOR_GRID)]),
+    "camera_e2e_903": (camera_e2e, 903, [("third_person", "third_person"), ("grid", GRID), ("director_grid", DIRECTOR_GRID), ("six_cameras", SIX)]),
 }
 
 

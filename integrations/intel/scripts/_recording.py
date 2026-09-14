@@ -33,7 +33,8 @@ class Recorder:
         self._mujoco = mujoco
         w, h = size
         n = len(self.cameras)
-        self._tile = (w, h) if n == 1 else ((w // 2, h) if n == 2 else (w // 2, h // 2))
+        # 1 -> full frame; 2 -> side by side; 3-4 -> 2x2; 5-6 -> 3x2 (all six scene cameras)
+        self._tile = (w, h) if n == 1 else ((w // 2, h) if n == 2 else ((w // 2, h // 2) if n <= 4 else (w // 3, h // 2)))
         tw, th = self._tile
         self._renderer = mujoco.Renderer(world.model, height=th, width=tw)
         self._writer = cv2.VideoWriter(str(self.path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
@@ -72,8 +73,16 @@ class Recorder:
             bgr = tiles[0]
         elif len(tiles) == 2:
             bgr = np.concatenate(tiles, axis=1)
-        else:
+        elif len(tiles) <= 4:
+            while len(tiles) < 4:
+                tiles.append(np.zeros_like(tiles[0]))
             bgr = np.concatenate([np.concatenate(tiles[:2], axis=1), np.concatenate(tiles[2:4], axis=1)], axis=0)
+        else:
+            while len(tiles) < 6:
+                tiles.append(np.zeros_like(tiles[0]))
+            bgr = np.concatenate([np.concatenate(tiles[:3], axis=1), np.concatenate(tiles[3:6], axis=1)], axis=0)
+        if bgr.shape[1] != self.size[0] or bgr.shape[0] != self.size[1]:
+            bgr = self._cv2.resize(bgr, self.size)
         if self.label:
             self._cv2.putText(bgr, self.label, (16, self.size[1] - 16), self._cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, self._cv2.LINE_AA)
         self._writer.write(bgr)

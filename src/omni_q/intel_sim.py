@@ -1001,11 +1001,16 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
         # "<arm>_Fixed_Jaw" here, not "Fixed_Jaw".
         jaw = arm_body.find(f".//body[@name='{arm}_Fixed_Jaw']")
         if jaw is not None:
+            # Mount (2026-09-14): beside the fixed jaw on its +z side, at the
+            # finger base, aimed down the finger at the fingertip pads. The
+            # earlier mount (x=.045, looking -x) stared at the jaw's own body.
+            # Three candidates were rendered mid-descent over the cup; this one
+            # shows the pads and the object beneath them.
             ET.SubElement(jaw, "camera", {
                 "name": f"{arm}_wrist",
-                "pos": ".045 -.055 0",
-                "euler": "0 1.5708 0",
-                "fovy": "58",
+                "pos": ".012 -.010 .048",
+                "xyaxes": "0 -0.4706 0.8824 0.9983 -0.0518 -0.0276",
+                "fovy": "70",
             })
         worldbody.append(arm_body)
         for exclude in source_excludes:
