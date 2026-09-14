@@ -124,6 +124,17 @@ that window. Close it to exit.
 #    --record tmp/name.gif --camera third_person --every 40
 ```
 
+Pre-recorded MP4s of all of the above (single camera, 2x2 multi-camera grid,
+a closer "director" free-camera view, and a six-camera 3x2 layout with both
+wrist cameras) are produced by
+
+```
+.venv/Scripts/python integrations/intel/scripts/record_demo_videos.py
+```
+
+into `Desktop/OMNI-Q_demo_videos/` — deliberately outside the repo; do not
+commit videos. 720p, 25 fps, real-time pace, labelled per clip.
+
 What the sim is and is not: the arms, joint limits, servo torque limits and
 gripper are the vendored MuJoCo Menagerie SO-ARM100 (unchanged); every grasp
 is a real contact event (no welds, no teleports, no collision exemptions —
