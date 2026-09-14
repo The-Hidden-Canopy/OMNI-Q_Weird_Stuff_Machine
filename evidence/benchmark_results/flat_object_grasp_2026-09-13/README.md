@@ -65,3 +65,44 @@ at.
 Nothing here weakens the simulation: no collision exemptions, no teleports,
 the gripper commands its own joint range, and the cutlery is more realistic
 than the slab it replaces, not less.
+
+## Update: evidence-driven retry — spoon 7/10 → 10/10
+
+Same ten seeds, `after_evidence_retry.json`:
+
+| object | held | placed |
+| --- | --- | --- |
+| `cup_1` | 10 | 9 |
+| `plate_1` | 10 | — |
+| `fork_1` | 10 | 9 |
+| **`spoon_1`** | **10** | **10** |
+| `napkin_1` | 0 | 0 |
+
+The pick already retried on failure, but blindly — the same four wrist rolls
+whether the pads had touched nothing or had gripped and slipped. The retry
+now reads the previous attempt's `grasp_sensor` and chooses a correction for
+*that* failure, re-observing the object's live pose each time (it may have been
+nudged), bounded to four attempts:
+
+| evidence | correction |
+| --- | --- |
+| no pad contact | fingertips stopped above the object → descend 4 mm deeper, same roll |
+| contact but no lift | gripped and pivoted/slipped → regrasp 20 mm toward the head (balance point), 2 mm deeper |
+| stalled at a wide jaw angle | came down *on* the object → back off 6 mm, shift 15 mm |
+| otherwise | mirrored jaw / ±0.25 rad roll alternatives |
+
+Across the run the spoon fired 4 × `no_contact_descend` and 5 ×
+`slipped_regrasp_toward_head`; five of its ten picks were won by a retry. Every
+retry and the evidence that chose it is in the receipt under `retries`, and
+`orientation.lift.retry_reason` names the winning attempt.
+
+This is the primitive updating its own plan from observation. The engine-level
+replan (OQ-018: verify after every step, replan on mismatch) sits above it and
+is unchanged. Note the trial-level label is *still* `grasp_failure: 10`,
+because every trial includes the napkin — the label is all-or-nothing and now
+hides four objects at 10/10.
+
+**The napkin fired 76 retries and won none**: it gets pad contact
+(`slipped_regrasp`, 22×) but never lifts. A 6 mm rigid cloth slab with no
+narrow feature cannot be pinched by 8 mm fingertip pads from above. That is the
+next model change.

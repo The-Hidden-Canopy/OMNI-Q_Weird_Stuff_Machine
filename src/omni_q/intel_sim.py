@@ -1811,23 +1811,59 @@ class IntelTableWorld(MockWorld):
 
         lifted_z = float(self.data.qpos[qpos_adr + 2])
         lift = lifted_z - start_z
+        attempts_log: list[dict[str, Any]] = []
+        lift_pose: dict[str, Any] = {"position_error_m": round(lift_error, 6), "retry_reason": "first_attempt"}
         if lift <= 0.02:
             # A bounded orientation search is still physical: each candidate
             # starts from the exact pre-attempt simulator state and is judged
             # by lift height.  This handles mirrored jaw conventions and
             # small object-yaw errors without writing the object freejoint.
-            candidate_rolls = []
-            for candidate in (
-                self._GRASP_WRIST_ROLL[arm_offset],
-                -self._GRASP_WRIST_ROLL[arm_offset],
-                roll_hint - 0.25, roll_hint + 0.25,
-            ):
-                candidate = float(np.clip(candidate, -1.65, 1.65))
-                if all(abs(candidate - seen) > 1e-5 for seen in candidate_rolls):
-                    candidate_rolls.append(candidate)
-            for candidate in candidate_rolls:
-                if abs(candidate - roll_hint) < 1e-5:
-                    continue
+            # Evidence-driven retry. The previous attempt's grasp_sensor says
+            # *what kind* of failure it was, and each kind wants a different
+            # correction -- the fixed roll list this replaces tried the same
+            # four wrist rolls whether the pads had touched nothing or had
+            # gripped and slipped. Every retry re-reads the object's live pose
+            # (it may have been nudged) and is bounded to four attempts.
+            #   no contact      -> fingertips stopped above the object: descend
+            #                      deeper, same roll
+            #   contact, no lift-> gripped but pivoted/slipped: regrasp toward
+            #                      the head (balance point), squeeze deeper
+            #   stalled wide    -> came down ON the object: back off and shift
+            #   otherwise       -> roll alternatives (mirrored jaw, +/-0.25)
+            raw_yaw = self._object_yaw(obj)
+            along = np.array([-math.sin(raw_yaw), math.cos(raw_yaw)])  # +y of the body: toward the head
+            base_roll = self._GRASP_WRIST_ROLL[arm_offset]
+            roll_alternatives = [base_roll, -base_roll, roll_hint - 0.25, roll_hint + 0.25]
+            attempts_log: list[dict[str, Any]] = []
+            tried: list[tuple[float, float, float]] = []
+            last_sensor = grasp_sensor
+            last_lift = lift
+            for _attempt in range(4):
+                pads = int(last_sensor.get("contact_pad_count", 0))
+                stalled_wide = bool(last_sensor.get("jaw_stalled")) and (
+                    last_sensor.get("jaw_stall_angle_rad") or 0.0) > 0.5
+                if stalled_wide:
+                    reason, roll_c, dz, shift = "stalled_on_top", roll_hint, +0.006, 0.015
+                elif pads == 0:
+                    reason, roll_c, dz, shift = "no_contact_descend", roll_hint, -0.004, 0.0
+                elif last_lift < 0.02:
+                    reason, roll_c, dz, shift = "slipped_regrasp_toward_head", roll_hint, -0.002, 0.02
+                else:
+                    reason, roll_c, dz, shift = "roll_alternative", roll_hint, 0.0, 0.0
+                # If this exact correction was already tried, fall through the
+                # roll alternatives instead of repeating it.
+                key = (round(roll_c, 3), round(dz, 4), round(shift, 4))
+                if key in tried:
+                    reason = "roll_alternative"
+                    remaining = [r for r in roll_alternatives
+                                 if all(abs(float(np.clip(r, -1.65, 1.65)) - t[0]) > 1e-5 for t in tried)]
+                    if not remaining:
+                        break
+                    roll_c, dz, shift = remaining[0], 0.0, 0.0
+                    key = (round(roll_c, 3), round(dz, 4), round(shift, 4))
+                roll_c = float(np.clip(roll_c, -1.65, 1.65))
+                tried.append(key)
+
                 self._restore_physics(attempt_snapshot)
                 self._set_gripper(arm_offset, GRIPPER_OPEN)
                 self._move_to(arm_offset, (grasp_xy[0], grasp_xy[1], clear_z))
@@ -1838,33 +1874,41 @@ class IntelTableWorld(MockWorld):
                     self._mujoco.mj_forward(self.model, self.data)
                 self._ik_reach_pad(
                     arm_offset, (grasp_xy[0], grasp_xy[1], clear_z),
-                    iters=220, roll=candidate,
+                    iters=220, roll=roll_c,
                 )
                 target_rotation = self.data.geom_xmat[self._pad_geom[arm_offset]].reshape(3, 3).copy()
                 self._ik_reach_pad_pose(
                     arm_offset, (xy[0], xy[1], clear_z), target_rotation,
-                    roll_hint=candidate, iters=120,
+                    roll_hint=roll_c, iters=120,
                 )
-                xy_retry = self.data.qpos[qpos_adr:qpos_adr + 2].copy()
+                xy_retry = self.data.qpos[qpos_adr:qpos_adr + 2].copy()  # re-observe: it may have moved
                 z_retry = float(self.data.qpos[qpos_adr + 2])
-                grasp_z_retry = z_retry + OBJECT_GRASP_VERTICAL_OFFSET.get(obj, 0.0)
-                grasp_xy_retry = xy_retry - opening_xy * grasp_offset
+                grasp_z_retry = z_retry + OBJECT_GRASP_VERTICAL_OFFSET.get(obj, 0.0) + dz
+                grasp_xy_retry = xy_retry - opening_xy * grasp_offset + along * shift
                 self._ik_reach_pad(
                     arm_offset, (grasp_xy_retry[0], grasp_xy_retry[1], grasp_z_retry),
-                    iters=180, roll=candidate,
+                    iters=180, roll=roll_c,
                 )
                 retry_sensor = self._set_gripper(arm_offset, GRIPPER_CLOSED, settle_steps=180, obj=obj)
                 self._ik_reach_pad(
                     arm_offset,
                     (grasp_xy_retry[0], grasp_xy_retry[1], grasp_z_retry + lift_rise),
-                    iters=280, roll=candidate,
+                    iters=280, roll=roll_c,
                 )
                 retry_lift = float(self.data.qpos[qpos_adr + 2]) - start_z
+                attempts_log.append({
+                    "reason": reason, "roll_rad": round(roll_c, 4), "dz_m": dz,
+                    "shift_toward_head_m": shift, "lift_m": round(retry_lift, 4),
+                    "contact_pad_count": retry_sensor["contact_pad_count"],
+                    "max_contact_force_n": retry_sensor["max_contact_force_n"],
+                })
+                last_sensor, last_lift = retry_sensor, retry_lift
                 if retry_lift > lift:
                     grasp_sensor = retry_sensor  # evidence from the attempt that actually won
                     lift = retry_lift
-                    lift_pose = {"position_error_m": round(lift_error, 6), "retry_roll_rad": round(candidate, 6)}
-                    roll_hint = candidate
+                    lift_pose = {"position_error_m": round(lift_error, 6), "retry_roll_rad": round(roll_c, 6),
+                                 "retry_reason": reason}
+                    roll_hint = roll_c
                 if lift > 0.02:
                     break
         return {
@@ -1877,10 +1921,15 @@ class IntelTableWorld(MockWorld):
             # GraspEvidence -- contact_pad_count and max_contact_force_n map
             # straight across.
             "grasp_sensor": grasp_sensor,
+            # Every retry, with the evidence that chose it. This is the
+            # primitive updating its own plan from observation rather than
+            # cycling a fixed list; the engine-level replan (OQ-018) sits
+            # above it.
+            "retries": attempts_log if lift <= 0.02 or attempts_log else [],
             "orientation": {
                 "clearance": clear_pose,
                 "pinch": pinch_pose,
-                "lift": {"position_error_m": round(lift_error, 6)},
+                "lift": lift_pose,
                 "roll_hint_rad": round(roll_hint, 6),
             },
             "safety": {"approach": approach_safety},
