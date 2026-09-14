@@ -259,3 +259,49 @@ stands; an earlier suspicion that they were a local addition was wrong).
 Menagerie has no SO-101 model, and neither the LeRobot SO-101 page nor
 roboticscenter.ai publishes a jaw-gap figure, so the model's own geometry is the
 authority here.
+
+## Host guidance applied: jaw stall + contact buffer as grasp sensors
+
+Two notes relayed from the challenge hosts' Discord:
+
+1. *A target angle tells the gripper to close to 0.5 rad, a rigid object blocks
+   it at 0.7 rad, and the controller endlessly ramps force to push the finger
+   through the solid object. Look at the object collision mesh and the gripper
+   closing position.*
+2. *Look at the simulation's contact buffer — MuJoCo tracks all active
+   intersections between geoms.*
+
+`_set_gripper` used to set `ctrl` and step blind. It now watches the jaw while
+closing, declares a **stall** when the jaw has stopped for a sustained window
+(25 steps, < 5 mrad travel) while still short of its target, and returns the
+actuator's actual angle plus every pad/object contact from `data.contact` with
+its force. That evidence rides in every PICK receipt as `grasp_sensor` and maps
+directly onto `skills/verification/grasp.py`'s `GraspEvidence`
+(`contact_pad_count`, `max_contact_force_n`).
+
+What the new sensor immediately showed, single picks with the correct arm:
+
+| object | held | jaw commanded | jaw actual | stalled | pads | max force |
+| --- | --- | --- | --- | --- | --- | --- |
+| `cup_1` | yes | −0.174 | **−0.095** | no (creeping) | 7 | 8.4 N |
+| `plate_1` | yes | −0.174 | **+1.026** | **yes @ 1.004** | 3 | **14.9 N** |
+| `fork_1` | no | −0.174 | −0.012 | no | **0** | 0.0 N |
+
+- `fork_1`: the jaw closes to −0.012 with **zero** pad/object contacts. It
+  closed on nothing — the fingertips are above the fork, as diagnosed above.
+- `cup_1`: blocked at −0.095 by the cup, seven pads touching. A real grasp,
+  and now a *reported* one.
+- **`plate_1` is the host's warning, verbatim.** The jaw stalls at ~1.0 rad
+  on the rim's top face and never closes on the rim at all; the plate lifts
+  because the servo, ramping toward its limit for 180 steps, presses a pad
+  down at ~15 N and drags the rim up. Lift is 21.1 mm against a 20 mm "held"
+  threshold. That is why plate has always been the fragile 9/10 grasp.
+
+### Why the bounded hold is opt-in
+
+With a bounded squeeze after stall (`OMNIQ_GRIPPER_STALL_HOLD=1`, ~2 N), the
+plate goes **9/10 → 0/10** — because its grasp *depends* on the force-ramp.
+The realistic behaviour therefore breaks the demo's plate. Detection and
+evidence are always on; the hold stays opt-in until the rim approach is fixed
+so the jaw actually closes on the rim instead of stalling on top of it. The
+receipt no longer hides which grasps are legitimate and which are force-driven.
