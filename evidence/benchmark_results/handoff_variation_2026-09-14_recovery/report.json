@@ -1,0 +1,323 @@
+{
+  "kind": "exploratory robustness report; not a promotion claim",
+  "mode": "simulation-contact-handoff",
+  "outcomes": {
+    "ambiguity": 0,
+    "collision": 0,
+    "drop": 0,
+    "other_failure": 12,
+    "success": 8,
+    "timeout": 0
+  },
+  "receipts": [
+    {
+      "failed_after_phase": "final_settle",
+      "failure_reason": "cup did not reach stable final placement",
+      "final_owner": null,
+      "handoff_point": [
+        -0.04,
+        -0.11,
+        0.134
+      ],
+      "phases_completed": 14,
+      "receipt": "trial-00-seed-700.json",
+      "seed": 700,
+      "success": false,
+      "trial": 0
+    },
+    {
+      "failed_after_phase": "final_settle",
+      "failure_reason": "cup did not reach stable final placement",
+      "final_owner": null,
+      "handoff_point": [
+        -0.04,
+        -0.11,
+        0.134
+      ],
+      "phases_completed": 14,
+      "receipt": "trial-01-seed-701.json",
+      "seed": 701,
+      "success": false,
+      "trial": 1
+    },
+    {
+      "failed_after_phase": null,
+      "failure_reason": null,
+      "final_owner": null,
+      "handoff_point": [
+        -0.0519,
+        -0.0893,
+        0.134
+      ],
+      "phases_completed": 13,
+      "receipt": "trial-02-seed-702.json",
+      "seed": 702,
+      "success": true,
+      "trial": 2
+    },
+    {
+      "failed_after_phase": "final_settle",
+      "failure_reason": "cup did not reach stable final placement",
+      "final_owner": null,
+      "handoff_point": [
+        -0.04,
+        -0.11,
+        0.134
+      ],
+      "phases_completed": 14,
+      "receipt": "trial-03-seed-703.json",
+      "seed": 703,
+      "success": false,
+      "trial": 3
+    },
+    {
+      "failed_after_phase": "final_settle",
+      "failure_reason": "cup did not reach stable final placement",
+      "final_owner": null,
+      "handoff_point": [
+        -0.0255,
+        -0.0967,
+        0.134
+      ],
+      "phases_completed": 13,
+      "receipt": "trial-04-seed-704.json",
+      "seed": 704,
+      "success": false,
+      "trial": 4
+    },
+    {
+      "failed_after_phase": null,
+      "failure_reason": null,
+      "final_owner": null,
+      "handoff_point": [
+        -0.0387,
+        -0.1228,
+        0.134
+      ],
+      "phases_completed": 13,
+      "receipt": "trial-05-seed-705.json",
+      "seed": 705,
+      "success": true,
+      "trial": 5
+    },
+    {
+      "failed_after_phase": null,
+      "failure_reason": null,
+      "final_owner": null,
+      "handoff_point": [
+        -0.0111,
+        -0.0831,
+        0.134
+      ],
+      "phases_completed": 13,
+      "receipt": "trial-06-seed-706.json",
+      "seed": 706,
+      "success": true,
+      "trial": 6
+    },
+    {
+      "failed_after_phase": "final_settle",
+      "failure_reason": "cup did not reach stable final placement",
+      "final_owner": null,
+      "handoff_point": [
+        -0.04,
+        -0.11,
+        0.134
+      ],
+      "phases_completed": 14,
+      "receipt": "trial-07-seed-707.json",
+      "seed": 707,
+      "success": false,
+      "trial": 7
+    },
+    {
+      "failed_after_phase": null,
+      "failure_reason": null,
+      "final_owner": null,
+      "handoff_point": [
+        -0.0509,
+        -0.0811,
+        0.134
+      ],
+      "phases_completed": 13,
+      "receipt": "trial-08-seed-708.json",
+      "seed": 708,
+      "success": true,
+      "trial": 8
+    },
+    {
+      "failed_after_phase": "final_settle",
+      "failure_reason": "cup did not reach stable final placement",
+      "final_owner": null,
+      "handoff_point": [
+        -0.04,
+        -0.11,
+        0.134
+      ],
+      "phases_completed": 14,
+      "receipt": "trial-09-seed-709.json",
+      "seed": 709,
+      "success": false,
+      "trial": 9
+    },
+    {
+      "failed_after_phase": null,
+      "failure_reason": null,
+      "final_owner": null,
+      "handoff_point": [
+        -0.0106,
+        -0.0965,
+        0.134
+      ],
+      "phases_completed": 13,
+      "receipt": "trial-10-seed-710.json",
+      "seed": 710,
+      "success": true,
+      "trial": 10
+    },
+    {
+      "failed_after_phase": null,
+      "failure_reason": null,
+      "final_owner": null,
+      "handoff_point": [
+        -0.0166,
+        -0.1372,
+        0.134
+      ],
+      "phases_completed": 13,
+      "receipt": "trial-11-seed-711.json",
+      "seed": 711,
+      "success": true,
+      "trial": 11
+    },
+    {
+      "failed_after_phase": "final_settle",
+      "failure_reason": "cup did not reach stable final placement",
+      "final_owner": null,
+      "handoff_point": [
+        -0.04,
+        -0.11,
+        0.134
+      ],
+      "phases_completed": 14,
+      "receipt": "trial-12-seed-712.json",
+      "seed": 712,
+      "success": false,
+      "trial": 12
+    },
+    {
+      "failed_after_phase": "final_settle",
+      "failure_reason": "cup did not reach stable final placement",
+      "final_owner": null,
+      "handoff_point": [
+        -0.04,
+        -0.11,
+        0.134
+      ],
+      "phases_completed": 14,
+      "receipt": "trial-13-seed-713.json",
+      "seed": 713,
+      "success": false,
+      "trial": 13
+    },
+    {
+      "failed_after_phase": "final_settle",
+      "failure_reason": "cup did not reach stable final placement",
+      "final_owner": null,
+      "handoff_point": [
+        -0.0139,
+        -0.0884,
+        0.134
+      ],
+      "phases_completed": 13,
+      "receipt": "trial-14-seed-714.json",
+      "seed": 714,
+      "success": false,
+      "trial": 14
+    },
+    {
+      "failed_after_phase": "final_settle",
+      "failure_reason": "cup did not reach stable final placement",
+      "final_owner": null,
+      "handoff_point": [
+        -0.04,
+        -0.11,
+        0.134
+      ],
+      "phases_completed": 14,
+      "receipt": "trial-15-seed-715.json",
+      "seed": 715,
+      "success": false,
+      "trial": 15
+    },
+    {
+      "failed_after_phase": null,
+      "failure_reason": null,
+      "final_owner": null,
+      "handoff_point": [
+        -0.0251,
+        -0.1108,
+        0.134
+      ],
+      "phases_completed": 13,
+      "receipt": "trial-16-seed-716.json",
+      "seed": 716,
+      "success": true,
+      "trial": 16
+    },
+    {
+      "failed_after_phase": "final_settle",
+      "failure_reason": "cup did not reach stable final placement",
+      "final_owner": null,
+      "handoff_point": [
+        -0.0277,
+        -0.1271,
+        0.134
+      ],
+      "phases_completed": 13,
+      "receipt": "trial-17-seed-717.json",
+      "seed": 717,
+      "success": false,
+      "trial": 17
+    },
+    {
+      "failed_after_phase": "final_settle",
+      "failure_reason": "cup did not reach stable final placement",
+      "final_owner": null,
+      "handoff_point": [
+        -0.04,
+        -0.11,
+        0.134
+      ],
+      "phases_completed": 14,
+      "receipt": "trial-18-seed-718.json",
+      "seed": 718,
+      "success": false,
+      "trial": 18
+    },
+    {
+      "failed_after_phase": null,
+      "failure_reason": null,
+      "final_owner": null,
+      "handoff_point": [
+        -0.0233,
+        -0.0949,
+        0.134
+      ],
+      "phases_completed": 13,
+      "receipt": "trial-19-seed-719.json",
+      "seed": 719,
+      "success": true,
+      "trial": 19
+    }
+  ],
+  "schema_version": 1,
+  "seed_start": 700,
+  "trials": 20,
+  "variation": {
+    "orientation_jitter_rad": 0.15,
+    "position_jitter_m": 0.02,
+    "receiver_pose_jitter_rad": 0.15,
+    "shared_point_jitter_m": 0.03
+  }
+}

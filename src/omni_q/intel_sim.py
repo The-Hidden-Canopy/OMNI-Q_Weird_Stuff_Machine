@@ -560,8 +560,8 @@ NAPKIN_CONTACT = {**RIGID_CONTACT, "solref": "-8000 -60"} if RIGID else {}
 # The isolated contact-handoff scene was tuned and gated (10/10) against the
 # original compliant pads; it keeps them until it is re-tuned against the
 # firm default (its deterministic gate failed on first try with them).
-HANDOFF_PAD_SOLREF = ".050 1"
-HANDOFF_PAD_SOLIMP = ".80 .95 .010"
+HANDOFF_PAD_SOLREF = os.environ.get("OMNIQ_HANDOFF_PAD_SOLREF", ".050 1")
+HANDOFF_PAD_SOLIMP = os.environ.get("OMNIQ_HANDOFF_PAD_SOLIMP", ".80 .95 .010")
 
 GRASP_CLEARANCE = 0.015  # m -- gap kept above an object's top surface before closing on it
 # Descent stops when a jaw geom presses the target harder than this (0 =
@@ -3539,10 +3539,14 @@ class IntelContactHandoffWorld(MockWorld):
             # every trial. A joint-space start offset, commanded through the
             # servos like any other pose -- the arm settles there itself.
             rng = random.Random(self.config.seed * 7919 + 11)
+            margin = self.config.joint_limit_margin_rad + 0.02
             for j in range(6, 10):
                 offset = rng.uniform(-self.config.receiver_pose_jitter_rad, self.config.receiver_pose_jitter_rad)
                 lo, hi = self.model.jnt_range[j]
-                self.data.qpos[j] = self.data.ctrl[j] = float(min(max(HOME[j - 6] + offset, lo), hi))
+                # inside the controller's own joint-limit margin: a start
+                # posture the guard would reject is not a trial, it is a
+                # misconfiguration (3 of 20 wide-variation trials, 2026-09-13)
+                self.data.qpos[j] = self.data.ctrl[j] = float(min(max(HOME[j - 6] + offset, lo + margin), hi - margin))
         self.data.qpos[5] = self.config.gripper_open_rad
         self.data.qpos[11] = self.config.gripper_open_rad
         self.data.ctrl[5] = self.config.gripper_open_rad
@@ -3643,6 +3647,7 @@ class _ContactHandoffController:
         self.np = np
         self.ik_data = self.mujoco.MjData(self.model)
         self.phase_timings: list[dict[str, Any]] = []
+        self.recoveries: list[dict[str, Any]] = []
         self.contact_transitions: list[dict[str, Any]] = []
         self.state_samples: list[dict[str, Any]] = []
         self._last_contact_signature: tuple[str, ...] = ()
@@ -3685,12 +3690,34 @@ class _ContactHandoffController:
             ))
             self._require_owner("left", "left_lift_transfer")
 
-            cup_shared = self._cup_position()
-            right_grasp = self._grasp_target("right", cup_shared, wrist_roll=-1.65)
-            self._run_phase("right_approach", lambda: self._move_to(
-                "right", self._raised_target("right", right_grasp, 0.035), -1.65, "right_approach",
-            ))
-            self._run_phase("right_descend", lambda: self._move_to("right", right_grasp, -1.65, "right_descend"))
+            def right_reach(tag: str) -> None:
+                cup_now = self._cup_position()
+                grasp = self._grasp_target("right", cup_now, wrist_roll=-1.65)
+                self._run_phase(f"right_approach{tag}", lambda: self._move_to(
+                    "right", self._raised_target("right", grasp, 0.035), -1.65, f"right_approach{tag}",
+                ))
+                self._run_phase(f"right_descend{tag}", lambda: self._move_to("right", grasp, -1.65, f"right_descend{tag}"))
+
+            try:
+                right_reach("")
+            except ContactHandoffRejected as exc:
+                if "right inverse-kinematics" not in str(exc):
+                    raise
+                # Recovery (2026-09-14): the receiver could not reach the cup
+                # where the giver presented it (8 of 20 wide-variation trials
+                # timed out here). The giver still owns the cup; bring it to
+                # the default shared point -- inside both arms' measured
+                # workspace -- re-observe, and let the receiver try once more.
+                self.recoveries.append({"phase": "right_approach", "reason": str(exc),
+                                        "action": "giver re-presents cup at the default shared point"})
+                self._require_owner("left", "recovery_check")
+                default_shared = self.np.array([-0.040, -0.110, 0.134])
+                self._run_phase("left_represent", lambda: self._move_to(
+                    "left", default_shared, 1.65, "left_represent",
+                ))
+                self._require_owner("left", "left_represent")
+                self.handoff_point = [round(float(v), 4) for v in default_shared]
+                right_reach("_retry")
             self._run_phase("right_grasp", lambda: self._command_gripper("right", self.config.gripper_closed_rad, "right_grasp"))
             self._require_owner("dual", "dual_contact_confirmation")
 
@@ -3708,8 +3735,18 @@ class _ContactHandoffController:
             ))
             self._require_owner("right", "right_retreat")
             self._carry_required = False
+            # Place by the CUP's height, not a fixed pad height: with a
+            # perturbed grasp the cup sits at a different height in the jaw,
+            # and a fixed pad target of 0.050 left it hanging when the jaw
+            # pre-opened -- it dropped onto an edge and rolled (5 of 20
+            # wide-variation trials ended with the cup on its side at
+            # z=0.021, 2026-09-14). Lower until the cup's resting centre
+            # height is reached, whatever the grasp offset.
+            fixed_pad, _, _ = self._arm_ids("right")
+            grasp_dz = float(self.data.geom_xpos[fixed_pad][2] - self._cup_position()[2])
+            place_z = 0.050 + grasp_dz + 0.002
             self._run_phase("right_place", lambda: self._move_to(
-                "right", self.np.array([0.145, -0.085, 0.050]), -1.65, "right_place",
+                "right", self.np.array([0.145, -0.085, place_z]), -1.65, "right_place",
             ))
             def release_right() -> None:
                 # Open to a clearance gap before lifting the pads away from
@@ -3738,7 +3775,8 @@ class _ContactHandoffController:
             schema_version=CONTACT_HANDOFF_SCHEMA_VERSION,
             mode=CONTACT_HANDOFF_MODE,
             mjcf_sha256=self.world.mjcf_sha256,
-            controller={**self.config.as_dict(), "handoff_point": getattr(self, "handoff_point", None)},
+            controller={**self.config.as_dict(), "handoff_point": getattr(self, "handoff_point", None),
+                        "recoveries": list(self.recoveries)},
             seed=self.config.seed,
             deterministic=not self.config.randomized,
             randomized=self.config.randomized,
@@ -3951,10 +3989,18 @@ class _ContactHandoffController:
     def _cup_is_stable_on_table(self) -> bool:
         contacts = self._contact_snapshot()
         velocity = self._cup_velocity()
+        # Upright, too (2026-09-14): the cup is 22 mm in radius, so lying on
+        # its side it sits at z = 0.021 and, once it stops rolling, passed
+        # every check here. Six of the 20 wide-variation "successes" ended at
+        # 90 deg. A handoff that leaves the cup on its side did not succeed.
+        pose = self._cup_pose()
+        qw, qx, qy, qz = (float(v) for v in pose["quaternion"])
+        upright = (1.0 - 2.0 * (qx * qx + qy * qy)) > 0.985   # R[2,2]: within ~10 deg
         return bool(
             contacts["cup_on_table"]
             and float(self.np.linalg.norm(velocity)) < 0.025
             and self._cup_position()[2] > 0.020
+            and upright
         )
 
     # -- receipt trace --------------------------------------------------

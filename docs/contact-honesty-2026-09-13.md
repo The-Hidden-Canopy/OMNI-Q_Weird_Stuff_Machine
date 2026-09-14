@@ -233,3 +233,27 @@ through the engine, seeds 900–902
 penetration 7.7 mm (the cloth napkin), 2–3 mm on the cutlery.
 
 Run it live: `python integrations/intel/scripts/demo_authority_change.py --seed 901 --live`
+
+### Handoff: recoveries, and an honest success criterion (2026-09-14)
+
+Two recoveries in `_ContactHandoffController` (recorded per receipt under
+`controller.recoveries`): if the receiver's IK times out, the giver — still
+holding the cup — re-presents it at the default shared point and the
+receiver tries once more; and the receiver's jittered start posture is
+clamped inside the controller's own joint-limit margin. Re-running
+yesterday's 20-trial wide-variation sweep: 6/20 → 15/20 by the old criterion,
+every IK timeout recovered.
+
+Then the criterion was found to be wrong: `_cup_is_stable_on_table` accepted
+a cup **lying on its side** (22 mm radius → z = 0.021, and it passes once it
+stops rolling). Six of those 15 ended at 90°. The criterion now requires
+upright (R[2,2] > 0.985, ~10°). Honest result,
+`evidence/benchmark_results/handoff_variation_2026-09-14_recovery/`:
+**8/20**. The single remaining failure class: the cup rotates 30–50° in the
+receiver's clamp during the carry and tips on release. Tried and measured
+worse, all with the deterministic gate failing: firm pads (1/20), closure
+0.25 rad (8/20 with 4 drops), 0.15 rad (3/20). The handoff scene keeps its
+soft pads and 0.35 rad closure; the real fix is a receiver grasp that
+constrains rotation (two contact rows, or a lower grasp on the cup), not a
+harder squeeze. The placement now lowers by the cup's own height rather than
+a fixed pad height.
