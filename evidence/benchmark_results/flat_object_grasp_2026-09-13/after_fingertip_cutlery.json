@@ -1,0 +1,27 @@
+{
+  "label": "fingertip_cutlery",
+  "pad_friction": "3.00 0.020 0.001",
+  "wall_s": 86.7,
+  "outcomes": {
+    "success": 0,
+    "grasp_failure": 10,
+    "placement_failure": 0,
+    "timeout": 0,
+    "collision": 0,
+    "transition_failure": 0,
+    "unresolved": 0
+  },
+  "per_object": {
+    "held_in_trials": {
+      "cup_1": 10,
+      "plate_1": 10,
+      "fork_1": 10,
+      "spoon_1": 4
+    },
+    "placed_in_trials": {
+      "cup_1": 7,
+      "fork_1": 6,
+      "spoon_1": 2
+    }
+  }
+}
