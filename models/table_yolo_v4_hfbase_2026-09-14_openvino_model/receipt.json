@@ -1,0 +1,31 @@
+{
+ "name": "table_yolo_v4_hfbase_2026-09-14",
+ "base": "hf:KissTheHabit/yolov8n-table-yolo/yolov8n-table-yolo-ftv3-30ep.pt",
+ "epochs": 30,
+ "imgsz": 640,
+ "dataset": {
+  "yaml": "data\\table_yolo_v4\\data.yaml",
+  "train_images": 1332,
+  "val_images": 268,
+  "generator": "integrations/intel/scripts/make_table_yolo_dataset.py"
+ },
+ "val": {
+  "map50": 0.9803237767309719,
+  "map50_95": 0.9171814987984661,
+  "per_class_map50": {
+   "plate": 0.995,
+   "cup": 0.9945306094746843,
+   "fork": 0.9437017530062187,
+   "spoon": 0.9591932414689026,
+   "napkin": 0.9945170564360263,
+   "drawer": 0.995
+  }
+ },
+ "openvino": {
+  "xml": "best.xml",
+  "bin": "best.bin",
+  "bin_sha256": "4c034ca35c0c340c5c7589152bbc4a107095306ef10814c2a1950e35bf6b7286",
+  "xml_sha256": "6e707f499d783ee7304aeda8324904b3892757610a633fdfa1f479c2598480ca"
+ },
+ "trained_at": "2026-09-14T12:48:26"
+}

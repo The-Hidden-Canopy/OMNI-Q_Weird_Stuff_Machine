@@ -115,6 +115,11 @@ that window. Close it to exit.
 #    shared point, right takes it while left still holds, left releases.
 .venv/Scripts/python integrations/intel/scripts/watch_sim.py --live --handoff --seed 19
 
+# 5. Perception in the loop: four scene cameras -> scene-trained YOLO (OpenVINO)
+#    -> fused, back-projected detections -> OMNI plan -> controllers -> the
+#    cameras look again and grade each object independently of the receipts.
+.venv/Scripts/python integrations/intel/scripts/demo_camera_e2e.py --seed 903 --live
+
 # GIF instead of a window (for slides): swap --live for
 #    --record tmp/name.gif --camera third_person --every 40
 ```
@@ -123,9 +128,10 @@ What the sim is and is not: the arms, joint limits, servo torque limits and
 gripper are the vendored MuJoCo Menagerie SO-ARM100 (unchanged); every grasp
 is a real contact event (no welds, no teleports, no collision exemptions —
 see the no-cheating rule in `src/omni_q/intel_sim.py`); a failed placement
-leaves the object where it fell. Perception in these runs is the simulator's
-own object state, not a camera; the camera/perception seam is the opt-in
-YOLO/OpenVINO integration in
+leaves the object where it fell. In runs 1-4 perception is the simulator's
+own object state; run 5 replaces it with real renders through the detector
+trained on this scene (`integrations/intel/README.md`, "Scene-trained
+detector"). The earlier camera/perception seam is documented in
 [`docs/oq-omni-vision-integration-2026-09-11.md`](docs/oq-omni-vision-integration-2026-09-11.md),
 and the trained Omni checkpoint on HF is the reasoner (intent and authority),
 not a motor policy — say it that way on camera.

@@ -257,3 +257,66 @@ soft pads and 0.35 rad closure; the real fix is a receiver grasp that
 constrains rotation (two contact rows, or a lower grasp on the cup), not a
 harder squeeze. The placement now lowers by the cup's own height rather than
 a fixed pad height.
+
+### Perception end to end (2026-09-14, afternoon)
+
+The published `table_yolo_v2` detector saw nothing on the current overhead
+render (legacy or realistic scene, conf 0.05). The operator pointed at
+`KissTheHabit/yolov8n-table-yolo` (real-photo lineage, ftv3-30ep at mAP50
+0.39 on 3,387 real images): on the sim render it finds the plate (0.68) and
+cup (0.85) but not the cutlery or napkin. So the detector is regenerated from
+the scene: `make_table_yolo_dataset.py` renders every scene camera under seed
+variation (positions, yaw, colour, light, random subsets already set, an arm
+over the table) and labels every object by projecting its own geometry
+through that camera; `train_table_yolo.py` fine-tunes and exports OpenVINO IR
+with a receipt (val mAP, dataset size, IR sha256).
+
+| detector | base | data | val mAP50 |
+|---|---|---|---|
+| `table_yolo_v3_2026-09-14` | stock yolov8n | 800 imgs, overhead + third-person | 0.994 |
+| `table_yolo_v3_hfbase_2026-09-14` | HF ftv3 (real photos) | same, 7-class map | 0.990 |
+| `table_yolo_v4_hfbase_2026-09-14` | HF ftv3 | 1,600 imgs, four scene cameras | **0.980** (fork 0.94, spoon 0.96, rest 0.99) — the demo's detector |
+
+**Multi-camera fusion** (`vision.MultiCameraFusion`): one view misses things
+— the overhead camera never saw the spoon parked at x = 0.34, so the
+camera-driven plan was built without it. Each camera's detections are
+back-projected through that camera's real geometry onto a per-class plane
+height (the 90 mm cup's centre landed 7 cm off when the table plane was
+assumed from an oblique view), merged by class and world distance, and a
+detection needs two cameras or conf ≥ 0.9. Measured on seed 903 with three
+cameras: plate, fork, napkin, cup all within 1–2 cm of truth, false
+positives (cup-as-napkin, spoon-as-fork) gone. The table-height grazing
+camera is replaced by two **flank cameras** looking in at the cutlery — six
+cameras with the two wrist cams, the challenge's maximum.
+
+**End to end** (`demo_camera_e2e.py`, `evidence/benchmark_results/camera_e2e_2026-09-14/`):
+fused cameras → FrameObserver → OMNI plan → controllers → fused cameras again,
+with the camera's per-object "in target zone" verdict compared to the
+controllers' own receipts. Two real bugs found by running it:
+
+1. With the camera observer the observation carries no ownership, and the
+   scheduler dispatched `PICK cup` to the right arm while it still held the
+   spoon; both MOVEs then failed "unsafe carry separation". The world now
+   refuses a PICK on an arm that is holding something (one object per
+   gripper is a physical fact the world knows regardless of perception).
+2. The cup's top-down pick was a tilted local minimum (fingertips 30–80 mm
+   apart in height at closure) that lifted by leaning on the wall and broke
+   whenever the arm arrived from the spoon's place posture. It now starts
+   from a scanned vertical-finger posture (`_topdown_seed_joints`); fresh and
+   after-spoon picks behave identically (3/3 placed both ways).
+
+Where camera and controller disagree, the camera is the stricter judge: the
+plate the controller counts as placed (within 60 mm) the camera puts nearest
+its spawn zone, because the two-arm carry ends ~3 cm short and spawn and
+target are only 6 cm apart. That is a true statement about the placement.
+
+Camera end-to-end with the v4 detector and four-camera fusion, seeds 903/905/911
+(`evidence/benchmark_results/camera_e2e_2026-09-14/`): the fused cameras now see
+all five objects before the run (the spoon via the flank cameras). Camera verdict
+vs controller receipt per object — 903: camera 4/5 in target, controller 4/5,
+disagreeing on napkin (camera lost it after the run) and spoon (controller's
+MOVE failed, camera sees it at "right"); 905: camera 2/5, controller 4/5 (camera
+misses the cup at its zone and the fork); 911: camera 4/5 = controller 4/5,
+full agreement. The overhead-frame zone map is coarse for objects near the
+arms; the disagreement rows are recorded, not smoothed over. Regression suites
+after all of today's changes: 63 passed, 0 failed.
