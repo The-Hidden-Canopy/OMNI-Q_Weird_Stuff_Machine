@@ -28,12 +28,22 @@ DIRECTOR_GRID = [DIRECTOR, "table_overhead", "left_flank", "right_flank"]
 SIX = ["third_person", "table_overhead", "left_flank", "right_flank", "left_wrist", "right_wrist"]
 
 
+def _detector():
+    from omni_q.vision import OpenVINODetector
+    model = sorted(Path("models").glob("table_yolo_v*_openvino_model/*.xml"))[-1]
+    return OpenVINODetector(str(model), device="CPU", conf_threshold=0.4)
+
+
 def _with_recorders(world, out: Path, stem: str, run, views):
-    """Run ``run(world)`` once per view set, recording each."""
+    """Run ``run(world)`` once per view set, recording each. A view tag
+    starting with "vision" draws the detector's boxes on every scene camera."""
     results = []
     for tag, cams in views:
+        vision = tag.startswith("vision")
         rec = Recorder(world(), cams, out / f"{stem}_{tag}.mp4",
-                       label=f"OMNI-Q  {stem.replace('_', ' ')}  [{tag}]")
+                       label=f"OMNI-Q  {stem.replace('_', ' ')}  [{tag}]",
+                       detector=_detector() if vision else None,
+                       annotate=[c for c in ([cams] if isinstance(cams, str) else cams) if not c.startswith("free:")] if vision else ())
         w = rec.world
         w._mujoco = rec.spy()
         t0 = time.time()
@@ -156,7 +166,9 @@ RUNS = {
     "plate_901": (plate_only, 901, [("third_person", "third_person"), ("grid", GRID), ("director", DIRECTOR)]),
     "authority_901": (authority, 901, [("third_person", "third_person"), ("grid", GRID), ("director", DIRECTOR)]),
     "handoff_19": (handoff, 19, [("third_person", "handoff_third_person"), ("director", "free:160,-25,0.8,0,-0.10,0.08")]),
-    "camera_e2e_903": (camera_e2e, 903, [("third_person", "third_person"), ("grid", GRID), ("director_grid", DIRECTOR_GRID), ("six_cameras", SIX)]),
+    "camera_e2e_903": (camera_e2e, 903, [("third_person", "third_person"), ("grid", GRID), ("director_grid", DIRECTOR_GRID), ("six_cameras", SIX),
+                                         ("vision_grid", [DIRECTOR, "table_overhead", "left_flank", "right_flank"]),
+                                         ("vision_overhead", "table_overhead")]),
 }
 
 

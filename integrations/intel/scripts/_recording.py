@@ -17,7 +17,7 @@ from pathlib import Path
 
 class Recorder:
     def __init__(self, world, camera: str, path, *, every: int = 20, size=(1280, 720), fps: int = 25,
-                 label: str | None = None):
+                 label: str | None = None, detector=None, annotate=(), detect_every: int = 2):
         import cv2  # noqa: PLC0415
         import mujoco  # noqa: PLC0415
 
@@ -40,6 +40,31 @@ class Recorder:
         self._writer = cv2.VideoWriter(str(self.path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
         self.frames = 0
         self._count = 0
+        # vision overlay: run ``detector`` (omni_q.vision.OpenVINODetector) on
+        # the tiles named in ``annotate`` and draw boxes/labels/confidence
+        self.detector = detector
+        self.annotate = set(annotate)
+        self.detect_every = detect_every
+        self._last_dets: dict = {}
+
+    _COLORS = {"plate": (255, 255, 255), "cup": (255, 200, 60), "fork": (120, 220, 255), "spoon": (255, 150, 220),
+               "napkin": (90, 90, 255), "drawer": (140, 200, 140), "knife": (200, 200, 200)}
+
+    def _draw_detections(self, camera: str, bgr):
+        if self.detector is None or camera not in self.annotate:
+            return bgr
+        if self.frames % self.detect_every == 0 or camera not in self._last_dets:
+            rgb = self._cv2.cvtColor(bgr, self._cv2.COLOR_BGR2RGB)
+            self._last_dets[camera] = self.detector.detect(rgb)
+        for d in self._last_dets[camera]:
+            x1, y1, x2, y2 = (int(v) for v in d.bbox_xyxy)
+            col = self._COLORS.get(d.cls_name, (0, 255, 0))
+            self._cv2.rectangle(bgr, (x1, y1), (x2, y2), col, 2)
+            txt = f"{d.cls_name} {d.conf:.2f}"
+            (tw, th), _ = self._cv2.getTextSize(txt, self._cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+            self._cv2.rectangle(bgr, (x1, max(0, y1 - th - 6)), (x1 + tw + 4, y1), col, -1)
+            self._cv2.putText(bgr, txt, (x1 + 2, y1 - 3), self._cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1, self._cv2.LINE_AA)
+        return bgr
 
     @staticmethod
     def _free_camera(spec: str):
@@ -60,8 +85,11 @@ class Recorder:
         else:
             self._renderer.update_scene(self.world.data, camera=camera)
         bgr = self._cv2.cvtColor(self._renderer.render(), self._cv2.COLOR_RGB2BGR)
+        bgr = self._draw_detections(camera, bgr)
         if len(self.cameras) > 1:
             name = "director" if camera.startswith("free:") else camera
+            if camera in self.annotate and self.detector is not None:
+                name += "  [YOLO/OpenVINO]"
             self._cv2.putText(bgr, name, (10, 24), self._cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, self._cv2.LINE_AA)
         return bgr
 
