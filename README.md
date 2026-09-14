@@ -175,6 +175,76 @@ be captured with optional MuJoCo telemetry through
 [`integrations/intel/demonstrations.py`](integrations/intel/demonstrations.py),
 but motor-level LeRobot conversion remains open.
 
+### Bimanual handoff
+
+One SO-101 acquires an object, transfers it within the shared workspace to the
+second arm, and the receiving arm continues the task without resetting the
+objective:
+
+```text
+SO-101 A: acquire object
+        ↓
+shared workspace: contact-verified transfer
+        ↓
+SO-101 B: receive object and continue the plan
+```
+
+The current retained evidence is the separate
+[`simulation-contact-handoff`](integrations/intel/README.md#contact-handoff-evidence-boundary)
+MuJoCo path: a contact-grounded `cup_1` transfer with a deterministic 10/10
+acceptance gate and retained randomized receipts. This proves the handoff
+mechanism, not general table setting, camera-driven perception, hardware
+execution, or transfer of every tableware class.
+
+### Closed-loop demo acceptance
+
+The handoff is only the beginning of the physical-intelligence demo. The
+trained controller must remain subordinate to the observed world and to live
+authority changes:
+
+```text
+camera → updated object state → OMNI objective/authority
+       → provider proposal → supervisor → arms
+       → contact/vision verification → replan or continue
+```
+
+The next proof gates are:
+
+- **Camera reacquisition:** move an object somewhere unexpected; perception
+  updates `WorldState`, and the learned policy reacquires the object instead of
+  replaying a stale trajectory.
+- **Dynamic authority:** while a learned bimanual skill is moving, say
+  “don't use the left arm anymore.” OMNI mutates the graph, stops left-arm
+  proposals, and replans around the surviving capability.
+- **Interrupt and resume:** say “OMNI, stop” mid-handoff, then “continue.” The
+  system preserves the objective, re-observes the world, reacquires the object
+  state, and resumes from verified reality rather than restarting blindly.
+- **Provider fallback:** let deterministic IK attempt a grasp and fail
+  verification, then select the learned grasp provider; also exercise the
+  reverse path when learned-controller confidence drops. This demonstrates
+  interchangeable bounded providers rather than a monolithic robot policy.
+- **Object and assignment variation:** repeat across the cup, plate,
+  fork/spoon/knife, and napkin with changed positions and arm assignments.
+  Partial success is useful evidence only when the receipts retain the failed
+  cases and show that the controller did not memorize one prop and one
+  choreography.
+- **Operational speech:** keep responses short and state-grounded, for
+  example, “Left arm unavailable. Reassigning grasp to right arm.” The voice
+  output should expose the real authority/replan result, not simulate a
+  chatbot layer.
+- **Speechmatics turn control:** use Smart Turn, speaker identification/focus,
+  and real interruption handling in the live path; raw transcript transport
+  alone is not sufficient evidence.
+- **OMNI as the brain:** the multimodal OMNI model must provide the actual
+  objective/state reasoning used by the demo, with the governed core retaining
+  authority. It must not sit beside the demo as an unconnected artifact.
+
+These are acceptance criteria for the next closed-loop demo, not claims that
+every gate is complete today. Each gate should retain the camera/world
+revision, selected provider, authority decision, interruption or fallback
+event, verification result, and final receipt so capability progress can be
+distinguished from model, dataset, and promotion progress.
+
 The `intel` project extra tracks the later LeRobot/OpenVINO policy stack; it is
 not required for, nor proof of, the current MuJoCo controller smoke.
 

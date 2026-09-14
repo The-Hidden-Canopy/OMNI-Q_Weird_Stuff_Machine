@@ -4,9 +4,9 @@ set -Eeuo pipefail
 # Serial 82-class transfer cycle.  Stage A is the live packed-FP4 pilot; do
 # not start Stage B until Stage A has finished so one GPU never hosts two
 # trainers.  The later stages use last.pt as the explicit weight handoff and
-# start fresh optimizer state at each dataset boundary.  Keep the transfer
-# LR at the current pilot level and use a 0.1 final-LR fraction; the earlier
-# 1e-4 -> 5e-5 schedule was too timid and encouraged plateaus.
+# start fresh optimizer state at each dataset boundary.  Keep the live pilot
+# and final reconsolidation conservative, but give the alternate-dataset
+# transfer a modest LR increase to move through the new distribution faster.
 
 CURRENT_PID=41562
 PROJECT=/workspace/omniq/runs/v4_chain
@@ -20,6 +20,7 @@ STAGE_C_NAME=ftv5_combined_oi_v1_yolov8m_b48_fp4pilot_reconsolidate_r1
 STAGE_C_RUN="${PROJECT}/${STAGE_C_NAME}"
 MIN_TRANSFER_EPOCHS=30
 MAX_TRANSFER_EPOCHS=60
+STAGE_B_LR0=0.00020
 
 last_epoch() {
     local csv="$1"
@@ -100,7 +101,7 @@ if [[ -s "${STAGE_B_RUN}/results.csv" || -e "${STAGE_B_RUN}/weights/last.pt" ]];
     exit 1
 fi
 echo "starting Stage B on ${OTHER_DATA_ROOT} from ${STAGE_A_RUN}/weights/last.pt"
-run_stage "${OTHER_DATA_ROOT}" "${STAGE_A_RUN}/weights/last.pt" "${STAGE_B_NAME}" 0.00015
+run_stage "${OTHER_DATA_ROOT}" "${STAGE_A_RUN}/weights/last.pt" "${STAGE_B_NAME}" "${STAGE_B_LR0}"
 check_transfer_stage "${STAGE_B_RUN}"
 
 if [[ -s "${STAGE_C_RUN}/results.csv" || -e "${STAGE_C_RUN}/weights/last.pt" ]]; then
