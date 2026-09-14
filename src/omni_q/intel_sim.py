@@ -2804,6 +2804,50 @@ class IntelTablePlanner(RulePlanner):
             elif object_id:
                 step.arm = "left"
 
+        # Authority (2026-09-14): an operator "prefer_arm" constraint -- the
+        # NLU's reading of "don't use the left arm anymore" / "stop using the
+        # left arm" -- overrides the default assignment above. The engine
+        # queues it at any time and recompiles at the next control boundary
+        # (engine.run -> _apply_constraints -> _recompile), so this is where
+        # a mid-run change of authority lands. Honestly: steps the remaining
+        # arm can reach are reassigned to it; steps it cannot (the other
+        # side's objects, and the two-arm plate) are removed from the plan
+        # and listed in ``self.last_authority_report`` so the receipt shows
+        # what the objective lost, rather than pretending or silently using
+        # the forbidden arm. The scheduler returns an explicit ``step.arm``
+        # before it consults prefer_arm, so this has to happen here.
+        prefer = next((c.value for c in getattr(world, "constraints", ()) if c.kind == "prefer_arm"), None)
+        self.last_authority_report = None
+        if prefer in ("left", "right"):
+            forbidden = "right" if prefer == "left" else "left"
+            reassigned, pruned = [], []
+            keep = []
+            for step in graph.steps:
+                object_id = step.args.get("object")
+                if object_id == "drawer" and step.arm == forbidden:
+                    step.arm = prefer  # the drawer is a fixture either arm may open
+                if not object_id or object_id == "drawer" or step.arm != forbidden:
+                    keep.append(step)
+                    continue
+                if object_id in BIMANUAL_OBJECTS:
+                    pruned.append((step.id, object_id, f"needs both arms; {forbidden} arm withdrawn"))
+                    continue
+                if self._arm_can_reach(prefer, object_id, world):
+                    step.arm = prefer
+                    step.rationale = (step.rationale + "; " if step.rationale else "") +                         f"reassigned to {prefer}: operator withdrew the {forbidden} arm"
+                    reassigned.append((step.id, object_id))
+                    keep.append(step)
+                else:
+                    pruned.append((step.id, object_id, f"out of the {prefer} arm's reach"))
+            pruned_ids = {pid for pid, _, _ in pruned}
+            for step in keep:
+                step.deps = tuple(d for d in step.deps if d not in pruned_ids)
+            graph.steps = keep
+            self.last_authority_report = {
+                "prefer_arm": prefer, "withdrawn_arm": forbidden,
+                "reassigned": reassigned, "pruned": pruned,
+            }
+
         # RulePlanner sorts object ids lexically.  Reorder only tracked
         # tableware pairs; fixture and terminal steps keep their existing
         # positions and dependencies.  This is scheduling, not ownership or
@@ -2836,6 +2880,27 @@ class IntelTablePlanner(RulePlanner):
         terminal = [step for step in other_steps if step.op == "VERIFY"]
         graph.steps = leading + ordered_tableware + terminal
         return graph
+
+    # Top-down reach of one arm, measured on the realistic layout: picks
+    # succeed out to ~0.33 m from the base and fail at 0.345 (cup, 2026-09-14).
+    _ARM_REACH_M = 0.33
+    _ARM_BASE_XY = {"left": (-0.26, 0.20), "right": (0.26, 0.20)}
+
+    def _arm_can_reach(self, arm: str, object_id: str, world) -> bool:
+        """Can ``arm`` pick this object where it is now AND set it down at its
+        target zone? Both ends of the chain must be inside the measured reach."""
+        base = self._ARM_BASE_XY[arm]
+        det = world.objects.get(object_id) if hasattr(world, "objects") else None
+        pose = getattr(det, "pose", None)
+        target = ZONE_POSITIONS.get(getattr(det, "target_zone", None) or "")
+        points = []
+        if pose is not None:
+            points.append((pose.x, pose.y))
+        if target is not None:
+            points.append((target[0], target[1]))
+        if not points:
+            return False
+        return all(math.hypot(x - base[0], y - base[1]) <= self._ARM_REACH_M for x, y in points)
 
     def replan(self, current, world, reason):
         """Count the one object that was actually just attempted, before

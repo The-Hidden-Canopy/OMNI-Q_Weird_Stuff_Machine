@@ -132,3 +132,92 @@ Is it a 32k-vocab model? Checked in the weights, not the labels:
    objects) and `--live --handoff --seed N` (two-arm pass) both work now —
    the viewer is attached to the world the harness actually steps.
 4. OQ-012 mid-run re-authorization, then the e2e with a camera observer.
+
+
+---
+
+## Update 2026-09-14 — realistic tableware, sideways pinch, two-arm plate
+
+Everything in section 5 item 1 is done and pushed (`58ca3a6`). What was
+built, what was measured, and where the numbers are.
+
+### Models (all MuJoCo primitives; `OMNIQ_LEGACY_MODELS=1` restores the old proxies)
+
+| object | model | why this shape |
+|---|---|---|
+| plate_1 | rimmed soup plate: 5 mm disc on a 10 mm foot ring, stepped wall, 5 mm lip at +25 mm, 200 mm, 200 g | The gripper's moving-jaw tip is 12.5 mm thick and the jaw body behind the fingertip 42 mm; nothing fits under a flat plate's ~8 mm lip. A rimmed soup bowl (real ones are 230×40 mm) carries its lip high enough for the thin fixed fingertip to slide under and the jaw body to clear the table. |
+| cup_1 | hollow: bottom disc + 16 wall boxes, 60×90 mm, 3 mm wall, 100 g | A solid cylinder was gripped by interpenetration; the diameter pinch now closes on two thin walls (2.1 mm max penetration under rigid contact). |
+| fork_1 / spoon_1 | bent handle (tip and neck slope to the table, grip section arches 7 mm up), 10×7 mm grip section, four tines / ellipsoid bowl, 150 mm, 40 g | A flat slab had nothing to straddle. The arch puts a 7 mm section 8 mm-tall pads can close on; 7 mm because the jaw's hard stop is a 5.6 mm tip gap. Gripped at the centre of mass (`OBJECT_GRASP_ALONG`), not the handle middle — at the middle the bowl-heavy spoon rolled 61° in the pinch and slipped in the first 0.2 s of the carry. |
+
+Render: `evidence/benchmark_results/realistic_models_2026-09-14/models.png`.
+
+### Sideways rim pinch (`_do_pick_edge`, `EDGE_PINCH`)
+
+Horizontal finger, roll 0, fixed fingertip under the lip, moving jaw closes
+down on top. Found by scanning joint space, not by the solver: from HOME the
+6D damped-least-squares solve converged 0.88 rad off every time; the
+forward-kinematic scan (`_edge_seed_joints`) shows the posture exists only
+with the fingertip **0.30–0.48 m from the base** at lip height, so the plate
+lives at the far centre of the table (near rims at 0.385 m). Waypoints are
+scan-seeded then refined by a 4-DOF tip track (`_edge_waypoint`).
+
+### One arm cannot lift the plate; two can
+
+`plate_single_arm_edge_pinch_tilts.png`: one arm pinches the rim, lifts the
+near edge 21 mm and the plate hangs at 19° with the far rim on the table —
+0.2 N·m of plate torque against ~0.1 N·m of pinch. `_do_pick_bimanual` has
+both arms pinch opposite rims and drive to their lifted postures in
+lockstep; `_do_place_bimanual` tracks both fingertips along a straight line,
+lowers, releases both, homes both. Isolated: **5/5 held and placed** (seeds
+900–904, 67 mm lift, ≤1.4 mm penetration). GIF: `tmp/bimanual_plate_900.gif`
+(regenerate with `watch_sim.py --record ... --pick plate_1 --move`).
+
+### Through the engine (scheduler-driven, all five objects)
+
+Seeds 900–903, firm contact default: **901, 902, 903 set the whole table
+(plate, cup, fork, spoon, napkin all placed); 900 placed 4/5** (plate set
+down >60 mm off centre). The 10-trial harness is in
+`evidence/benchmark_results/realistic_models_2026-09-14/harness_seed900_x10/`.
+
+Three engine-only failures were found and fixed on the way, all real:
+
+1. A failed MOVE rewound physics into a phantom "still holding" state and the
+   scheduler sent that arm, jaw closed on the napkin, to pick the plate. A
+   failed placement now leaves the object where it landed, ownership cleared.
+2. `OPEN` teleports the drawer by its travel; at 120 mm the open front reached
+   the plate's rim at max jitter and slammed it. Drawer at the table edge,
+   50 mm travel.
+3. Both arms' sideways approaches run down the middle of the table, so the
+   plate is set **first** and every zone sits outside those corridors. After
+   the two-arm place both arms go HOME — the extended sideways posture is
+   near a wrist limit and every later safety check on that arm failed.
+
+### Still open
+
+- Seed 900's plate placement offset (carry drift in the lockstep track).
+- Rigid contact (`OMNIQ_RIGID_CONTACT=1`) with the new models: cup/spoon/fork
+  hold with 2–5 mm penetration in isolation; the full-engine run under rigid
+  contact has not been re-gated since the layout changes.
+- Handoff recovery, OQ-012 mid-run re-authorization, camera-observer e2e
+  (section 4 unchanged).
+
+### Mid-run change of authority — "don't use the left arm anymore"
+
+`integrations/intel/scripts/demo_authority_change.py` runs the table-setting
+goal and, the moment the two-arm plate is set, injects the operator phrase
+through the voice path's own NLU (`omni_q.nlu.parse` → `prefer_arm=right` →
+`engine.add_constraint`). The engine applies it at its next control boundary
+and recompiles (`graph.recompiled`, 7 revisions in the run). The Intel
+planner now honours it (it used to set `step.arm` explicitly, which the
+scheduler takes before consulting `prefer_arm`, so the instruction was
+accepted and ignored): steps the right arm can reach are reassigned, steps
+it cannot are **pruned and listed** (`last_authority_report`), the two-arm
+plate would be pruned too. Receipt-backed result
+(`evidence/benchmark_results/authority_change_2026-09-14/seed-901.json`):
+arms used before the instruction `['left']`, after it `['right']`; fork and
+napkin pruned "out of the right arm's reach"; objective preserved for the
+spoon (placed by the right arm). Known: the cup's top-down pick fails when it
+follows the spoon in this ordering (grasp slips at 9 mm; the cup has not
+moved) — not yet understood.
+
+Run it live: `python integrations/intel/scripts/demo_authority_change.py --seed 901 --live`
