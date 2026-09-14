@@ -2812,6 +2812,13 @@ class IntelTableWorld(MockWorld):
         )  # retract straight up
         lift_error = float(retract_pose["position_error_m"])
 
+        # Withdraw to the ready pose after the release (2026-09-14): the arm
+        # used to stay retracted right above the object it had just set down,
+        # and the overhead camera could not see the napkin under the left
+        # gripper -- the camera end-to-end reported "not verified" for a
+        # placement that was fine. Moving out of the cameras' way before
+        # verification is what a robot does; the next pick homes anyway.
+        self._go_home(arm_offset)
         settle = self._settle_released_object(obj)
 
         final_xy = self.data.qpos[qpos_adr:qpos_adr + 2].copy()
