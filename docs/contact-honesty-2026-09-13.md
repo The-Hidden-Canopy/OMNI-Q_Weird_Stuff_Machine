@@ -341,3 +341,28 @@ Relationship to `src/omni_q/perception_broker.py` (teammate PR #3, merged
 pose and robot-state sample and deliberately does not fuse; `MultiCameraFusion`
 is the resolver above it that associates across cameras into the compact
 observation. They compose; nothing in one replaces the other.
+
+### Real drawers (opt-in, `OMNIQ_REAL_DRAWERS=1`), 2026-09-14 late afternoon
+
+Operator: "the arms can be rearranged so they can reach everything including
+the drawer." Built without moving the arm bases (everything is tuned to
+them): a shallow pull-out cutlery tray on each flank, inside its arm's
+reach, the fork lying in the left one and the spoon in the right, a handle
+bar standing off the front wall. `OPEN` is a real pinch on the bar and a
+50 mm pull along the slide (`_do_open_drawer`), verified by the slide joint
+like before. Measured: **pull 6/6** (3 seeds × 2 arms, 50 mm, three-pad
+pinch). Three things had to be true first — the tray rides 3 mm above the
+tabletop (on the table, finger load became sliding friction and it stalled
+at 30 mm), the handle stands clear of the wall top (level with it, the inner
+pad landed on the wall), and the walls are 6 mm (12 mm blocked the open
+jaw, 121 mm at the tips, from straddling a handle in a 90 mm tray).
+
+Picking the cutlery *out* of the trays is where it stands: ~50% (fork 2/3
+held, spoon 1/3 placed). Cutlery at 90° in a tray put the wrist-roll hint
+near ±π, which the clip turned into a jaw closing along the handle; the hint
+is now chosen among its half-turn twins (`_grasp_frame`), which fixed the
+direction but the remaining picks are marginal. So the default layout stays
+the symbolic-drawer one (47/50, 50/50 measured), and the real drawers are
+opt-in until the tray picks are at that level. The wrist cameras were also
+re-aimed (they looked at their own jaw) and the six-camera recording layout
+added.

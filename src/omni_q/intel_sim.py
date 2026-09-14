@@ -363,6 +363,11 @@ GRIPPER_OPEN = 1.5     # Jaw joint, rad -- near the SO-101 open end of its range
 # here -- this commands the joint its own MJCF range already allows.
 GRIPPER_CLOSED = -0.174
 LEGACY_MODELS_FLAG = os.environ.get("OMNIQ_LEGACY_MODELS", "0") not in {"", "0", "false", "no"}
+# Real pull-out drawer trays on the flanks, opened by a pinch on the handle
+# (2026-09-14). Opt-in: the pull itself is 6/6 but the cutlery picks out of
+# the trays are still ~50%, and the default layout is the one measured at
+# 47/50 and 50/50 placements. See docs/contact-honesty-2026-09-13.md.
+REAL_DRAWERS = (not LEGACY_MODELS_FLAG) and os.environ.get("OMNIQ_REAL_DRAWERS", "0") not in {"", "0", "false", "no"}
 DRAWER_OPEN = 0.12 if LEGACY_MODELS_FLAG else 0.05   # drawer_slide qpos, m -- matches its MJCF range max
 DRAWER_CLOSED = 0.0
 TRANSIT_HEIGHT = 0.28  # m -- above the table/drawer/tableware envelope, within reach (see _move_to)
@@ -488,7 +493,8 @@ BIMANUAL_MAX_TILT_RAD = 0.21  # 12 deg: a plate carried flat, not dragged
 # Top-down picks that start from a scanned vertical-finger posture instead
 # of HOME (see IntelTableWorld._topdown_seed_joints). Opt-in per object: the
 # cutlery and napkin picks are 10/10 from HOME and are left alone.
-TOPDOWN_SEED_OBJECTS: frozenset[str] = frozenset() if LEGACY_MODELS_FLAG else frozenset({"cup_1"})
+TOPDOWN_SEED_OBJECTS: frozenset[str] = (frozenset() if LEGACY_MODELS_FLAG else
+                                        (frozenset({"cup_1", "fork_1", "spoon_1"}) if REAL_DRAWERS else frozenset({"cup_1"})))
 OBJECT_GRASP_VERTICAL_OFFSET: dict[str, float] = {
     "spoon_1": 0.0,
 }
@@ -613,7 +619,8 @@ ZONE_POSITIONS: dict[str, tuple[float, float, float]] = (
         "upper_right": (0.12, 0.02, 0.046),   # hollow cup, 90 mm tall
         "left": (-0.16, -0.12, 0.010),        # fork, grip segment arched up
         "right": (0.16, -0.12, 0.010),        # spoon
-        "lower_left": (-0.25, -0.12, 0.012),  # napkin, outside the fork
+        "lower_left": (-0.20, 0.00, 0.012) if os.environ.get("OMNIQ_REAL_DRAWERS", "0") not in {"", "0", "false", "no"}
+                      else (-0.25, -0.12, 0.012),   # napkin, outside the fork (real drawers: clear of the left unit)
     }
 )
 
@@ -811,24 +818,48 @@ def _hollow_cup(name: str, pos: str, *, rgba: str, mass: str, friction: str, con
     return body
 
 
-def _drawer(pos: str) -> ET.Element:
-    """A shallow drawer on a slide joint (OQ-007). Passive -- no actuator, so
-    it doesn't change ``model.nu``. Opens toward the arms along +y; a future
-    OQ-010 ``OPEN``/``CLOSE`` primitive drives ``data.qpos`` for
-    ``drawer_slide`` (or contacts a handle, once grasping is contact-driven)."""
-    body = ET.Element("body", {"name": "drawer", "pos": pos})
+def _drawer(pos: str, name: str = "drawer") -> ET.Element:
+    """A drawer on a slide joint (OQ-007), passive -- no actuator.
+
+    Legacy: a solid block at the far edge, out of every arm's reach, whose
+    ``OPEN`` is a symbolic write to the slide joint.
+
+    Realistic (2026-09-14, the operator's call -- "the arms can reach
+    everything including the drawer"): a pull-out tray with 12 mm walls and a
+    handle bar on its front, one unit on each flank inside its arm's reach,
+    the fork lying in the left one and the spoon in the right. ``OPEN`` is
+    then a real pinch on the handle and a 50 mm pull along the slide
+    (:meth:`IntelTableWorld._do_open_drawer`). Opens toward the arms (+y).
+    """
+    body = ET.Element("body", {"name": name, "pos": pos})
     ET.SubElement(body, "joint", {
-        "name": "drawer_slide", "type": "slide", "axis": "0 1 0",
-        # Realistic layout: 50 mm of travel. OPEN teleports the drawer by its
-        # full travel, and with 120 mm the open front (y -0.275) reached the
-        # plate's rim at max jitter -- the drawer slammed into the plate.
+        "name": f"{name}_slide", "type": "slide", "axis": "0 1 0",
         "range": "0 .12" if LEGACY_MODELS_FLAG else "0 .05", "limited": "true", "damping": "3",
     })
-    ET.SubElement(body, "geom", {
-        "name": "drawer", "type": "box", "size": ".12 .045 .015",
-        "rgba": ".30 .19 .11 1", "mass": ".2", "friction": "1.20 .006 .0002",
-        **RIGID_CONTACT,
-    })
+    wood = {"rgba": ".30 .19 .11 1", "friction": "1.20 .006 .0002", **RIGID_CONTACT}
+    if not REAL_DRAWERS:
+        ET.SubElement(body, "geom", {"name": name, "type": "box", "size": ".12 .045 .015", "mass": ".2", **wood})
+        return body
+    # shallow cutlery tray: 200 x 90 mm inside, bottom 8 mm, walls 6 mm tall
+    # (12 mm walls blocked the open jaw -- 121 mm at the tips -- from
+    # straddling a handle lying in a 90 mm-wide tray)
+    ET.SubElement(body, "geom", {"name": name, "type": "box", "size": ".10 .045 .004", "pos": "0 0 .004", "mass": ".15", **wood})
+    for i, (px, py, sx, sy) in enumerate(((0, .045, .10, .004), (0, -.045, .10, .004), (.10, 0, .004, .045), (-.10, 0, .004, .045))):
+        ET.SubElement(body, "geom", {"name": f"{name}_wall_{i}", "type": "box", "size": f"{sx} {sy} .003",
+                                     "pos": f"{px} {py} .011", "mass": ".02", **wood})
+    # handle: a 60 x 8 x 10 mm bar standing off the front wall on a post, so
+    # fingertip pads can close across its 8 mm thickness
+    # handle clear of the wall top (z .024): post up from the wall, a thin
+    # bracket out to the bar, bar centre at z .040 with 13 mm of free space
+    # behind it for the inner pad (the bar level with the wall top jammed the
+    # inner pad on the wall, 2026-09-14)
+    ET.SubElement(body, "geom", {"name": f"{name}_handle_post", "type": "box", "size": ".004 .003 .012",
+                                 "pos": "0 .048 .026", "mass": ".005", **wood})
+    ET.SubElement(body, "geom", {"name": f"{name}_handle_bracket", "type": "box", "size": ".004 .010 .002",
+                                 "pos": "0 .055 .042", "mass": ".003", **wood})
+    ET.SubElement(body, "geom", {"name": f"{name}_handle", "type": "box", "size": ".030 .004 .005",
+                                 "pos": "0 .064 .040", "mass": ".01", "rgba": ".75 .75 .78 1",
+                                 "friction": "1.20 .006 .0002", **RIGID_CONTACT})
     return body
 
 
@@ -837,13 +868,13 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     config = config or IntelSceneConfig()
     rng = random.Random(config.seed)
 
-    def tableware_pose(base: tuple[float, float, float]) -> tuple[str, str | None]:
+    def tableware_pose(base: tuple[float, float, float], yaw0: float = 0.0) -> tuple[str, str | None]:
         if not config.randomized:
-            return "%.6f %.6f %.6f" % base, None
+            return "%.6f %.6f %.6f" % base, ("0 0 %.6f" % yaw0 if yaw0 else None)
         x, y, z = base
         x += rng.uniform(-config.position_jitter_m, config.position_jitter_m)
         y += rng.uniform(-config.position_jitter_m, config.position_jitter_m)
-        yaw = rng.uniform(-config.yaw_jitter_rad, config.yaw_jitter_rad)
+        yaw = yaw0 + rng.uniform(-config.yaw_jitter_rad, config.yaw_jitter_rad)
         return "%.6f %.6f %.6f" % (x, y, z), "0 0 %.6f" % yaw
 
     def tableware_rgba(base_rgba: str) -> str:
@@ -1019,7 +1050,17 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
                 "body2": f"{arm}_{exclude.attrib['body2']}",
             })
 
-    worldbody.append(_drawer("0 -.40 .015" if LEGACY_MODELS else "0 -.45 .015"))  # half-height .015 -> base rests on the z=0 table top
+    if LEGACY_MODELS:
+        worldbody.append(_drawer("0 -.40 .015"))  # half-height .015 -> base rests on the z=0 table top
+    elif not REAL_DRAWERS:
+        worldbody.append(_drawer("0 -.45 .015"))
+    else:
+        # one pull-out tray per flank, inside its arm's reach (handle ~0.26 m from the base)
+        # 3 mm above the tabletop: a drawer rides in its housing, it is not
+        # dragged across the table (a tray on the table stalled at 30 mm with
+        # 300 N of finger load turning into sliding friction)
+        worldbody.append(_drawer("-.32 -.10 .003", "drawer"))
+        worldbody.append(_drawer(".32 -.10 .003", "drawer_right"))
     # Each z is the geom's own half-height: the object starts resting on the
     # table surface (top face at world z = 0) rather than hovering above a
     # surface that used to be below the floor. z is never jittered by
@@ -1053,9 +1094,20 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     # explicitly, that fork_1/spoon_1 were never kinematically attached to
     # the drawer's slide joint in the first place, so "opening" it was
     # always symbolic and didn't literally reveal these bodies either way.
-    fork_pos, fork_euler = tableware_pose((-.32, -.05, .004 if LEGACY_MODELS else .009))
-    spoon_pos, spoon_euler = tableware_pose((.32, -.05, .004) if LEGACY_MODELS else (.34, .02, .009))
-    napkin_pos, napkin_euler = tableware_pose((-.22, .02, .009))
+    if LEGACY_MODELS:
+        fork_pos, fork_euler = tableware_pose((-.32, -.05, .004))
+        spoon_pos, spoon_euler = tableware_pose((.32, -.05, .004))
+        napkin_pos, napkin_euler = tableware_pose((-.22, .02, .009))
+    elif not REAL_DRAWERS:
+        fork_pos, fork_euler = tableware_pose((-.32, -.05, .009))
+        spoon_pos, spoon_euler = tableware_pose((.34, .02, .009))
+        napkin_pos, napkin_euler = tableware_pose((-.22, .02, .009))
+    else:
+        # cutlery lying inside its drawer tray (tray bottom top face at z .008),
+        # along the tray's long axis; the napkin off the left unit's footprint
+        fork_pos, fork_euler = tableware_pose((-.32, -.10, .017), yaw0=1.5708)
+        spoon_pos, spoon_euler = tableware_pose((.32, -.10, .017), yaw0=-1.5708)
+        napkin_pos, napkin_euler = tableware_pose((-.10, .10, .009))
     tableware = [
         _lipped_plate("plate_1", plate_pos, rgba=tableware_rgba(".93 .93 .91 1"),
                       mass=".20", friction="1.20 .006 .0002", euler=plate_euler),
@@ -1182,7 +1234,7 @@ class IntelTableWorld(MockWorld):
             # zone == target_zone: it's a fixture, never "misplaced", so
             # RulePlanner never tries to PICK/MOVE it like tableware.
             Detection("drawer", "fixture", "closed", "closed"),
-        ])
+        ] + ([Detection("drawer_right", "fixture", "closed", "closed")] if REAL_DRAWERS else []))
         mujoco = _mujoco()
         self.model = load_dual_so101_model(self.scene_config)
         self.data = mujoco.MjData(self.model)
@@ -1190,6 +1242,10 @@ class IntelTableWorld(MockWorld):
         self._controller_steps = 0
         drawer_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "drawer_slide")
         self._drawer_qpos_adr = self.model.jnt_qposadr[drawer_joint_id]
+        self._drawer_slide_adr = {"drawer": self._drawer_qpos_adr}
+        if REAL_DRAWERS:
+            jr = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "drawer_right_slide")
+            self._drawer_slide_adr["drawer_right"] = self.model.jnt_qposadr[jr]
         # TCP reference per arm -- the same body the capability-map probe
         # (integrations/intel/scripts/probe_so101.py) already uses.
         self._tcp_body = {
@@ -1266,6 +1322,11 @@ class IntelTableWorld(MockWorld):
                      "reason": f"{request.actor} is already holding {held[0]}"},
                 )
         physics_snapshot = None
+        if op == "OPEN" and obj in getattr(self, "_drawer_slide_adr", {}):
+            physics_snapshot = (
+                self.data.qpos.copy(), self.data.qvel.copy(), self.data.ctrl.copy(),
+                float(self.data.time), self._controller_steps,
+            )
         if op in {"PICK", "MOVE", "PLACE"} and obj in self._object_joints:
             # A failed real attempt must not leave the next governed retry
             # starting from a disturbed arm/object configuration. WorldState
@@ -1322,16 +1383,21 @@ class IntelTableWorld(MockWorld):
                 target[2], target[3], target[5] = 1.20, 0.85, GRIPPER_CLOSED
             elif op == "PLACE":
                 target[2], target[3], target[5] = 1.20, 0.85, GRIPPER_OPEN
-            elif op == "OPEN" and obj == "drawer":
-                # Opening a passive fixture must not move an arm away from
-                # its verified home pose. The previous coarse arm command
-                # made the next physically unrelated PICK depend on whether
-                # an OPEN step happened to precede it.
+            elif op == "OPEN" and obj in self._drawer_slide_adr:
                 arm_command = False
-                self.data.qpos[self._drawer_qpos_adr] = DRAWER_OPEN
-            elif op == "CLOSE" and obj == "drawer":
+                if not REAL_DRAWERS:
+                    # Symbolic write to the slide joint -- the block sits at
+                    # the far edge, out of every arm's reach.
+                    self.data.qpos[self._drawer_qpos_adr] = DRAWER_OPEN
+                else:
+                    # Realistic: pinch the handle and pull (2026-09-14).
+                    grasp_info = self._do_open_drawer(arm_offset, obj)
+                    if not grasp_info["opened"]:
+                        self._restore_physics(physics_snapshot)
+                        result = replace(result, ok=False)
+            elif op == "CLOSE" and obj in self._drawer_slide_adr:
                 arm_command = False
-                self.data.qpos[self._drawer_qpos_adr] = DRAWER_CLOSED
+                self.data.qpos[self._drawer_slide_adr[obj]] = DRAWER_CLOSED
             elif op == "OPEN":
                 target[5] = GRIPPER_OPEN
             elif op == "CLOSE":
@@ -1759,7 +1825,18 @@ class IntelTableWorld(MockWorld):
             # fourth try (lifts 79-84 mm once it landed). Closing across the
             # folded block's short side wants the jaw the other way round.
             base_roll = -base_roll
-        roll_hint = base_roll - yaw
+        # A parallel pinch is the same pinch after a half-turn of the wrist.
+        # Cutlery lying at ~90 deg (in its drawer tray) produced a hint near
+        # +/-pi that the clip below turned into a jaw 90 deg off -- closing
+        # ALONG the handle (2026-09-14). Of the half-turn-equivalent hints,
+        # take the one closest to the arm's base roll that the joint can
+        # reach; the proven picks (yaw ~0, hint = base roll) are unchanged.
+        candidates = [base_roll - yaw + k * math.pi for k in (-1, 0, 1)]
+        # "reachable" = what the clip below used to absorb (base roll +/- a
+        # small yaw jitter overshoots 1.62 by a few hundredths and is clipped,
+        # as before); only a near-pi hint is replaced by its half-turn twin
+        reachable = [c for c in candidates if abs(c) <= 2.2]
+        roll_hint = min(reachable or candidates, key=lambda c: abs(c - base_roll))
         return target_rotation, float(np.clip(roll_hint, -1.62, 1.62))
 
     def _ik_reach_pad_pose(
@@ -2328,6 +2405,67 @@ class IntelTableWorld(MockWorld):
         qw, qx, qy, qz = (float(v) for v in self.data.qpos[qpos_adr + 3:qpos_adr + 7])
         zz = 1.0 - 2.0 * (qx * qx + qy * qy)   # R[2,2]
         return float(np.arccos(np.clip(zz, -1.0, 1.0)))
+
+    def _do_open_drawer(self, arm_offset: int, drawer: str) -> dict[str, Any]:
+        """Pull a drawer tray open by its handle (2026-09-14): top-down pinch
+        across the 8 mm handle bar (the same pinch the cutlery uses), then a
+        straight pull along the slide axis (+y, toward the arm) by the
+        drawer's travel, release, withdraw. Verified by the slide joint
+        reading, the same observable the symbolic OPEN was verified by."""
+        import numpy as np
+
+        mujoco = self._mujoco
+        handle = self.model.geom(f"{drawer}_handle").id
+        adr = self._drawer_slide_adr[drawer]
+        travel = float(self.model.jnt_range[self.model.joint(f"{drawer}_slide").id][1])
+        start = float(self.data.qpos[adr])
+        hpos = self.data.geom_xpos[handle].copy()
+        # pads close along y (across the bar's 8 mm); finger vertical
+        opening = np.array([0.0, -1.0, 0.0]) if arm_offset == 0 else np.array([0.0, 1.0, 0.0])
+        pad_x = -opening
+        pad_y = np.array([0.0, 0.0, 1.0])
+        target_rotation = np.column_stack((pad_x, pad_y, np.cross(pad_x, pad_y)))
+        # the bar lies along x, like cutlery at yaw +/-90 deg: base roll minus
+        # +pi/2 on the left, minus -pi/2 on the mirrored right arm
+        yaw = math.pi / 2 if arm_offset == 0 else -math.pi / 2
+        roll_hint = float(np.clip(self._GRASP_WRIST_ROLL[arm_offset] - yaw, -1.62, 1.62))
+        clear_z = hpos[2] + 0.005 + GRASP_CLEARANCE + 0.02
+        self._go_home(arm_offset)
+        self._pick_track_tcp = True
+        self._set_gripper(arm_offset, GRIPPER_OPEN)
+        # start from a scanned vertical-finger posture above the handle (the
+        # plain solve arrived tilted and landed 36 mm along the bar)
+        seed_q, _ = self._topdown_seed_joints(arm_offset, (hpos[0], hpos[1], clear_z + 0.03), roll_hint)
+        if seed_q is not None:
+            self._drive_joints(arm_offset, seed_q, steps=250)
+        self._move_to(arm_offset, (hpos[0], hpos[1], clear_z))
+        self._ik_reach_pad(arm_offset, (hpos[0], hpos[1], clear_z), iters=200, roll=roll_hint)
+        target_rotation = self.data.geom_xmat[self._pad_geom[arm_offset]].reshape(3, 3).copy()
+        self._ik_reach_pad_pose(arm_offset, (hpos[0], hpos[1], clear_z), target_rotation, roll_hint=roll_hint, iters=200)
+        pinch_err = self._ik_reach_pad(arm_offset, (hpos[0], hpos[1], hpos[2]), iters=200, roll=roll_hint)
+        sensor = self._set_gripper(arm_offset, GRIPPER_CLOSED, settle_steps=150, obj=drawer)
+        # pull: track the fingertips +y in 10 mm steps
+        tip_now = None
+        pull_err = 0.0
+        for k in range(1, int(round(travel / 0.01)) + 2):
+            goal = np.array([hpos[0], hpos[1] + min(travel + 0.01, 0.01 * k), hpos[2]])
+            pull_err = self._ik_reach_pad(arm_offset, goal, iters=60, roll=roll_hint, max_dq=0.02)
+        for _ in range(60):
+            mujoco.mj_step(self.model, self.data)
+            self._controller_steps += 1
+        opened_by = float(self.data.qpos[adr]) - start
+        self._set_gripper(arm_offset, GRIPPER_OPEN, settle_steps=60)
+        self._ik_reach_pad(arm_offset, (hpos[0], hpos[1] + travel, hpos[2] + 0.06), iters=120, roll=roll_hint)
+        self._go_home(arm_offset)
+        final = float(self.data.qpos[adr])
+        opened = abs(final - DRAWER_OPEN) <= 0.008
+        return {
+            "grasp": "drawer_pull", "drawer": drawer, "opened": opened,
+            "slide_m": round(final, 4), "opened_by_m": round(opened_by, 4),
+            "pinch_error_m": round(float(pinch_err), 4), "pull_error_m": round(float(pull_err), 4),
+            "grasp_sensor": sensor,
+            "reason": None if opened else f"drawer pulled {opened_by * 1000:.0f} mm of {travel * 1000:.0f}",
+        }
 
     def _do_pick_edge(self, arm_offset: int, obj: str) -> dict[str, Any]:
         """Sideways rim pinch, one arm (2026-09-14): for tableware whose
@@ -2907,23 +3045,32 @@ class IntelTablePlanner(RulePlanner):
     def plan(self, goal, world):
         graph = super().plan(goal, world)
 
-        needs_drawer = any(
-            s.op == "PICK" and s.args.get("object") in self._DRAWER_OBJECTS
-            for s in graph.steps
-        )
-        if needs_drawer:
+        # Which drawer holds which piece. Legacy: one block, both pieces
+        # nominally in it. Realistic: a tray per flank, fork left, spoon right,
+        # each opened by its own arm with a real pull.
+        drawer_of = ({"fork_1": "drawer", "spoon_1": "drawer_right"} if REAL_DRAWERS
+                     else {"fork_1": "drawer", "spoon_1": "drawer"})
+        needed = []
+        for s in graph.steps:
+            if s.op == "PICK" and s.args.get("object") in drawer_of:
+                d = drawer_of[s.args["object"]]
+                if d not in needed:
+                    needed.append(d)
+        for d in needed:
+            step_id = "open_drawer" if d == "drawer" else f"open_{d}"
             open_drawer = Step(
-                "open_drawer", "manipulate", "OPEN", args={"object": "drawer"},
-                rationale="fork/spoon start in the drawer; open it before retrieving them",
+                step_id, "manipulate", "OPEN", args={"object": d},
+                rationale="cutlery starts in the drawer; open it before retrieving it",
             )
+            open_drawer.arm = "right" if d == "drawer_right" else "left"
             graph.steps.insert(0, open_drawer)
             for s in graph.steps:
-                if s.op == "PICK" and s.args.get("object") in self._DRAWER_OBJECTS:
+                if s.op == "PICK" and drawer_of.get(s.args.get("object")) == d:
                     s.deps = tuple(sorted(set(s.deps) | {open_drawer.id}))
 
         for step in graph.steps:
             object_id = step.args.get("object")
-            if object_id in self._RIGHT_OBJECTS:
+            if object_id in self._RIGHT_OBJECTS or object_id == "drawer_right":
                 step.arm = "right"
             elif object_id:
                 step.arm = "left"
@@ -2948,9 +3095,13 @@ class IntelTablePlanner(RulePlanner):
             keep = []
             for step in graph.steps:
                 object_id = step.args.get("object")
-                if object_id == "drawer" and step.arm == forbidden:
-                    step.arm = prefer  # the drawer is a fixture either arm may open
-                if not object_id or object_id == "drawer" or step.arm != forbidden:
+                if object_id in ("drawer", "drawer_right") and step.arm == forbidden:
+                    if not REAL_DRAWERS:
+                        step.arm = prefer  # symbolic open: either arm
+                    else:
+                        pruned.append((step.id, object_id, f"{forbidden} arm's drawer; withdrawn"))
+                        continue
+                if not object_id or object_id in ("drawer", "drawer_right") or step.arm != forbidden:
                     keep.append(step)
                     continue
                 if object_id in BIMANUAL_OBJECTS:
@@ -2967,10 +3118,12 @@ class IntelTablePlanner(RulePlanner):
             for step in keep:
                 step.deps = tuple(d for d in step.deps if d not in pruned_ids)
             # The drawer only needs opening for cutlery that is still planned.
-            if not any(st.op == "PICK" and st.args.get("object") in self._DRAWER_OBJECTS for st in keep):
-                keep = [st for st in keep if st.id != "open_drawer"]
-                for step in keep:
-                    step.deps = tuple(d for d in step.deps if d != "open_drawer")
+            for d, sid in (("drawer", "open_drawer"), ("drawer_right", "open_drawer_right")):
+                still = any(st.op == "PICK" and drawer_of.get(st.args.get("object")) == d for st in keep)
+                if not still:
+                    keep = [st for st in keep if st.id != sid]
+                    for step in keep:
+                        step.deps = tuple(x for x in step.deps if x != sid)
             graph.steps = keep
             self.last_authority_report = {
                 "prefer_arm": prefer, "withdrawn_arm": forbidden,
@@ -3094,10 +3247,14 @@ class IntelTableVerifier(FakeVerifier):
         self.world = world
 
     def check(self, step: Step, observation: Any) -> VerifyResult:
-        if step.op in {"OPEN", "CLOSE"} and step.args.get("object") == "drawer":
+        if step.op in {"OPEN", "CLOSE"} and step.args.get("object") in getattr(self.world, "_drawer_slide_adr", {"drawer": None}):
             expected = DRAWER_OPEN if step.op == "OPEN" else DRAWER_CLOSED
-            observed = float(self.world.data.qpos[self.world._drawer_qpos_adr])
-            ok = abs(observed - expected) <= self._DRAWER_TOLERANCE_M
+            adr = self.world._drawer_slide_adr.get(step.args.get("object"), self.world._drawer_qpos_adr)
+            observed = float(self.world.data.qpos[adr])
+            # a real pull lands within a few mm of the travel stop; the symbolic
+            # write is exact
+            tol = 0.008 if REAL_DRAWERS else self._DRAWER_TOLERANCE_M
+            ok = abs(observed - expected) <= tol
             return VerifyResult(
                 ok=ok,
                 expected={"drawer_qpos": expected, "tolerance_m": self._DRAWER_TOLERANCE_M},
