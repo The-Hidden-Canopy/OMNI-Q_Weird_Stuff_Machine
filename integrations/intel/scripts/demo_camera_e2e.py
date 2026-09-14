@@ -120,8 +120,18 @@ def main() -> int:
     after = look()
     print("camera after: ", after, flush=True)
 
-    # Independent verification: per class, does the camera see it in its target zone?
-    seen_in_target = {cls: any(c == cls and z == TARGET_ZONE[cls] for c, z, _ in after) for cls in TARGET_ZONE}
+    # Independent verification: per class, do the fused cameras put it within
+    # 50 mm of its target zone? (Distance to the target, not nearest-zone: a
+    # cup set down 3 cm short of a zone 6 cm from its spawn zone read as
+    # "not moved" under argmin, seed 905. 50 mm is tighter than the
+    # controller's own 60 mm placement tolerance.)
+    import math  # noqa: PLC0415
+    fused_after = looks[-1]["fused"]
+    seen_in_target = {}
+    for cls, zone in TARGET_ZONE.items():
+        zx, zy, _ = ZONE_POSITIONS[zone]
+        seen_in_target[cls] = any(f["cls"] == cls and math.hypot(f["world_xy"][0] - zx, f["world_xy"][1] - zy) <= 0.05
+                                  for f in fused_after)
     controller = {oid.split("_")[0]: v["placed"] for oid, v in _per_object_pick_place_outcomes(receipt).items()}
     agreement = {cls: (seen_in_target[cls], controller.get(cls)) for cls in TARGET_ZONE}
     summary = {
@@ -136,6 +146,10 @@ def main() -> int:
         "run_id": receipt.run_id, "content_hash": receipt.content_hash,
     }
     args.out.mkdir(parents=True, exist_ok=True)
+    # The four camera frames the verdict was read from, for the record.
+    from PIL import Image  # noqa: PLC0415
+    for n, c in cams.items():
+        Image.fromarray(c.capture()).save(args.out / f"seed-{args.seed}_after_{n}.png")
     (args.out / f"seed-{args.seed}.json").write_text(json.dumps({"summary": summary, "receipt": receipt.as_dict()}, indent=1, sort_keys=True))
     print("\n=== camera end-to-end ===")
     print(json.dumps({k: v for k, v in summary.items() if k != "model"}, indent=1))

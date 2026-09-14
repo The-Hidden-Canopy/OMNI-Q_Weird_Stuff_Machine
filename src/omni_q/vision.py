@@ -398,11 +398,16 @@ class MultiCameraFusion:
         for cls, conf, wxy, cam in hits:
             for f in fused:
                 if f["cls"] == cls and np.hypot(f["xy"][0] - wxy[0], f["xy"][1] - wxy[1]) <= self.merge_radius_m:
+                    # confidence-weighted position over the agreeing cameras:
+                    # one oblique view can be 3-4 cm off, the mean is not
+                    w0, w1 = f["weight"], conf
+                    f["xy"] = ((f["xy"][0] * w0 + wxy[0] * w1) / (w0 + w1), (f["xy"][1] * w0 + wxy[1] * w1) / (w0 + w1))
+                    f["weight"] = w0 + w1
                     f["votes"] += 1
                     f["cameras"].append(cam)
                     break
             else:
-                fused.append({"cls": cls, "conf": conf, "xy": wxy, "votes": 1, "cameras": [cam]})
+                fused.append({"cls": cls, "conf": conf, "xy": wxy, "weight": conf, "votes": 1, "cameras": [cam]})
         fused = [f for f in fused if f["votes"] >= self.min_votes or f["conf"] >= self.single_view_min_conf]
         ref = self.cameras[self.reference]
         pos, rot, fovy = ref.camera_pose()
