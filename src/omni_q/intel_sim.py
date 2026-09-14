@@ -2367,6 +2367,15 @@ class IntelTableWorld(MockWorld):
         goal_high = np.array([target[0], target[1], centre_now[2]])
         goal_low = np.array([target[0], target[1], rest_centre_z])
 
+        # Lockstep IK carry: both fingertips tracked along the straight line,
+        # 12 waypoints out and 6 down. Measured 2026-09-14 over two 10-trial
+        # harness runs: plate placed 19/20 with this. Two alternatives were
+        # tried the same day and were worse -- a scan-planned joint-space
+        # drive (tips arrive, plate follows 2 cm of 6: it slips in the
+        # pinches while the arms' arcs diverge) and 1 cm scan-planned
+        # increments (both arms pull the plate toward their own bases at
+        # every re-plan). The tips lag the line here (carry error ~60 mm)
+        # but the plate stays with them.
         def track_both(delta_total, n_steps, iters):
             errs = []
             for k in range(1, n_steps + 1):
