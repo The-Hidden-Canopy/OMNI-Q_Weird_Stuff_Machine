@@ -383,7 +383,13 @@ def test_legacy_scene_exposes_calibrated_cup_and_no_collision_exemptions():
     mujoco = world._mujoco
     cup_id = mujoco.mj_name2id(world.model, mujoco.mjtObj.mjOBJ_GEOM, "cup_1")
     pad_id = world._pad_geom[0]
-    assert tuple(world.model.geom_size[cup_id][:2]) == pytest.approx((0.022, 0.050), abs=1e-6)
+    # 2026-09-14: the cup is a hollow 60 mm cup (bottom disc + 16 wall
+    # boxes); the geom carrying the body's name is its bottom disc, 30 mm
+    # radius, 1.5 mm half-thick. The legacy solid cylinder (22 x 50 mm) is
+    # behind OMNIQ_LEGACY_MODELS=1.
+    from omni_q.intel_sim import LEGACY_MODELS_FLAG
+    expected_size = (0.022, 0.050) if LEGACY_MODELS_FLAG else (0.030, 0.0015)
+    assert tuple(world.model.geom_size[cup_id][:2]) == pytest.approx(expected_size, abs=1e-6)
     assert tuple(world.model.geom_friction[cup_id]) == pytest.approx((3.0, 0.020, 0.001), abs=1e-6)
     # Every geom -- pads included -- uses plain MuJoCo defaults, not a
     # custom contype/conaffinity scheme (the pad's own friction/solref/
@@ -495,8 +501,16 @@ def test_legacy_pick_stops_before_motion_when_shared_entry_is_unsafe():
     assert float(world.data.time) == pytest.approx(before_time)
 
 
-def test_legacy_planner_reserves_napkin_before_cutlery_retrieval():
-    """The shared workspace order is explicit and remains governed."""
+def test_planner_sets_the_plate_first_and_the_order_is_explicit():
+    """The shared workspace order is explicit and remains governed.
+
+    2026-09-14: with the realistic tableware the plate is the two-arm object
+    and both arms' sideways approaches run down the middle of the table, so
+    it is set first (as a table is actually set); the napkin, whose zone is
+    outside the fork, goes last. The legacy proxies keep the measured old
+    napkin-first order behind OMNIQ_LEGACY_MODELS=1.
+    """
+    from omni_q.intel_sim import LEGACY_MODELS_FLAG
     engine = build_intel_sim_engine()
     graph = engine.planner.plan("set the table", engine.world.state())
     pick_ids = {
@@ -505,8 +519,12 @@ def test_legacy_planner_reserves_napkin_before_cutlery_retrieval():
         if step.op == "PICK"
     }
 
-    assert pick_ids["napkin_1"] < pick_ids["fork_1"]
-    assert pick_ids["napkin_1"] < pick_ids["spoon_1"]
+    if LEGACY_MODELS_FLAG:
+        assert pick_ids["napkin_1"] < pick_ids["fork_1"]
+        assert pick_ids["napkin_1"] < pick_ids["spoon_1"]
+    else:
+        assert pick_ids["plate_1"] < min(pick_ids["cup_1"], pick_ids["fork_1"], pick_ids["spoon_1"], pick_ids["napkin_1"])
+        assert pick_ids["fork_1"] < pick_ids["napkin_1"]
 
 
 def test_failed_grasp_restores_mujoco_state_for_a_clean_retry():
@@ -537,11 +555,15 @@ def test_failed_grasp_restores_mujoco_state_for_a_clean_retry():
     assert world.state().ownership["cup_1"] is None
 
 
-def test_failed_place_restores_the_pre_attempt_owner():
-    """A failed carry must not silently turn a held object into released."""
+def test_failed_place_releases_the_object_and_keeps_its_zone():
+    """A failed placement is reported honestly: the object is released
+    (the gripper opened and retracted; it is on the table wherever it
+    landed), ownership is cleared so the planner picks it up again, and the
+    symbolic zone is reverted. It is NOT rewound into a phantom hold --
+    that rewind sent an arm with a closed jaw to its next PICK (engine
+    trace, 2026-09-14). Physics is deliberately not restored here."""
     world = IntelTableWorld()
     world._ownership["cup_1"] = "intel.right_arm"  # fixture: prior verified PICK
-    before_qpos = world.data.qpos.copy()
 
     result = _send(
         world, "PLACE", {"object": "cup_1", "to": "not-a-zone"},
@@ -550,9 +572,8 @@ def test_failed_place_restores_the_pre_attempt_owner():
 
     assert result.ok is False
     assert result.detail["placed"] is False
-    assert world.state().ownership["cup_1"] == "intel.right_arm"
+    assert world.state().ownership["cup_1"] is None
     assert world.state().objects["cup_1"].zone == "tray_cup"
-    np.testing.assert_allclose(world.data.qpos, before_qpos, atol=1e-10)
 
 
 def test_full_run_opens_the_drawer_before_retrieving_cutlery():

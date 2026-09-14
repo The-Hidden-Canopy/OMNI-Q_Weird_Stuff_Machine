@@ -362,7 +362,8 @@ GRIPPER_OPEN = 1.5     # Jaw joint, rad -- near the SO-101 open end of its range
 # wedge; see so101_capability_map.md's corrected entry). Nothing is relaxed
 # here -- this commands the joint its own MJCF range already allows.
 GRIPPER_CLOSED = -0.174
-DRAWER_OPEN = 0.12     # drawer_slide qpos, m -- matches its MJCF range max
+LEGACY_MODELS_FLAG = os.environ.get("OMNIQ_LEGACY_MODELS", "0") not in {"", "0", "false", "no"}
+DRAWER_OPEN = 0.12 if LEGACY_MODELS_FLAG else 0.05   # drawer_slide qpos, m -- matches its MJCF range max
 DRAWER_CLOSED = 0.0
 TRANSIT_HEIGHT = 0.28  # m -- above the table/drawer/tableware envelope, within reach (see _move_to)
 
@@ -430,9 +431,12 @@ class IntelSceneConfig:
 # servo just pushes into the object's own volume, dragging it around instead
 # of approaching it cleanly. Not derived from the model at runtime because
 # _do_pick/_do_place need it before the arm ever gets there.
-OBJECT_HALF_HEIGHT: dict[str, float] = {
-    "plate_1": 0.016, "cup_1": 0.055, "fork_1": 0.0035, "spoon_1": 0.0035, "napkin_1": 0.009,
-}
+OBJECT_HALF_HEIGHT: dict[str, float] = (
+    {"plate_1": 0.016, "cup_1": 0.055, "fork_1": 0.0035, "spoon_1": 0.0035, "napkin_1": 0.009}
+    if LEGACY_MODELS_FLAG else
+    # realistic models: origin -> top. plate: lip top; cup: rim; cutlery: grip segment top
+    {"plate_1": 0.0275, "cup_1": 0.045, "fork_1": 0.0035, "spoon_1": 0.0035, "napkin_1": 0.009}
+)
 # Horizontal offset from an object's centre to the fixed pad target.  Large
 # flat fixtures are grasped at their rim/edge; targeting their centre puts the
 # pad inside the collision volume and drags them during the lift.
@@ -444,7 +448,7 @@ OBJECT_GRASP_OFFSET: dict[str, float] = {
     # its base tips over. Seen live by the operator on 2026-09-13 ("only one
     # claw is moving, the other stayed out"). Land the fixed jaw first; then
     # the moving jaw closes onto an object that cannot travel.
-    "plate_1": 0.078, "cup_1": 0.022, "fork_1": 0.006, "spoon_1": 0.0,
+    "plate_1": 0.078, "cup_1": 0.022 if LEGACY_MODELS_FLAG else 0.030, "fork_1": 0.006, "spoon_1": 0.0,
     # The cloth's broad, thin footprint is more stable under a centred pinch;
     # the earlier rim offset let the moving jaw skim past it during lift.
     "napkin_1": 0.0,
@@ -452,6 +456,35 @@ OBJECT_GRASP_OFFSET: dict[str, float] = {
 # Small vertical calibration for thin proxies whose pad centre is not exactly
 # coincident with the object's geometric centre.  This remains a target
 # offset; the object freejoint is never written.
+# Offset along the object's own +y axis (toward the head) from its origin to
+# the grip point. The bent cutlery's origin is the middle of the handle, but
+# the bowl/tines put the centre of mass 17 mm toward the head; pinched at the
+# geometric middle the piece hangs bowl-down and pivots in a two-pad grip
+# (measured 2026-09-14: spoon rolled 61 deg about its handle after the lift,
+# then slipped out in the first 0.2 s of the carry). Grip at the CoM.
+OBJECT_GRASP_ALONG: dict[str, float] = (
+    {} if LEGACY_MODELS_FLAG else {"fork_1": 0.017, "spoon_1": 0.017}
+)
+# Objects picked by a SIDEWAYS pinch on a rim: the gripper comes in
+# horizontally from outside, fixed jaw above the lip, moving jaw below.
+# (lip_radius_m, lip_centre_z_from_origin_m, lip_half_thickness_m)
+EDGE_PINCH: dict[str, tuple[float, float, float]] = (
+    {} if LEGACY_MODELS_FLAG else {"plate_1": (0.0925, 0.025, 0.0025)}
+)
+# Jaw opening for the horizontal approach. Fully open (77 mm) would put the
+# moving jaw ~50 mm below the table when the fixed jaw is on a lip 25 mm up;
+# ~26 mm of gap clears a 5 mm lip with the moving jaw tip still above the table.
+# Measured pad-to-pad at the tips: q=0 -> 17.8 mm, q=0.15 -> 29 mm. At 0.05
+# the moving jaw's tip sits ~20 mm below the fixed pad: under a lip whose
+# underside is 23 mm up, and still clear of the table.
+EDGE_PINCH_APPROACH_JAW_RAD = 0.05
+# Objects that need BOTH arms: measured 2026-09-14 (evidence/benchmark_results/
+# realistic_models_2026-09-14/plate_single_arm_edge_pinch_tilts.png), one arm
+# pinching the rim of the 200 mm plate lifts its near edge 21 mm and the
+# plate hangs at 19 deg with the far rim on the table -- 0.2 N.m of plate
+# torque against ~0.1 N.m of pinch. Two arms on opposite rims lift it flat.
+BIMANUAL_OBJECTS: frozenset[str] = frozenset() if LEGACY_MODELS_FLAG else frozenset({"plate_1"})
+BIMANUAL_MAX_TILT_RAD = 0.21  # 12 deg: a plate carried flat, not dragged
 OBJECT_GRASP_VERTICAL_OFFSET: dict[str, float] = {
     "spoon_1": 0.0,
 }
@@ -559,13 +592,26 @@ LEGACY_MAX_SETTLE_DRIFT_M = 0.012
 # IK targets for _do_place -- unrelated to scheduler.DEFAULT_LAYOUT, which is
 # an abstract reachability space, not a physical coordinate frame (see that
 # dict's comment).
-ZONE_POSITIONS: dict[str, tuple[float, float, float]] = {
-    "center": (0.00, -0.10, 0.02),        # plate
-    "upper_right": (0.16, 0.02, 0.055),   # cup
-    "left": (-0.16, -0.10, 0.015),        # fork
-    "right": (0.16, -0.10, 0.015),        # spoon
-    "lower_left": (-0.16, 0.05, 0.012),   # napkin
-}
+ZONE_POSITIONS: dict[str, tuple[float, float, float]] = (
+    {
+        "center": (0.00, -0.10, 0.02),        # plate
+        "upper_right": (0.16, 0.02, 0.055),   # cup
+        "left": (-0.16, -0.10, 0.015),        # fork
+        "right": (0.16, -0.10, 0.015),        # spoon
+        "lower_left": (-0.16, 0.05, 0.012),   # napkin
+    } if LEGACY_MODELS_FLAG else {
+        # z = the realistic model's resting centre height (measured after settle)
+        "center": (0.00, -0.16, 0.012),       # plate on its foot ring; both near rims 0.35 m from their bases
+        # A set place around the centred plate (rim reaches x +/-0.10,
+        # y -0.06..-0.26): fork and spoon beside it, napkin outside the fork,
+        # cup upper right. The plate is set first, so nothing is in either
+        # arm's sideways corridor when it is picked.
+        "upper_right": (0.12, 0.02, 0.046),   # hollow cup, 90 mm tall
+        "left": (-0.16, -0.12, 0.010),        # fork, grip segment arched up
+        "right": (0.16, -0.12, 0.010),        # spoon
+        "lower_left": (-0.25, -0.12, 0.012),  # napkin, outside the fork
+    }
+)
 
 
 class IntelSimulationUnavailable(RuntimeError):
@@ -634,6 +680,133 @@ def _cutlery(name: str, pos: str, *, handle: dict[str, str], head: dict[str, str
     return body
 
 
+# Realistic tableware, built from primitives (2026-09-14). The blocky proxies
+# (32 mm puck plate, solid cup, flat cutlery slabs) were the operator's call
+# to replace and the physics agreed: under honest (rigid) contact the puck
+# jams in the jaw notch and the solid cup's grasp collapses. Dimensions are
+# real-world; every shape is still MuJoCo boxes/cylinders/ellipsoids so
+# there are no mesh assets. The old proxies stay reachable with
+# OMNIQ_LEGACY_MODELS=1 for A/B evidence only.
+LEGACY_MODELS = LEGACY_MODELS_FLAG
+
+
+def _free_body(name: str, pos: str, euler: str | None = None) -> ET.Element:
+    attrs = {"name": name, "pos": pos}
+    if euler is not None:
+        attrs["euler"] = euler
+    body = ET.Element("body", attrs)
+    ET.SubElement(body, "freejoint", {"name": f"{name}_free"})
+    return body
+
+
+def _bent_cutlery(name: str, pos: str, *, kind: str, mass: str, friction: str, rgba: str,
+                  euler: str | None = None) -> ET.Element:
+    """Cutlery with a bent handle, the way it actually lies on a table.
+
+    Body origin = centre of the mid-handle, the grip point. A real fork or
+    spoon does not lie flat: the head and the handle tip touch the table and
+    the middle of the handle arches ~7 mm above it. That arch is what makes
+    the handle graspable at all with 8 mm-tall fingertip pads -- the flat
+    slab had nothing to straddle (measured 2026-09-13). Overall 150 mm,
+    handle 10 x 7 mm grip section (5 mm at the tip and neck).
+    """
+    body = _free_body(name, pos, euler)
+    common = {"rgba": rgba, "friction": friction, **RIGID_CONTACT}
+    # mid-handle, level, 50 mm: the grip
+    # 10 x 7 mm grip section: the jaw's hard stop is a 5.6 mm tip gap, so a
+    # 5 mm handle was barely touched (1-2 pads, single-digit newtons).
+    ET.SubElement(body, "geom", {"name": name, "type": "box", "size": ".005 .025 .0035",
+                                 "pos": "0 0 0", "mass": "0.012", **common})
+    # handle tip, 40 mm sloping down to the table (drop 6.5 mm over 40 mm)
+    ET.SubElement(body, "geom", {"name": f"{name}_tip", "type": "box", "size": ".005 .02 .0025",
+                                 "pos": "0 -.044 -.0033", "euler": "0.162 0 0", "mass": "0.010", **common})
+    # neck, 25 mm sloping down to the head
+    ET.SubElement(body, "geom", {"name": f"{name}_neck", "type": "box", "size": ".004 .0125 .0025",
+                                 "pos": "0 .036 -.0033", "euler": "-0.262 0 0", "mass": "0.005", **common})
+    if kind == "fork":
+        # four tines, 45 mm, on a 25 mm bridge, resting on the table
+        ET.SubElement(body, "geom", {"name": f"{name}_head", "type": "box", "size": ".0125 .005 .0015",
+                                     "pos": "0 .053 -.0075", "mass": "0.004", **common})
+        for i, x in enumerate((-.0095, -.0032, .0032, .0095)):
+            ET.SubElement(body, "geom", {"name": f"{name}_tine_{i}", "type": "box", "size": ".0015 .0225 .0015",
+                                         "pos": f"{x} .0805 -.0075", "mass": "0.00225", **common})
+    else:
+        # spoon bowl: a flattened ellipsoid, 50 x 32 x 8 mm, resting on the table
+        ET.SubElement(body, "geom", {"name": f"{name}_head", "type": "ellipsoid", "size": ".016 .025 .004",
+                                     "pos": "0 .073 -.005", "mass": "0.013", **common})
+    return body
+
+
+def _lipped_plate(name: str, pos: str, *, rgba: str, mass: str, friction: str,
+                  euler: str | None = None) -> ET.Element:
+    """A rimmed soup plate: bowl floor on a foot ring, stepped wall, flat lip.
+
+    Body origin = bowl-floor centre. Measured 2026-09-14: the SO-101's
+    moving-jaw tip is ~12.5 mm thick and the fixed jaw ~24 mm, so nothing on
+    this gripper fits under a flat dinner plate's lip (~8 mm above the
+    table). A rimmed soup/pasta plate -- a real, common piece -- carries its
+    lip well up off the table, and that lip is the feature a sideways
+    pinch takes: the thin fixed fingertip slides under it, the moving jaw
+    closes down on top. The jaw body behind the fingertip is 42 mm thick,
+    so the lip underside must be >= ~33 mm up for it to clear the table:
+    a rimmed soup bowl (real ones run 230 x 40 mm). 200 mm across, 5 mm
+    lip at +25 mm, 25 mm bowl depth, 350 g.
+    """
+    body = _free_body(name, pos, euler)
+    common = {"rgba": rgba, "friction": friction, **RIGID_CONTACT}
+    ET.SubElement(body, "geom", {"name": name, "type": "cylinder", "size": ".060 .0025",
+                                 "mass": str(float(mass) * 0.35), **common})
+    n_foot, n_wall, n_lip = 12, 16, 16
+    for i in range(n_foot):
+        th = 2 * math.pi * i / n_foot  # the scene compiler is in radians
+        r = 0.050
+        ET.SubElement(body, "geom", {"name": f"{name}_foot_{i}", "type": "box", "size": ".003 .0135 .004",
+                                     "pos": f"{r * math.cos(th):.4f} {r * math.sin(th):.4f} -.0065",
+                                     "euler": f"0 0 {th:.4f}", "mass": str(float(mass) * 0.10 / n_foot), **common})
+    # stepped wall: three rings climbing from the floor (r 60) to the lip (r 85)
+    for ring, (r, z) in enumerate(((0.065, 0.004), (0.075, 0.0115), (0.085, 0.019))):
+        for i in range(n_wall):
+            th = 2 * math.pi * i / n_wall
+            ET.SubElement(body, "geom", {"name": f"{name}_wall{ring}_{i}", "type": "box",
+                                         "size": f".003 {r * math.tan(math.pi / n_wall) * 1.08:.4f} .0045",
+                                         "pos": f"{r * math.cos(th):.4f} {r * math.sin(th):.4f} {z:.4f}",
+                                         "euler": f"0 0 {th:.4f}", "mass": str(float(mass) * 0.30 / (3 * n_wall)), **common})
+    for i in range(n_lip):
+        th = 2 * math.pi * i / n_lip
+        r = 0.0925  # lip spans r 85-100 mm, 5 mm thick, centre +25 mm (top +27.5)
+        ET.SubElement(body, "geom", {"name": f"{name}_lip_{i}", "type": "box",
+                                     "size": f".0075 {r * math.tan(math.pi / n_lip) * 1.08:.4f} .0025",
+                                     "pos": f"{r * math.cos(th):.4f} {r * math.sin(th):.4f} .025",
+                                     "euler": f"0 0 {th:.4f}", "mass": str(float(mass) * 0.25 / n_lip), **common})
+    return body
+
+
+def _hollow_cup(name: str, pos: str, *, rgba: str, mass: str, friction: str, contact: dict[str, str],
+                euler: str | None = None) -> ET.Element:
+    """A cup that is actually hollow: 16 wall segments on a bottom disc.
+
+    Body origin = mid-height, like the old solid cylinder, so every existing
+    height constant still means the same thing. 60 mm across, 90 mm tall,
+    3 mm wall. A pinch across the diameter now closes on two thin walls; a
+    wall pinch (one pad inside, one outside) becomes possible.
+    """
+    R, H, WALL, N = 0.030, 0.090, 0.003, 16
+    body = _free_body(name, pos, euler)
+    common = {"rgba": rgba, "friction": friction, **contact}
+    ET.SubElement(body, "geom", {"name": name, "type": "cylinder", "size": f"{R:.4f} {WALL / 2:.4f}",
+                                 "pos": f"0 0 {-H / 2 + WALL / 2:.4f}", "mass": str(float(mass) * 0.2), **common})
+    rc = R - WALL / 2
+    half_chord = rc * math.tan(math.pi / N) * 1.08  # slight overlap closes the seams
+    for i in range(N):
+        th = 2 * math.pi * i / N
+        ET.SubElement(body, "geom", {"name": f"{name}_wall_{i}", "type": "box",
+                                     "size": f"{WALL / 2:.4f} {half_chord:.4f} {H / 2:.4f}",
+                                     "pos": f"{rc * math.cos(th):.4f} {rc * math.sin(th):.4f} 0",
+                                     "euler": f"0 0 {th:.4f}",  # radians
+                                     "mass": f"{float(mass) * 0.8 / N:.5f}", **common})
+    return body
+
+
 def _drawer(pos: str) -> ET.Element:
     """A shallow drawer on a slide joint (OQ-007). Passive -- no actuator, so
     it doesn't change ``model.nu``. Opens toward the arms along +y; a future
@@ -642,7 +815,10 @@ def _drawer(pos: str) -> ET.Element:
     body = ET.Element("body", {"name": "drawer", "pos": pos})
     ET.SubElement(body, "joint", {
         "name": "drawer_slide", "type": "slide", "axis": "0 1 0",
-        "range": "0 .12", "limited": "true", "damping": "3",
+        # Realistic layout: 50 mm of travel. OPEN teleports the drawer by its
+        # full travel, and with 120 mm the open front (y -0.275) reached the
+        # plate's rim at max jitter -- the drawer slammed into the plate.
+        "range": "0 .12" if LEGACY_MODELS_FLAG else "0 .05", "limited": "true", "damping": "3",
     })
     ET.SubElement(body, "geom", {
         "name": "drawer", "type": "box", "size": ".12 .045 .015",
@@ -823,13 +999,25 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
                 "body2": f"{arm}_{exclude.attrib['body2']}",
             })
 
-    worldbody.append(_drawer("0 -.40 .015"))  # half-height .015 -> base rests on the z=0 table top
+    worldbody.append(_drawer("0 -.40 .015" if LEGACY_MODELS else "0 -.45 .015"))  # half-height .015 -> base rests on the z=0 table top
     # Each z is the geom's own half-height: the object starts resting on the
     # table surface (top face at world z = 0) rather than hovering above a
     # surface that used to be below the floor. z is never jittered by
     # tableware_pose(), so these stay exact.
-    plate_pos, plate_euler = tableware_pose((-.13, -.08, .016))
-    cup_pos, cup_euler = tableware_pose((.16, -.06, .050))
+    # Realistic plate: further across the table from its arm. Scanned joint
+    # space 2026-09-14: a horizontal finger with the fixed jaw on top exists
+    # only with the fingertip 0.30-0.48 m from the base at lip height, so the
+    # near rim must be at least 0.30 m out -- the old spot put it at 0.215.
+    # Bimanual plate: centred between the arms, far side of the table, so
+    # each arm's near rim is ~0.40 m from its base (band 0.30-0.48).
+    # (y -0.13: the drawer opens toward the arms by 0.12 m and its open front
+    # reaches y -0.275 with the drawer at the table edge -- at y -0.22 the
+    # plate's rim sat in that path, 19 mm of drawer/plate penetration.)
+    plate_pos, plate_euler = tableware_pose((-.13, -.08, .016) if LEGACY_MODELS else (0.0, -.22, .0105))
+    # Cup: out of the right arm's corridor to the plate rim (it spawned on
+    # that line and blocked the bimanual approach, 2026-09-14), still 0.30 m
+    # from the right base.
+    cup_pos, cup_euler = tableware_pose((.16, -.06, .050) if LEGACY_MODELS else (.06, .03, .045))
     # fork_1/spoon_1 used to sit at (+/-.04, -.40) -- co-located with the
     # drawer prop above. Measured (two independent ways: this file's own IK
     # convergence sweep, and OQ-003's separately-published reach probe in
@@ -845,43 +1033,56 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     # explicitly, that fork_1/spoon_1 were never kinematically attached to
     # the drawer's slide joint in the first place, so "opening" it was
     # always symbolic and didn't literally reveal these bodies either way.
-    fork_pos, fork_euler = tableware_pose((-.32, -.05, .004))
-    spoon_pos, spoon_euler = tableware_pose((.32, -.05, .004))
+    fork_pos, fork_euler = tableware_pose((-.32, -.05, .004 if LEGACY_MODELS else .009))
+    spoon_pos, spoon_euler = tableware_pose((.32, -.05, .004) if LEGACY_MODELS else (.34, .02, .009))
     napkin_pos, napkin_euler = tableware_pose((-.22, .02, .009))
+    tableware = [
+        _lipped_plate("plate_1", plate_pos, rgba=tableware_rgba(".93 .93 .91 1"),
+                      mass=".20", friction="1.20 .006 .0002", euler=plate_euler),
+        _hollow_cup("cup_1", cup_pos, rgba=tableware_rgba(".22 .58 .78 1"), mass=".10",
+                    friction="3.00 .020 .001",
+                    contact=(RIGID_CONTACT or {"solref": PAD_SOLREF, "solimp": PAD_SOLIMP}), euler=cup_euler),
+        _bent_cutlery("fork_1", fork_pos, kind="fork", mass=".04", friction="1.20 .006 .0002",
+                      rgba=tableware_rgba(".72 .73 .75 1"), euler=fork_euler),
+        _bent_cutlery("spoon_1", spoon_pos, kind="spoon", mass=".04", friction="1.20 .006 .0002",
+                      rgba=tableware_rgba(".72 .73 .75 1"), euler=spoon_euler),
+    ]
+    if LEGACY_MODELS:
+        # (legacy plate note) Rim half-height .016 (32mm full thickness), not
+        # the original .007 (14mm): the gripper's fully-closed pad gap was
+        # then believed to be 21.3mm, so the puck was made thick enough to
+        # pinch. It is kept only as the A/B baseline.
+        tableware = [
+            _body("plate_1", plate_pos, {
+                "type": "cylinder", "size": ".095 .016", "rgba": tableware_rgba(".93 .93 .91 1"),
+                "mass": ".18", "friction": "1.20 .006 .0002",  # ceramic
+                **RIGID_CONTACT,
+            }, euler=plate_euler),
+            _body("cup_1", cup_pos, {
+                # Calibrated to the measured SO-101 pad envelope: the previous
+                # 64 mm / 120 g fixture exceeded the 27 mm open-pad gap and could
+                # not distinguish a bad grasp from an impossible geometry.
+                "type": "cylinder", "size": ".022 .050", "rgba": tableware_rgba(".22 .58 .78 1"),
+                "mass": ".08", "friction": "3.00 .020 .001",
+                **(RIGID_CONTACT or {"solref": PAD_SOLREF, "solimp": PAD_SOLIMP}),
+            }, euler=cup_euler),
+            # fork/spoon start inside the drawer -- retrieval is gated on OPEN, matching
+            # the brief's scenario ("open the top drawer, retrieve spoons and forks").
+            # Handle 10 mm wide x 100 mm x 7 mm; head 25 mm x 50 mm x 6 mm at the
+            # +y end. Same 150 mm overall length and 40 g as the old slab.
+            _cutlery("fork_1", fork_pos,
+                     handle={"size": ".005 .05 .0035"}, handle_offset="0 0 0",
+                     head={"size": ".0125 .025 .003"}, head_offset="0 .075 0",
+                     mass=".04", friction="1.20 .006 .0002",
+                     rgba=tableware_rgba(".72 .73 .75 1"), euler=fork_euler),
+            _cutlery("spoon_1", spoon_pos,
+                     handle={"size": ".005 .05 .0035"}, handle_offset="0 0 0",
+                     head={"size": ".013 .02 .004"}, head_offset="0 .07 0",
+                     mass=".04", friction="1.20 .006 .0002",
+                     rgba=tableware_rgba(".72 .73 .75 1"), euler=spoon_euler),
+        ]
+    worldbody.extend(tableware)
     worldbody.extend([
-        # Rim half-height .016 (32mm full thickness), not the original .007
-        # (14mm): the SO-101 gripper's own fully-closed pad gap is 21.3mm
-        # (integrations/intel/so101_capability_map.md) -- a 14mm rim is
-        # geometrically thinner than the gripper can ever close to, so the
-        # jaws would sweep past it without contact. 32mm sits inside the
-        # gripper's 21.3-77mm graspable range.
-        _body("plate_1", plate_pos, {
-            "type": "cylinder", "size": ".095 .016", "rgba": tableware_rgba(".93 .93 .91 1"),
-            "mass": ".18", "friction": "1.20 .006 .0002",  # ceramic
-            **RIGID_CONTACT,
-        }, euler=plate_euler),
-        _body("cup_1", cup_pos, {
-            # Calibrated to the measured SO-101 pad envelope: the previous
-            # 64 mm / 120 g fixture exceeded the 27 mm open-pad gap and could
-            # not distinguish a bad grasp from an impossible geometry.
-            "type": "cylinder", "size": ".022 .050", "rgba": tableware_rgba(".22 .58 .78 1"),
-            "mass": ".08", "friction": "3.00 .020 .001",
-            **(RIGID_CONTACT or {"solref": PAD_SOLREF, "solimp": PAD_SOLIMP}),
-        }, euler=cup_euler),
-        # fork/spoon start inside the drawer -- retrieval is gated on OPEN, matching
-        # the brief's scenario ("open the top drawer, retrieve spoons and forks").
-        # Handle 10 mm wide x 100 mm x 7 mm; head 25 mm x 50 mm x 6 mm at the
-        # +y end. Same 150 mm overall length and 40 g as the old slab.
-        _cutlery("fork_1", fork_pos,
-                 handle={"size": ".005 .05 .0035"}, handle_offset="0 0 0",
-                 head={"size": ".0125 .025 .003"}, head_offset="0 .075 0",
-                 mass=".04", friction="1.20 .006 .0002",
-                 rgba=tableware_rgba(".72 .73 .75 1"), euler=fork_euler),
-        _cutlery("spoon_1", spoon_pos,
-                 handle={"size": ".005 .05 .0035"}, handle_offset="0 0 0",
-                 head={"size": ".013 .02 .004"}, head_offset="0 .07 0",
-                 mass=".04", friction="1.20 .006 .0002",
-                 rgba=tableware_rgba(".72 .73 .75 1"), euler=spoon_euler),
         # A FOLDED napkin -- 70 x 50 x 18 mm -- as it sits on a set table, not
         # a 140 x 100 x 6 mm sheet laid flat. The flat sheet was unpickable by
         # construction: 8 mm-tall fingertip pads cannot straddle a 6 mm slab
@@ -1061,8 +1262,15 @@ class IntelTableWorld(MockWorld):
             if not grasp_info["placed"]:
                 if prev_zone is not None:
                     self._objects[obj] = replace(self._objects[obj], zone=prev_zone)
-                self._ownership[obj] = prev_owner
-                self._restore_physics(physics_snapshot)
+                # A failed placement is NOT rewound (2026-09-14). The gripper
+                # has already opened and retracted; the object is on the table
+                # wherever it landed. Restoring the pre-MOVE physics re-created
+                # a phantom "still holding it" state, and the scheduler then
+                # sent the same arm -- jaw closed on the napkin -- to pick the
+                # plate, which failed, which retried... (seed 900 trace). The
+                # honest state is: object released, arm free, ownership
+                # cleared so the planner picks it up again from where it is.
+                self._ownership[obj] = None
                 result = replace(result, ok=False)
         elif op == "EXPRESS":
             expressive_info = self._execute_expressive(arm_offset, request.args)
@@ -1378,7 +1586,7 @@ class IntelTableWorld(MockWorld):
     def _ik_reach_pad(
         self, arm_offset: int, target_pos, *, iters: int = 300, max_dq: float = 0.04, tol: float = 0.01,
         roll: float | None = None, track_tcp: bool | None = None,
-        stop_on_contact: tuple[str, float] | None = None,
+        stop_on_contact: tuple[str, float] | None = None, geom_id: int | None = None,
     ) -> float:
         """4-DOF (Rotation/Pitch/Elbow/Wrist_Pitch) IK tracking the fixed-jaw
         pad geom toward ``target_pos`` with wrist-roll pinned to
@@ -1387,7 +1595,7 @@ class IntelTableWorld(MockWorld):
         import numpy as np
 
         mujoco = self._mujoco
-        pad_id = self._pad_geom[arm_offset]
+        pad_id = self._pad_geom[arm_offset] if geom_id is None else geom_id
         # track_tcp drives the *midpoint of the two fingertips* instead of the
         # fixed jaw's fourth pad. Position and Jacobian are both averaged, so
         # the solve stays consistent rather than steering one point while
@@ -1785,14 +1993,17 @@ class IntelTableWorld(MockWorld):
         position_after = self.data.qpos[qpos_adr:qpos_adr + 3].copy()
         drift = float(np.linalg.norm(position_after - position_before))
         support = False
-        object_geom = self._mujoco.mj_name2id(
-            self.model, self._mujoco.mjtObj.mjOBJ_GEOM, obj,
-        )
+        # Body-level: the realistic plate stands on its foot ring and the
+        # cutlery on its tip and head, so the geom that carries the object's
+        # name may never touch the table itself.
+        object_body = self._mujoco.mj_name2id(self.model, self._mujoco.mjtObj.mjOBJ_BODY, obj)
         for contact_id in range(self.data.ncon):
             contact = self.data.contact[contact_id]
-            if object_geom not in (int(contact.geom1), int(contact.geom2)):
+            b1 = int(self.model.geom_bodyid[int(contact.geom1)])
+            b2 = int(self.model.geom_bodyid[int(contact.geom2)])
+            if object_body not in (b1, b2):
                 continue
-            other_geom = int(contact.geom2 if int(contact.geom1) == object_geom else contact.geom1)
+            other_geom = int(contact.geom2 if b1 == object_body else contact.geom1)
             other_name = self._mujoco.mj_id2name(
                 self.model, self._mujoco.mjtObj.mjOBJ_GEOM, other_geom,
             ) or ""
@@ -1880,6 +2091,312 @@ class IntelTableWorld(MockWorld):
         self._mujoco.mj_step(self.model, self.data, nstep=40)
         self._controller_steps += steps + 40
 
+    def _edge_seed_joints(self, arm_offset: int, tip_target, outward_xy) -> Any:
+        """Joint configuration (5 arm joints) whose forward kinematics puts the
+        fixed-jaw tip pad nearest ``tip_target`` with the finger horizontal,
+        pointing along ``outward_xy``, fixed pad closing downward. A coarse
+        forward-kinematic scan of pitch/elbow/wrist-pitch at roll 0, with the
+        base joint aimed at the target; the 6D damped-least-squares solve then
+        starts from a configuration on the right branch instead of from HOME
+        (from HOME it converged 0.88 rad off every time, 2026-09-14).
+        """
+        import numpy as np
+        import itertools
+
+        mujoco = self._mujoco
+        m = self.model
+        prefix = "left_" if arm_offset == 0 else "right_"
+        base = self.data.xpos[m.body(f"{prefix}Base").id].copy()
+        pad1 = m.geom(f"{prefix}fixed_jaw_pad_1").id
+        pad4 = self._pad_geom[arm_offset]
+        cache = getattr(self, "_edge_scan_cache", None)
+        if cache is None or arm_offset not in cache:
+            scratch = mujoco.MjData(m)
+            rng = m.jnt_range[arm_offset:arm_offset + 5]
+            grid = [np.linspace(lo, hi, 33) for lo, hi in rng[1:4]]
+            rows = []
+            for pitch, elbow, wp in itertools.product(*grid):
+                scratch.qpos[:] = self.data.qpos
+                scratch.qpos[arm_offset:arm_offset + 5] = [0.0, pitch, elbow, wp, 0.0]
+                mujoco.mj_kinematics(m, scratch)
+                R = scratch.geom_xmat[pad4].reshape(3, 3)
+                if abs(R[2, 1]) < 0.12 and R[2, 0] < -0.95:
+                    tip = scratch.geom_xpos[pad1] - base
+                    rows.append((pitch, elbow, wp, float(np.hypot(tip[0], tip[1])), float(tip[2]),
+                                 float(np.arctan2(tip[1], tip[0]))))
+            cache = getattr(self, "_edge_scan_cache", None) or {}
+            cache[arm_offset] = np.array(rows)
+            self._edge_scan_cache = cache
+        rows = cache[arm_offset]
+        tgt = np.asarray(tip_target, dtype=float)
+        rel = tgt - base
+        want_r, want_z = float(np.hypot(rel[0], rel[1])), float(rel[2])
+        heading = float(np.arctan2(rel[1], rel[0]))
+        err = np.hypot(rows[:, 3] - want_r, rows[:, 4] - want_z)
+        best = rows[int(np.argmin(err))]
+        # base joint: the scan was done at base=0, whose tip heading is best[5]
+        base_q = heading - best[5]
+        base_q = float(np.arctan2(np.sin(base_q), np.cos(base_q)))
+        lo, hi = m.jnt_range[arm_offset]
+        return np.array([float(np.clip(base_q, lo, hi)), best[0], best[1], best[2], 0.0]), float(err.min())
+
+    def _drive_joints(self, arm_offset: int, target_q, *, steps: int = 200) -> None:
+        """Interpolate the arm's five joint commands to ``target_q`` (jaw
+        command untouched) and let the servos follow -- like _go_home."""
+        import numpy as np
+
+        start = self.data.ctrl[arm_offset:arm_offset + 5].copy()
+        target = np.asarray(target_q, dtype=float)
+        for k in range(1, steps + 1):
+            self.data.ctrl[arm_offset:arm_offset + 5] = start + (target - start) * (k / steps)
+            self._mujoco.mj_step(self.model, self.data)
+            self._controller_steps += 1
+
+    def _edge_geometry(self, arm_offset: int, obj: str) -> dict[str, Any]:
+        """Rim point facing this arm's base, the tip-pad frame for a sideways
+        pinch, and the tip targets (under-lip grip, 6 cm outside, 6 cm up)."""
+        import numpy as np
+
+        lip_r, lip_dz, lip_half = EDGE_PINCH[obj]
+        qpos_adr, _ = self._object_joints[obj]
+        start_z = float(self.data.qpos[qpos_adr + 2])
+        centre = self.data.qpos[qpos_adr:qpos_adr + 2].copy()
+        prefix = "left" if arm_offset == 0 else "right"
+        base_xy = self.data.xpos[self.model.body(f"{prefix}_Base").id][:2].copy()
+        u = base_xy - centre
+        u = u / (np.linalg.norm(u) + 1e-9)
+        grip = np.array([centre[0] + u[0] * lip_r, centre[1] + u[1] * lip_r, start_z + lip_dz])
+        pad_y = np.array([u[0], u[1], 0.0])
+        tip_grip = grip - np.array([0.0, 0.0, lip_half + 0.005])   # fixed tip pad under the lip
+        tip_approach = tip_grip + pad_y * 0.06
+        return {
+            "grip": grip, "pad_y": pad_y, "tip_grip": tip_grip, "tip_approach": tip_approach,
+            "tip_high": tip_approach + np.array([0.0, 0.0, 0.06]),
+            "tip_pad": self.model.geom(f"{prefix}_fixed_jaw_pad_1").id,
+            "start_z": start_z, "qpos_adr": qpos_adr,
+        }
+
+    def _edge_waypoint(self, arm_offset: int, tip_pad: int, tip_target, pad_y, iters: int) -> tuple[float, float]:
+        """Joint-space plan from the forward-kinematic scan (finger horizontal,
+        roll 0), then a short position-only refinement of the fixed TIP pad
+        with roll pinned. The scan gets the branch and the posture right; the
+        refinement takes out its ~2 cm heading error without letting the
+        finger pitch into the table."""
+        q, scan_err = self._edge_seed_joints(arm_offset, tip_target, pad_y[:2])
+        self._drive_joints(arm_offset, q)
+        err = self._ik_reach_pad(arm_offset, tip_target, iters=iters, roll=0.0,
+                                 track_tcp=False, geom_id=tip_pad, tol=0.004, max_dq=0.02)
+        return err, scan_err
+
+    def _edge_approach_and_pinch(self, arm_offset: int, obj: str) -> dict[str, Any]:
+        """One arm: home, part-open, high -> outside the rim -> slide the fixed
+        tip under the lip, close. Returns the errors and the grasp sensor."""
+        import numpy as np
+
+        g = self._edge_geometry(arm_offset, obj)
+        self._go_home(arm_offset)
+        self._set_gripper(arm_offset, EDGE_PINCH_APPROACH_JAW_RAD)
+        high_err, seed_err = self._edge_waypoint(arm_offset, g["tip_pad"], g["tip_high"], g["pad_y"], 120)
+        approach_err, _ = self._edge_waypoint(arm_offset, g["tip_pad"], g["tip_approach"], g["pad_y"], 160)
+        slide_err, _ = self._edge_waypoint(arm_offset, g["tip_pad"], g["tip_grip"], g["pad_y"], 200)
+        sensor = self._set_gripper(arm_offset, GRIPPER_CLOSED, settle_steps=180, obj=obj)
+        return {
+            "geometry": g, "seed_scan_error_m": round(seed_err, 4),
+            "approach_error_m": round(float(approach_err), 6), "reach_error_m": round(float(slide_err), 6),
+            "grasp_sensor": sensor, "grip_point": [round(float(v), 4) for v in g["grip"]],
+        }
+
+    def _drive_joints_both(self, targets: dict[int, Any], *, steps: int = 300) -> None:
+        """Interpolate several arms' five joint commands together, one physics
+        step per increment, so two arms holding one object move in lockstep."""
+        import numpy as np
+
+        starts = {a: self.data.ctrl[a:a + 5].copy() for a in targets}
+        ends = {a: np.asarray(t, dtype=float) for a, t in targets.items()}
+        for k in range(1, steps + 1):
+            for a in targets:
+                self.data.ctrl[a:a + 5] = starts[a] + (ends[a] - starts[a]) * (k / steps)
+            self._mujoco.mj_step(self.model, self.data)
+            self._controller_steps += 1
+
+    def _object_tilt(self, obj: str) -> float:
+        """Angle (rad) between the object's +z and world up."""
+        import numpy as np
+
+        qpos_adr, _ = self._object_joints[obj]
+        qw, qx, qy, qz = (float(v) for v in self.data.qpos[qpos_adr + 3:qpos_adr + 7])
+        zz = 1.0 - 2.0 * (qx * qx + qy * qy)   # R[2,2]
+        return float(np.arccos(np.clip(zz, -1.0, 1.0)))
+
+    def _do_pick_edge(self, arm_offset: int, obj: str) -> dict[str, Any]:
+        """Sideways rim pinch, one arm (2026-09-14): for tableware whose
+        graspable feature is a lip standing off the table. The gripper comes
+        in horizontally from outside the rim, finger axis pointing back toward
+        the arm, jaw partly open; the thin fixed fingertip slides under the
+        lip, the moving jaw closes down on top; then lift. Same receipt shape
+        as the top-down pick. Objects in BIMANUAL_OBJECTS never get here.
+        """
+        import numpy as np
+
+        attempt_snapshot = (
+            self.data.qpos.copy(), self.data.qvel.copy(), self.data.ctrl.copy(),
+            float(self.data.time), self._controller_steps,
+        )
+        g = self._edge_geometry(arm_offset, obj)
+        safety = self._workspace_safety(arm_offset, target_xy=g["grip"][:2])
+        if not safety["safe"]:
+            return {"grasp": "edge", "reach_error_m": None, "lift_height_m": 0.0, "held": False,
+                    "reason": safety["reason"], "safety": {"approach": safety}}
+        self._pick_track_tcp = False
+        pinch = self._edge_approach_and_pinch(arm_offset, obj)
+        lift_target = g["tip_grip"] + np.array([0.0, 0.0, LIFT_VERIFY_MIN + 0.02])
+        lift_q, lift_scan_err = self._edge_seed_joints(arm_offset, lift_target, g["pad_y"][:2])
+        self._drive_joints(arm_offset, lift_q, steps=300)
+        lift_err = self._ik_reach_pad(arm_offset, lift_target, iters=120, roll=0.0, track_tcp=False,
+                                      geom_id=g["tip_pad"], tol=0.006, max_dq=0.02)
+        lift = float(self.data.qpos[g["qpos_adr"] + 2]) - g["start_z"]
+        held = lift >= LIFT_VERIFY_MIN
+        result = {
+            "grasp": "edge", "lift_error_m": round(float(lift_err), 6), "lift_height_m": round(lift, 4),
+            "tilt_rad": round(self._object_tilt(obj), 4), "held": held, "retries": [],
+            "reason": None if held else "edge pinch did not lift", "safety": {"approach": safety},
+            **{k: v for k, v in pinch.items() if k != "geometry"},
+        }
+        if not held:
+            self._set_gripper(arm_offset, GRIPPER_OPEN, settle_steps=40)
+            self._restore_physics(attempt_snapshot)
+        return result
+
+    def _do_pick_bimanual(self, obj: str) -> dict[str, Any]:
+        """Two-arm rim pinch and cooperative lift (2026-09-14). Left and right
+        each take the rim point facing their own base with the sideways
+        pinch, then both arms drive to their lifted postures in lockstep so
+        the plate rises flat. Held = it rose LIFT_VERIFY_MIN and stayed
+        within BIMANUAL_MAX_TILT_RAD of level. Both grippers keep holding
+        until _do_place_bimanual releases them together.
+        """
+        import numpy as np
+
+        attempt_snapshot = (
+            self.data.qpos.copy(), self.data.qvel.copy(), self.data.ctrl.copy(),
+            float(self.data.time), self._controller_steps,
+        )
+        per_arm: dict[str, Any] = {}
+        for arm_offset in (0, 6):
+            g = self._edge_geometry(arm_offset, obj)
+            safety = self._workspace_safety(arm_offset, target_xy=g["grip"][:2])
+            if not safety["safe"]:
+                return {"grasp": "bimanual_edge", "reach_error_m": None, "lift_height_m": 0.0, "held": False,
+                        "reason": f"{'left' if arm_offset == 0 else 'right'}: {safety['reason']}",
+                        "safety": {"approach": safety}, "arms": per_arm}
+            self._pick_track_tcp = False
+            pinch = self._edge_approach_and_pinch(arm_offset, obj)
+            per_arm["left" if arm_offset == 0 else "right"] = {k: v for k, v in pinch.items() if k != "geometry"}
+            per_arm["left" if arm_offset == 0 else "right"]["_geom"] = pinch["geometry"]
+        start_z = per_arm["left"]["_geom"]["start_z"]
+        qpos_adr = per_arm["left"]["_geom"]["qpos_adr"]
+        # Cooperative lift: both arms driven together to their scanned
+        # postures LIFT_VERIFY_MIN + 20 mm up. (Tracking both tips straight up
+        # with the 4-DOF IK was tried 2026-09-14 and does not climb from this
+        # near-extended posture -- 0 mm on four seeds; the joint-space drive
+        # lifts 66-71 mm; a shorter, slower drive measured worse: 17-55 mm.)
+        lift_targets = {}
+        for name, arm_offset in (("left", 0), ("right", 6)):
+            g = per_arm[name]["_geom"]
+            lift_tip = g["tip_grip"] + np.array([0.0, 0.0, LIFT_VERIFY_MIN + 0.02])
+            q, scan_err = self._edge_seed_joints(arm_offset, lift_tip, g["pad_y"][:2])
+            lift_targets[arm_offset] = q
+            per_arm[name]["lift_scan_error_m"] = round(scan_err, 4)
+        self._drive_joints_both(lift_targets, steps=400)
+        for _ in range(60):
+            self._mujoco.mj_step(self.model, self.data)
+            self._controller_steps += 1
+        lift = float(self.data.qpos[qpos_adr + 2]) - start_z
+        tilt = self._object_tilt(obj)
+        held = lift >= LIFT_VERIFY_MIN and tilt <= BIMANUAL_MAX_TILT_RAD
+        pads = sum(per_arm[n]["grasp_sensor"]["contact_pad_count"] for n in ("left", "right"))
+        for n in ("left", "right"):
+            per_arm[n].pop("_geom", None)
+        result = {
+            "grasp": "bimanual_edge", "arms": per_arm,
+            "reach_error_m": max(per_arm[n]["reach_error_m"] for n in ("left", "right")),
+            "lift_height_m": round(lift, 4), "tilt_rad": round(tilt, 4), "held": held,
+            "grasp_sensor": {"contact_pad_count": pads,
+                             "max_contact_force_n": max(per_arm[n]["grasp_sensor"]["max_contact_force_n"] for n in ("left", "right")),
+                             "jaw_commanded_rad": GRIPPER_CLOSED,
+                             "jaw_actual_rad": {n: per_arm[n]["grasp_sensor"]["jaw_actual_rad"] for n in ("left", "right")}},
+            "retries": [],
+            "reason": None if held else ("plate tilted in the pinch" if lift >= LIFT_VERIFY_MIN else "bimanual pinch did not lift"),
+        }
+        if not held:
+            self._set_gripper(0, GRIPPER_OPEN, settle_steps=40)
+            self._set_gripper(6, GRIPPER_OPEN, settle_steps=40)
+            self._restore_physics(attempt_snapshot)
+        return result
+
+    def _do_place_bimanual(self, obj: str, to_zone: str | None) -> dict[str, Any]:
+        """Carry the two-arm-held object level to ``to_zone`` and set it down:
+        both fingertips are tracked in lockstep along a straight line (the
+        plate is rigid, so the tips must translate identically), lowered to
+        the resting height, released together, and both arms retract."""
+        import numpy as np
+
+        target = ZONE_POSITIONS.get(to_zone)
+        if target is None:
+            return {"grasp": "bimanual_edge", "placed": False, "reason": f"unknown zone {to_zone!r}"}
+        qpos_adr, _ = self._object_joints[obj]
+        lip_r, lip_dz, lip_half = EDGE_PINCH[obj]
+        centre_now = self.data.qpos[qpos_adr:qpos_adr + 3].copy()
+        tips = {a: self.model.geom(f"{'left' if a == 0 else 'right'}_fixed_jaw_pad_1").id for a in (0, 6)}
+        tip_now = {a: self.data.geom_xpos[tips[a]].copy() for a in (0, 6)}
+        # plate centre path: horizontal at the current height, then straight down
+        rest_centre_z = float(target[2])
+        goal_high = np.array([target[0], target[1], centre_now[2]])
+        goal_low = np.array([target[0], target[1], rest_centre_z])
+
+        def track_both(delta_total, n_steps, iters):
+            errs = []
+            for k in range(1, n_steps + 1):
+                d = delta_total * (k / n_steps)
+                for a in (0, 6):
+                    errs.append(self._ik_reach_pad(a, tip_now[a] + d, iters=iters, roll=0.0, track_tcp=False,
+                                                   geom_id=tips[a], tol=0.003, max_dq=0.015))
+            return max(errs[-2:]) if errs else 0.0
+
+        carry_err = track_both(goal_high - centre_now, 12, 14)
+        lower_err = track_both(goal_low - centre_now, 6, 14)
+        self._set_gripper(0, GRIPPER_OPEN, settle_steps=30)
+        self._set_gripper(6, GRIPPER_OPEN, settle_steps=30)
+        # retract both straight up and out
+        for a in (0, 6):
+            self._ik_reach_pad(a, self.data.geom_xpos[tips[a]] + np.array([0.0, 0.0, 0.05]), iters=80, roll=0.0,
+                               track_tcp=False, geom_id=tips[a], tol=0.005, max_dq=0.02)
+        # Both arms back to the ready pose: the extended sideways posture
+        # sits near a wrist-pitch limit, and every later step on either arm
+        # failed its joint-margin safety check from there (engine trace,
+        # seeds 900-903: fork MOVE "joint-limit proximity" right after the
+        # plate). The jaws are open; nothing is held.
+        self._go_home(0)
+        self._go_home(6)
+        settle = self._settle_released_object(obj)
+        final_xy = self.data.qpos[qpos_adr:qpos_adr + 2].copy()
+        offset = float(np.linalg.norm(final_xy - np.asarray(target[:2])))
+        tilt = self._object_tilt(obj)
+        safety_after = {"safe": True, "reason": None}
+        for a in (0, 6):
+            sa = self._workspace_safety(a, obj=None)
+            if not sa["safe"]:
+                safety_after = sa
+        placed = bool(offset < 0.06 and settle["settled"] and tilt <= BIMANUAL_MAX_TILT_RAD and safety_after["safe"])
+        return {
+            "grasp": "bimanual_edge", "reach_error_m": round(float(lower_err), 6),
+            "carry_error_m": round(float(carry_err), 6),
+            "placement_error_m": round(offset, 4), "tilt_rad": round(tilt, 4), "placed": placed,
+            "settle": settle, "safety": {"after": safety_after},
+            "reason": None if placed else (safety_after["reason"] or (
+                "placement offset" if offset >= 0.06 else ("tilted" if tilt > BIMANUAL_MAX_TILT_RAD else "unstable placement"))),
+        }
+
     def _do_pick(self, arm_offset: int, obj: str) -> dict[str, Any]:
         """Approach from above (via a safe transit height, unweighted-vs-table
         motion), then switch to the fixed-wrist-roll pad-tracking solve for
@@ -1888,6 +2405,10 @@ class IntelTableWorld(MockWorld):
         (measured height gain), not just whether the motion finished."""
         import numpy as np
 
+        if obj in BIMANUAL_OBJECTS:
+            return self._do_pick_bimanual(obj)
+        if obj in EDGE_PINCH:
+            return self._do_pick_edge(arm_offset, obj)
         target_rotation, roll_hint = self._grasp_frame(arm_offset, obj)
         attempt_snapshot = (
             self.data.qpos.copy(), self.data.qvel.copy(), self.data.ctrl.copy(),
@@ -1901,6 +2422,12 @@ class IntelTableWorld(MockWorld):
         opening_xy = -target_rotation[:2, 0]
         grasp_offset = OBJECT_GRASP_OFFSET.get(obj, 0.0)
         grasp_xy = xy - opening_xy * grasp_offset
+        along_offset = OBJECT_GRASP_ALONG.get(obj, 0.0)
+        if along_offset:
+            # Along the body's +y (toward the head), from the live yaw: grip
+            # at the centre of mass, not the handle's geometric middle.
+            raw_yaw = self._object_yaw(obj)
+            grasp_xy = grasp_xy + np.array([-math.sin(raw_yaw), math.cos(raw_yaw)]) * along_offset
         approach_safety = self._workspace_safety(
             arm_offset, target_xy=grasp_xy,
         )
@@ -2122,6 +2649,8 @@ class IntelTableWorld(MockWorld):
         height, then descend onto the target."""
         import numpy as np
 
+        if obj in BIMANUAL_OBJECTS:
+            return self._do_place_bimanual(obj, to_zone)
         target = ZONE_POSITIONS.get(to_zone)
         if target is None:
             return {"grasp": "contact", "placed": False, "reason": f"unknown zone {to_zone!r}"}
@@ -2219,7 +2748,14 @@ class IntelTablePlanner(RulePlanner):
     # The left-arm napkin approach otherwise sweeps through the napkin while
     # retrieving the fork from the drawer.  Keep the same governed plan shape,
     # but reserve the shared left workspace in a measured, deterministic order.
-    _OBJECT_ORDER = ("cup_1", "napkin_1", "plate_1", "fork_1", "spoon_1")
+    # Plate first (2026-09-14): it is the two-arm object and both arms'
+    # sideways approaches run down the middle of the table; anything placed
+    # in those corridors before it -- the cup at upper_right, the napkin at
+    # lower_left -- blocked the plate pick in every engine trial while the
+    # same pick was 5/5 in isolation. Setting the plate first is also how a
+    # table is actually set. Legacy proxies keep the measured old order.
+    _OBJECT_ORDER = (("cup_1", "napkin_1", "plate_1", "fork_1", "spoon_1") if LEGACY_MODELS_FLAG
+                     else ("plate_1", "cup_1", "fork_1", "spoon_1", "napkin_1"))
     # objects that physically start inside the drawer (dual_so101_xml) -- their
     # PICK depends on an OPEN step first, matching the brief's literal
     # scenario ("open the top drawer, retrieve spoons and forks").
