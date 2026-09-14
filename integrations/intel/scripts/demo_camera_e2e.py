@@ -1,10 +1,11 @@
 """End to end with real perception: camera -> detector -> zones -> OMNI plan ->
 dual-arm controllers -> camera verification.
 
-The engine's observer is replaced by `FrameObserver` fed by a real render of
-the scene's overhead camera through the OpenVINO detector trained on this
-scene (`models/table_yolo_v3_*`), with zones assigned by back-projecting each
-detection through the camera's real geometry. No ground-truth object state
+The engine's observer is replaced by `FrameObserver` fed by real renders of
+all four scene cameras (overhead, third-person, left and right flank) through
+the OpenVINO detector trained on this scene (`models/table_yolo_v*`), fused by
+back-projecting each camera's detections through its own geometry
+(`vision.MultiCameraFusion`), with zones assigned in the overhead frame. No ground-truth object state
 reaches the planner: what OMNI plans from is what the camera saw. At the
 end the camera looks again and reports, per object, whether it is in its
 target zone -- that verification is independent of the controllers' own
@@ -28,15 +29,15 @@ from omni_q.intel_sim import (  # noqa: E402
     TABLE_SETTING_PHRASINGS, ZONE_POSITIONS, IntelSceneConfig, IntelTableWorld,
     _per_object_pick_place_outcomes, build_intel_sim_engine,
 )
-from omni_q.vision import MuJoCoCameraSource, OpenVINODetector, as_frame_detector, make_camera_zone_map  # noqa: E402
+from omni_q.vision import MuJoCoCameraSource, MultiCameraFusion, OpenVINODetector, make_camera_zone_map  # noqa: E402
 
 TARGET_ZONE = {"plate": "center", "cup": "upper_right", "fork": "left", "spoon": "right", "napkin": "lower_left"}
 
 
 def latest_model() -> Path:
-    cands = sorted(Path("models").glob("table_yolo_v3_*_openvino_model/*.xml"))
+    cands = sorted(Path("models").glob("table_yolo_v*_openvino_model/*.xml"))
     if not cands:
-        raise SystemExit("no models/table_yolo_v3_*_openvino_model/*.xml -- run train_table_yolo.py first")
+        raise SystemExit("no models/table_yolo_v*_openvino_model/*.xml -- run train_table_yolo.py first")
     return cands[-1]
 
 
@@ -52,7 +53,11 @@ def main() -> int:
     engine = build_intel_sim_engine(IntelSceneConfig(seed=args.seed, randomized=True))
     world: IntelTableWorld = engine.world  # type: ignore[assignment]
     size = (640, 480)
-    cam = MuJoCoCameraSource(world.model, world.data, "table_overhead", *size)
+    # All four scene cameras, one renderer each is fine here (they are only
+    # captured through the fusion, never two at once elsewhere).
+    cam_names = ("table_overhead", "third_person", "left_flank", "right_flank")
+    cams = {n: MuJoCoCameraSource(world.model, world.data, n, *size) for n in cam_names}
+    cam = cams["table_overhead"]
     detector = OpenVINODetector(str(args.model or latest_model()), device="CPU", conf_threshold=args.conf)
     # Zones the camera can name: the set-table zones plus where things start.
     zones = dict(ZONE_POSITIONS)
@@ -60,15 +65,19 @@ def main() -> int:
         if det.pose is not None and det.zone not in zones:
             zones[det.zone] = (det.pose.x, det.pose.y, det.pose.z)
     zone_map = make_camera_zone_map(cam, zones, size)
-    frame_detector = as_frame_detector(detector, size)
+    fusion = MultiCameraFusion(detector, cams, reference="table_overhead", frame_size=size)
+    looks: list = []
 
     def look():
-        """One camera observation, as (class, zone, conf) rows -- independent of the world state."""
-        raw = frame_detector(cam.capture())
-        return sorted((d.cls, zone_map(*d.center), round(float(d.conf), 2)) for d in raw)
+        """One fused multi-camera observation as (class, zone, conf, votes) rows --
+        independent of the world state. Per-camera raw rows are kept for the receipt."""
+        raw = fusion(None)
+        rows = sorted((d.cls, zone_map(*d.center), round(float(d.conf), 2)) for d in raw)
+        looks.append({"fused": fusion.last["fused"], "per_camera": fusion.last["per_camera"], "zoned": rows})
+        return rows
 
     engine.observer = FrameObserver(
-        frame_detector, zone_map=zone_map, frame_source=lambda w: cam.capture(),
+        fusion, zone_map=zone_map, frame_source=lambda w: None,
         target_zones=lambda object_id, cls: TARGET_ZONE.get(cls, "unknown"),
     )
 
@@ -117,7 +126,9 @@ def main() -> int:
     agreement = {cls: (seen_in_target[cls], controller.get(cls)) for cls in TARGET_ZONE}
     summary = {
         "seed": args.seed, "goal": goal, "model": str(args.model or latest_model()),
+        "cameras": list(cam_names),
         "camera_before": before, "camera_after": after,
+        "camera_before_detail": looks[0], "camera_after_detail": looks[-1],
         "camera_says_in_target_zone": seen_in_target,
         "controller_says_placed": controller,
         "agree": all(a == b for a, b in agreement.values() if b is not None),

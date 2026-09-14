@@ -11,7 +11,7 @@ right-drag to pan; the sim runs the requested picks while you watch):
     .venv/Scripts/python integrations/intel/scripts/watch_sim.py --live \
         --pick cup_1 --pick fork_1 --seed 701
 
-Record a clip from a scene camera (third_person, table_overhead, table_grazing,
+Record a clip from a scene camera (third_person, table_overhead, left_flank, right_flank,
 left_wrist, right_wrist) to an animated GIF you can share:
 
     .venv/Scripts/python integrations/intel/scripts/watch_sim.py \

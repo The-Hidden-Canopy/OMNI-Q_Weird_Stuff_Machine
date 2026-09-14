@@ -311,3 +311,112 @@ def make_camera_zone_map(cam: MuJoCoCameraSource, zone_positions: dict[str, tupl
         return best_name
 
     return zone_map
+
+
+# ---------------------------------------------------------------------------
+# Multi-camera fusion (2026-09-14)
+# ---------------------------------------------------------------------------
+#
+# The scene has several cameras (overhead, third-person, table-grazing, two
+# wrist cameras) and one view misses things: the overhead camera never saw
+# the spoon parked near the right arm's base, so the camera-driven plan was
+# built without it. Each camera's detections are back-projected through that
+# camera's own geometry to the table plane (`project_to_table`), merged by
+# class and world distance, and re-expressed in a canonical reference camera's
+# pixel frame so the existing FrameObserver / zone map / tracker are unchanged.
+
+def project_from_table(world_xy, cam_pos, cam_rot, fovy_deg: float, frame_size: tuple[int, int],
+                       table_z: float = -0.005):
+    """Inverse of project_to_table for a point on the table plane -> (u, v)."""
+    import numpy as np
+
+    width, height = frame_size
+    p = np.array([world_xy[0], world_xy[1], table_z], dtype=float)
+    rel = np.asarray(cam_rot).T @ (p - np.asarray(cam_pos, dtype=float))
+    if rel[2] >= -1e-9:
+        return None
+    half_h = np.tan(np.radians(fovy_deg) / 2)
+    half_w = half_h * (width / height)
+    ndc_x = rel[0] / -rel[2] / half_w
+    ndc_y = rel[1] / -rel[2] / half_h
+    return float((ndc_x + 1) / 2 * width), float((1 - ndc_y) / 2 * height)
+
+
+class MultiCameraFusion:
+    """Run one detector over several MuJoCo cameras and fuse the results.
+
+    ``cameras``: dict name -> MuJoCoCameraSource (all the same frame size).
+    ``reference``: the camera whose pixel frame the fused detections are
+    expressed in (the zone map and tracker keep working on that frame).
+    Returns ``frame_observer.Detection2D`` in normalised reference coords.
+    ``last`` keeps the per-camera raw view for receipts.
+    """
+
+    # Height of each class's visual centre above the table. A detection's
+    # centre is back-projected onto the plane at that height, not the table:
+    # from an oblique camera the 90 mm cup's centre landed 7 cm too far
+    # along the ray when the table plane was assumed.
+    CLASS_CENTRE_Z = {"cup": 0.045, "plate": 0.020, "fork": 0.010, "spoon": 0.010, "napkin": 0.012, "drawer": 0.015}
+
+    def __init__(self, detector: "OpenVINODetector", cameras: dict, *, reference: str,
+                 frame_size: tuple[int, int], merge_radius_m: float = 0.06, table_z: float = -0.005,
+                 min_votes: int = 2, single_view_min_conf: float = 0.9):
+        self.detector = detector
+        self.cameras = cameras
+        self.reference = reference
+        self.frame_size = frame_size
+        self.merge_radius_m = merge_radius_m
+        self.table_z = table_z
+        # A detection seen by one camera only must be confident; two cameras
+        # agreeing on class and place is accepted at the normal threshold.
+        self.min_votes = min_votes
+        self.single_view_min_conf = single_view_min_conf
+        self.last: dict = {}
+
+    def __call__(self, _frame=None) -> list:
+        import numpy as np
+        from .frame_observer import Detection2D
+
+        width, height = self.frame_size
+        hits = []          # (cls, conf, world_xy, camera)
+        per_camera = {}
+        for name, cam in self.cameras.items():
+            frame = cam.capture()
+            pos, rot, fovy = cam.camera_pose()
+            rows = []
+            for r in self.detector.detect(frame):
+                plane_z = self.table_z + self.CLASS_CENTRE_Z.get(r.cls_name, 0.0)
+                wxy = project_to_table(r.center_xy, self.frame_size, pos, rot, fovy, plane_z)
+                if wxy is None:
+                    continue
+                hits.append((r.cls_name, float(r.conf), wxy, name))
+                rows.append((r.cls_name, round(float(r.conf), 3), (round(wxy[0], 3), round(wxy[1], 3))))
+            per_camera[name] = rows
+        # greedy merge: highest confidence first, absorb same-class hits nearby
+        hits.sort(key=lambda h: -h[1])
+        fused = []
+        for cls, conf, wxy, cam in hits:
+            for f in fused:
+                if f["cls"] == cls and np.hypot(f["xy"][0] - wxy[0], f["xy"][1] - wxy[1]) <= self.merge_radius_m:
+                    f["votes"] += 1
+                    f["cameras"].append(cam)
+                    break
+            else:
+                fused.append({"cls": cls, "conf": conf, "xy": wxy, "votes": 1, "cameras": [cam]})
+        fused = [f for f in fused if f["votes"] >= self.min_votes or f["conf"] >= self.single_view_min_conf]
+        ref = self.cameras[self.reference]
+        pos, rot, fovy = ref.camera_pose()
+        out = []
+        for f in fused:
+            uv = project_from_table(f["xy"], pos, rot, fovy, self.frame_size, self.table_z)
+            if uv is None:
+                continue
+            u, v = uv
+            r = 12.0  # synthetic box: the tracker only needs a stable centre and IoU overlap frame to frame
+            out.append(Detection2D(f["cls"], min(1.0, f["conf"]),
+                                   ((u - r) / width, (v - r) / height, (u + r) / width, (v + r) / height)))
+            f["ref_uv"] = (round(u, 1), round(v, 1))
+        self.last = {"per_camera": per_camera, "fused": [
+            {"cls": f["cls"], "conf": round(f["conf"], 3), "world_xy": (round(f["xy"][0], 3), round(f["xy"][1], 3)),
+             "votes": f["votes"], "cameras": f["cameras"]} for f in fused]}
+        return out

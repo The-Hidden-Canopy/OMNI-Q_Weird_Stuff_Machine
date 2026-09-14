@@ -1,0 +1,30 @@
+{
+ "name": "table_yolo_v3_2026-09-14",
+ "base": "yolov8n.pt",
+ "epochs": 30,
+ "imgsz": 640,
+ "dataset": {
+  "yaml": "data\\table_yolo_v3\\data.yaml",
+  "train_images": 666,
+  "val_images": 134,
+  "generator": "integrations/intel/scripts/make_table_yolo_dataset.py"
+ },
+ "val": {
+  "map50": 0.9940341184450177,
+  "map50_95": 0.9438481362797365,
+  "per_class_map50": {
+   "plate": 0.995,
+   "cup": 0.995,
+   "fork": 0.9911786891910204,
+   "spoon": 0.9939919030340679,
+   "napkin": 0.995
+  }
+ },
+ "openvino": {
+  "xml": "best.xml",
+  "bin": "best.bin",
+  "bin_sha256": "eba67be3ba99246893e3b62e934a084364d488cb41e8577132f51ab3b9b58c61",
+  "xml_sha256": "873156a24223c8451f69d65351b13d0513d4927f8a56d89efb81f862c9867acf"
+ },
+ "trained_at": "2026-09-14T11:52:26"
+}

@@ -12,7 +12,7 @@ mismatch between what the sim shows and what the label says.
 Variation per image: scene seed (object positions and yaw, tableware colour,
 light direction and intensity via IntelSceneConfig), a random subset of
 objects moved to their set-table zones (so "before" and "after" states are
-both covered), and both cameras (overhead and third-person).
+both covered), and all four scene cameras (overhead, third-person, left and right flank).
 
     python integrations/intel/scripts/make_table_yolo_dataset.py --out data/table_yolo_v3 --n 400
 """
@@ -33,8 +33,10 @@ from PIL import Image  # noqa: E402
 
 from omni_q.intel_sim import ZONE_POSITIONS, IntelSceneConfig, IntelTableWorld  # noqa: E402
 
-CLASSES = {"plate_1": 0, "cup_1": 1, "fork_1": 2, "spoon_1": 3, "napkin_1": 5}   # 4 = knife (absent)
-NAMES = {0: "plate", 1: "cup", 2: "fork", 3: "spoon", 4: "knife", 5: "napkin"}
+# Same 7-class map as KissTheHabit/yolov8n-table-yolo (real-photo lineage),
+# so its weights fine-tune onto this data head-for-head. 4 = knife (absent).
+CLASSES = {"plate_1": 0, "cup_1": 1, "fork_1": 2, "spoon_1": 3, "napkin_1": 5, "drawer": 6}
+NAMES = {0: "plate", 1: "cup", 2: "fork", 3: "spoon", 4: "knife", 5: "napkin", 6: "drawer"}
 
 
 def project(points_world, cam_pos, cam_rot, fovy_deg, width, height):
@@ -97,7 +99,7 @@ def teleport(world, obj, xy, yaw):
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=Path, default=Path("data/table_yolo_v3"))
-    ap.add_argument("--n", type=int, default=400, help="number of scene seeds (x2 cameras)")
+    ap.add_argument("--n", type=int, default=400, help="number of scene seeds (x4 cameras)")
     ap.add_argument("--seed0", type=int, default=5000)
     ap.add_argument("--val-frac", type=float, default=0.15)
     ap.add_argument("--size", default="640x480")
@@ -134,7 +136,7 @@ def main() -> int:
         split = "val" if rng.random() < args.val_frac else "train"
         if renderer is None:
             renderer = mujoco.Renderer(model, height=height, width=width)
-        for cam_name in ("table_overhead", "third_person"):
+        for cam_name in ("table_overhead", "third_person", "left_flank", "right_flank"):
             renderer.update_scene(data, camera=cam_name)
             frame = np.asarray(renderer.render()).copy()
             cam_id = model.camera(cam_name).id

@@ -485,6 +485,10 @@ EDGE_PINCH_APPROACH_JAW_RAD = 0.05
 # torque against ~0.1 N.m of pinch. Two arms on opposite rims lift it flat.
 BIMANUAL_OBJECTS: frozenset[str] = frozenset() if LEGACY_MODELS_FLAG else frozenset({"plate_1"})
 BIMANUAL_MAX_TILT_RAD = 0.21  # 12 deg: a plate carried flat, not dragged
+# Top-down picks that start from a scanned vertical-finger posture instead
+# of HOME (see IntelTableWorld._topdown_seed_joints). Opt-in per object: the
+# cutlery and napkin picks are 10/10 from HOME and are left alone.
+TOPDOWN_SEED_OBJECTS: frozenset[str] = frozenset() if LEGACY_MODELS_FLAG else frozenset({"cup_1"})
 OBJECT_GRASP_VERTICAL_OFFSET: dict[str, float] = {
     "spoon_1": 0.0,
 }
@@ -921,12 +925,22 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     })
     ET.SubElement(worldbody, "camera", {"name": "third_person", "pos": "0 -1.15 .85", "euler": "1.05 0 0"})
     ET.SubElement(worldbody, "camera", {"name": "table_overhead", "pos": "0 -.10 1.20", "euler": "0 0 0"})
-    # Table-height side view. A grasp failure on a flat object is a few
-    # millimetres of fingertip-vs-table gap; from above or from the front that
-    # gap is invisible, which is why it took direct geom measurement to find.
-    # This camera puts it on screen.
-    ET.SubElement(worldbody, "camera", {"name": "table_grazing", "pos": "-.90 -.10 .035",
-                                        "euler": "1.5708 -1.5708 0", "fovy": "42"})
+    # Flank cameras (2026-09-14), one over each side of the table looking in
+    # at the cutlery. The challenge allows six cameras; with overhead,
+    # third-person and the two wrist cameras these make six. They replace the
+    # table-height grazing view: fused perception (vision.MultiCameraFusion)
+    # missed the spoon and fork parked at x = +/-0.32 -- tiny from overhead,
+    # foreshortened from the front -- and the grazing view contributed only a
+    # misread. Under OMNIQ_LEGACY_MODELS=1 the grazing camera stays, since
+    # the recorded cup evidence of 2026-09-13 was taken from it.
+    if LEGACY_MODELS:
+        ET.SubElement(worldbody, "camera", {"name": "table_grazing", "pos": "-.90 -.10 .035",
+                                            "euler": "1.5708 -1.5708 0", "fovy": "42"})
+    else:
+        ET.SubElement(worldbody, "camera", {"name": "left_flank", "pos": "-.60 -.02 .42",
+                                            "xyaxes": "-0.1322 -0.9912 0 0.8042 -0.1072 0.5846", "fovy": "50"})
+        ET.SubElement(worldbody, "camera", {"name": "right_flank", "pos": ".60 -.02 .42",
+                                            "xyaxes": "-0.1322 0.9912 0 -0.8042 -0.1072 0.5846", "fovy": "50"})
 
     base = source.find("./worldbody/body[@name='Base']")
     if base is None:  # static source validation, not a recoverable runtime state
@@ -1230,6 +1244,21 @@ class IntelTableWorld(MockWorld):
             # can bypass the policy generator.  Generic expression is free-space
             # only; contact primitives remain a separate controller gate.
             validate_expressive_command(request.args)
+        if op == "PICK" and obj in self._object_joints and request.actor:
+            # One object per gripper (2026-09-14). With the camera observer
+            # the observation carries no ownership, and the scheduler sent
+            # PICK cup to the right arm while it still held the spoon; the
+            # spoon's MOVE then failed "unsafe carry separation" and so did
+            # the cup's. A held object is a physical fact the world knows
+            # regardless of what perception reported: refuse, without moving
+            # anything, so the planner sends the MOVE first.
+            held = [o for o, owner in self._ownership.items() if owner == request.actor and o != obj]
+            if held:
+                return TransitionResult(
+                    request.step_id, False, self.revision,
+                    {"grasp": "refused", "held": False, "lift_height_m": 0.0,
+                     "reason": f"{request.actor} is already holding {held[0]}"},
+                )
         physics_snapshot = None
         if op in {"PICK", "MOVE", "PLACE"} and obj in self._object_joints:
             # A failed real attempt must not leave the next governed retry
@@ -2153,6 +2182,53 @@ class IntelTableWorld(MockWorld):
         lo, hi = m.jnt_range[arm_offset]
         return np.array([float(np.clip(base_q, lo, hi)), best[0], best[1], best[2], 0.0]), float(err.min())
 
+    def _topdown_seed_joints(self, arm_offset: int, tip_target, roll: float) -> Any:
+        """Joint configuration whose forward kinematics puts the fixed-jaw tip
+        pad nearest ``tip_target`` with the finger VERTICAL (pointing down).
+        The top-down pinch solve for the cup settled in a tilted local
+        minimum from HOME (fingertips 30-80 mm apart in height at closure,
+        measured 2026-09-14) and lifted by leaning the fixed jaw on the wall;
+        started from a posture that is already vertical above the target,
+        the pose solve stays vertical."""
+        import numpy as np
+        import itertools
+
+        mujoco = self._mujoco
+        m = self.model
+        prefix = "left_" if arm_offset == 0 else "right_"
+        base = self.data.xpos[m.body(f"{prefix}Base").id].copy()
+        pad1 = m.geom(f"{prefix}fixed_jaw_pad_1").id
+        pad4 = self._pad_geom[arm_offset]
+        cache = getattr(self, "_topdown_scan_cache", None) or {}
+        if arm_offset not in cache:
+            scratch = mujoco.MjData(m)
+            rng = m.jnt_range[arm_offset:arm_offset + 5]
+            grid = [np.linspace(lo, hi, 33) for lo, hi in rng[1:4]]
+            rows = []
+            for pitch, elbow, wp in itertools.product(*grid):
+                scratch.qpos[:] = self.data.qpos
+                scratch.qpos[arm_offset:arm_offset + 5] = [0.0, pitch, elbow, wp, roll]
+                mujoco.mj_kinematics(m, scratch)
+                R = scratch.geom_xmat[pad4].reshape(3, 3)
+                if R[2, 1] > 0.95:   # pad frame y (tip->wrist) points up: finger vertical, tip down
+                    tip = scratch.geom_xpos[pad1] - base
+                    rows.append((pitch, elbow, wp, float(np.hypot(tip[0], tip[1])), float(tip[2]),
+                                 float(np.arctan2(tip[1], tip[0]))))
+            cache[arm_offset] = np.array(rows)
+            self._topdown_scan_cache = cache
+        rows = cache[arm_offset]
+        if len(rows) == 0:
+            return None, float("inf")
+        rel = np.asarray(tip_target, dtype=float) - base
+        want_r, want_z = float(np.hypot(rel[0], rel[1])), float(rel[2])
+        heading = float(np.arctan2(rel[1], rel[0]))
+        err = np.hypot(rows[:, 3] - want_r, rows[:, 4] - want_z)
+        best = rows[int(np.argmin(err))]
+        base_q = heading - best[5]
+        base_q = float(np.arctan2(np.sin(base_q), np.cos(base_q)))
+        lo, hi = m.jnt_range[arm_offset]
+        return np.array([float(np.clip(base_q, lo, hi)), best[0], best[1], best[2], roll]), float(err.min())
+
     def _drive_joints(self, arm_offset: int, target_q, *, steps: int = 200) -> None:
         """Interpolate the arm's five joint commands to ``target_q`` (jaw
         command untouched) and let the servos follow -- like _go_home."""
@@ -2466,6 +2542,13 @@ class IntelTableWorld(MockWorld):
         self._go_home(arm_offset)          # same ready pose for every pick; see _go_home
         self._pick_track_tcp = self._track_tcp_for(obj)
         self._set_gripper(arm_offset, GRIPPER_OPEN)
+        if obj in TOPDOWN_SEED_OBJECTS:
+            # Vertical-finger posture above the grasp point, from the scan,
+            # before the up-over-down move (see _topdown_seed_joints).
+            seed_q, _ = self._topdown_seed_joints(
+                arm_offset, (grasp_xy[0], grasp_xy[1], clear_z + 0.03), roll_hint)
+            if seed_q is not None:
+                self._drive_joints(arm_offset, seed_q, steps=250)
         self._move_to(arm_offset, (grasp_xy[0], grasp_xy[1], clear_z))
 
         # Object-specific escape from a confirmed differential-IK local

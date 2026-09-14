@@ -30,7 +30,9 @@ def sha256(path: Path) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", type=Path, default=Path("data/table_yolo_v3/data.yaml"))
-    ap.add_argument("--base", default="yolov8n.pt")
+    ap.add_argument("--base", default="yolov8n.pt",
+                    help="starting weights; 'hf:KissTheHabit/yolov8n-table-yolo/yolov8n-table-yolo-ftv3-30ep.pt' "
+                         "fine-tunes from the real-photo tableware detector on HF")
     ap.add_argument("--epochs", type=int, default=30)
     ap.add_argument("--imgsz", type=int, default=640)
     ap.add_argument("--batch", type=int, default=16)
@@ -41,7 +43,12 @@ def main() -> int:
 
     from ultralytics import YOLO  # noqa: PLC0415
 
-    model = YOLO(args.base)
+    base = args.base
+    if base.startswith("hf:"):
+        from huggingface_hub import hf_hub_download  # noqa: PLC0415
+        repo, _, filename = base[3:].rpartition("/")
+        base = hf_hub_download(repo, filename)
+    model = YOLO(base)
     results = model.train(
         data=str(args.data), epochs=args.epochs, imgsz=args.imgsz, batch=args.batch,
         device=args.device, workers=0, project="tmp/yolo_runs", name=args.name, exist_ok=True,
