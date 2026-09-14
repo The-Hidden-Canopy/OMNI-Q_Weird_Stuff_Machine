@@ -435,10 +435,21 @@ def test_plate_1_grasp_escapes_its_local_minimum_via_the_verified_seed_bias():
 
 def test_plate_1_seed_bias_does_not_affect_other_objects():
     """OBJECT_GRASP_SEED_BIAS is keyed only by "plate_1" -- objects with no
-    entry must see the exact same (unbiased) attempt as before. This isn't
-    asserting these objects succeed (they don't, see intel_sim.py's module
-    docstring); it's guarding against the bias leaking into their attempt
-    via a keying/default-value mistake."""
+    entry must see an unbiased attempt. Guards against the bias leaking into
+    other objects' attempts via a keying/default-value mistake.
+
+    Until 2026-09-13 this also asserted ``held is False`` for fork and spoon,
+    with a docstring noting they "don't" succeed. They do now (fully closing
+    gripper + fingertip tracking + handle/head cutlery + a lift height that
+    does not shrink with the object -- fork 10/10 held across ten randomized
+    seeds). A test that encodes a limitation must be updated when the
+    limitation is removed, not kept as a monument to it.
+    """
+    from omni_q.intel_sim import OBJECT_GRASP_SEED_BIAS
+
+    assert "fork_1" not in OBJECT_GRASP_SEED_BIAS
+    assert "spoon_1" not in OBJECT_GRASP_SEED_BIAS
+
     world = IntelTableWorld()
     world.data.qpos[world._drawer_qpos_adr] = DRAWER_OPEN
     world._mujoco.mj_forward(world.model, world.data)
@@ -446,8 +457,11 @@ def test_plate_1_seed_bias_does_not_affect_other_objects():
     fork = world._do_pick(0, "fork_1")
     spoon = world._do_pick(6, "spoon_1")
 
-    assert fork["held"] is False
-    assert spoon["held"] is False
+    # The attempt must be a real one either way -- a contact grasp with a
+    # sensor record -- not a short-circuit from a mis-keyed bias.
+    for result in (fork, spoon):
+        assert result["grasp"] == "contact"
+        assert "grasp_sensor" in result
 
 
 def test_legacy_workspace_guard_fails_closed_for_limit_and_shared_entry():

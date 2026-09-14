@@ -431,7 +431,7 @@ class IntelSceneConfig:
 # of approaching it cleanly. Not derived from the model at runtime because
 # _do_pick/_do_place need it before the arm ever gets there.
 OBJECT_HALF_HEIGHT: dict[str, float] = {
-    "plate_1": 0.016, "cup_1": 0.055, "fork_1": 0.004, "spoon_1": 0.004, "napkin_1": 0.003,
+    "plate_1": 0.016, "cup_1": 0.055, "fork_1": 0.0035, "spoon_1": 0.0035, "napkin_1": 0.003,
 }
 # Horizontal offset from an object's centre to the fixed pad target.  Large
 # flat fixtures are grasped at their rim/edge; targeting their centre puts the
@@ -479,6 +479,14 @@ OBJECT_GRASP_SEED_BIAS: dict[str, tuple[float, float]] = {
 PAD_FRICTION = os.environ.get("OMNIQ_PAD_FRICTION", "3.00 0.020 0.001")
 
 GRASP_CLEARANCE = 0.015  # m -- gap kept above an object's top surface before closing on it
+# How far a grasped object is raised to prove it is held. This used to be
+# clear_z - start_z = half_height + GRASP_CLEARANCE, which SHRINKS with the
+# object: 70 mm for the cup, 31 mm for the plate, and 18.5 mm for a 7 mm fork
+# -- below the 20 mm "held" threshold. A perfectly grasped fork could never
+# register as held because the arm was never asked to lift it far enough.
+# Measured 2026-09-13: fork lifting 12.8 mm of a possible 18.5 and counted as
+# a failure. Verification height is now a floor independent of object size.
+LIFT_VERIFY_MIN = 0.040  # m
 # Legacy-path safety bounds.  These are controller stop bounds, not hardware
 # force limits: the contact-handoff path owns the promotion-grade force gate.
 LEGACY_MAX_CARRY_OFFSET_M = 0.100
@@ -531,6 +539,35 @@ def _body(name: str, pos: str, geom: dict[str, str], *, euler: str | None = None
     body = ET.Element("body", attrs)
     ET.SubElement(body, "freejoint", {"name": f"{name}_free"})
     ET.SubElement(body, "geom", {"name": name, **geom})
+    return body
+
+
+def _cutlery(name: str, pos: str, *, handle: dict[str, str], head: dict[str, str],
+             head_offset: str, mass: str, friction: str, rgba: str,
+             euler: str | None = None) -> ET.Element:
+    """A piece of cutlery as a narrow HANDLE plus a wider HEAD.
+
+    A single flat box was the previous model, and it was the reason the flat
+    objects could not be picked: with the fingertip pads 8 mm tall and the slab
+    8 mm thick, any horizontal offset lands the pads on top of the slab rather
+    than beside it, and the jaws pinch a corner at an angle -- measured live,
+    2 pads at 15.5 N, +9 mm of lift, then a slip. Real cutlery is not a slab.
+    The handle is ~10 mm wide and the head ~25 mm, so the jaws close squarely
+    on a handle a fraction of their travel wide, with clearance to the table.
+
+    The body origin is the handle's centre, so the freejoint position -- which
+    is what the pick targets -- is the grasp point. The head geom carries the
+    ``<name>_head`` suffix; contact accounting matches on the prefix.
+    """
+    attrs = {"name": name, "pos": pos}
+    if euler is not None:
+        attrs["euler"] = euler
+    body = ET.Element("body", attrs)
+    ET.SubElement(body, "freejoint", {"name": f"{name}_free"})
+    common = {"rgba": rgba, "friction": friction}
+    ET.SubElement(body, "geom", {"name": name, "type": "box", "mass": mass, **handle, **common})
+    ET.SubElement(body, "geom", {"name": f"{name}_head", "type": "box", "pos": head_offset,
+                                 "mass": "0", **head, **common})
     return body
 
 
@@ -765,14 +802,18 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
         }, euler=cup_euler),
         # fork/spoon start inside the drawer -- retrieval is gated on OPEN, matching
         # the brief's scenario ("open the top drawer, retrieve spoons and forks").
-        _body("fork_1", fork_pos, {
-            "type": "box", "size": ".012 .075 .004", "rgba": tableware_rgba(".72 .73 .75 1"),
-            "mass": ".04", "friction": "1.20 .006 .0002",
-        }, euler=fork_euler),
-        _body("spoon_1", spoon_pos, {
-            "type": "box", "size": ".013 .07 .004", "rgba": tableware_rgba(".72 .73 .75 1"),
-            "mass": ".04", "friction": "1.20 .006 .0002",
-        }, euler=spoon_euler),
+        # Handle 10 mm wide x 100 mm x 7 mm; head 25 mm x 50 mm x 6 mm at the
+        # +y end. Same 150 mm overall length and 40 g as the old slab.
+        _cutlery("fork_1", fork_pos,
+                 handle={"size": ".005 .05 .0035"},
+                 head={"size": ".0125 .025 .003"}, head_offset="0 .075 0",
+                 mass=".04", friction="1.20 .006 .0002",
+                 rgba=tableware_rgba(".72 .73 .75 1"), euler=fork_euler),
+        _cutlery("spoon_1", spoon_pos,
+                 handle={"size": ".005 .05 .0035"},
+                 head={"size": ".013 .02 .004"}, head_offset="0 .07 0",
+                 mass=".04", friction="1.20 .006 .0002",
+                 rgba=tableware_rgba(".72 .73 .75 1"), euler=spoon_euler),
         _body("napkin_1", napkin_pos, {
             "type": "box", "size": ".07 .05 .003", "rgba": tableware_rgba(".90 .40 .38 1"),
             # Cloth genuinely grips more than metal cutlery or glazed
@@ -1210,7 +1251,12 @@ class IntelTableWorld(MockWorld):
     @property
     def _fingertip_pinch(self) -> bool:
         """Track the fingertip midpoint (not pad_4) for every pick IK solve."""
-        return os.environ.get("OMNIQ_FINGERTIP_PINCH", "") in ("1", "true", "True")
+        # Default ON since 2026-09-13. Ten randomized seeds, held per object:
+        #   pad_4 tracking:     cup 10  plate 9   fork 0   spoon 0
+        #   fingertip tracking: cup 10  plate 10  fork 10  spoon 4
+        # Better or equal on every object. Set OMNIQ_FINGERTIP_PINCH=0 to
+        # reproduce the old pad_4 behaviour for comparison.
+        return os.environ.get("OMNIQ_FINGERTIP_PINCH", "1") not in ("0", "false", "False")
 
     def _tcp_geoms(self, arm_offset: int) -> tuple[int, int] | None:
         """The two fingertip pads whose midpoint is the real TCP.
@@ -1467,7 +1513,7 @@ class IntelTableWorld(MockWorld):
                 pad = g1 if (g1.startswith(prefix) and "jaw_pad" in g1) else (
                     g2 if (g2.startswith(prefix) and "jaw_pad" in g2) else None)
                 other = g2 if pad == g1 else g1
-                if pad is None or other != obj:
+                if pad is None or not other.startswith(obj):
                     continue
                 mujoco.mj_contactForce(self.model, self.data, c, f)
                 mag = float(np.linalg.norm(f[:3]))
@@ -1720,8 +1766,9 @@ class IntelTableWorld(MockWorld):
         )
 
         grasp_sensor = self._set_gripper(arm_offset, GRIPPER_CLOSED, settle_steps=180, obj=obj)  # stall-aware; let the grip settle
+        lift_rise = max(clear_z - start_z, LIFT_VERIFY_MIN)
         lift_error = self._ik_reach_pad(
-            arm_offset, (xy_now[0], xy_now[1], grasp_z + (clear_z - start_z)),
+            arm_offset, (xy_now[0], xy_now[1], grasp_z + lift_rise),
             iters=280, roll=roll_hint,
         )
 
@@ -1769,14 +1816,15 @@ class IntelTableWorld(MockWorld):
                     arm_offset, (grasp_xy_retry[0], grasp_xy_retry[1], grasp_z_retry),
                     iters=180, roll=candidate,
                 )
-                self._set_gripper(arm_offset, GRIPPER_CLOSED, settle_steps=180)
+                retry_sensor = self._set_gripper(arm_offset, GRIPPER_CLOSED, settle_steps=180, obj=obj)
                 self._ik_reach_pad(
                     arm_offset,
-                    (grasp_xy_retry[0], grasp_xy_retry[1], grasp_z_retry + (clear_z - start_z)),
+                    (grasp_xy_retry[0], grasp_xy_retry[1], grasp_z_retry + lift_rise),
                     iters=280, roll=candidate,
                 )
                 retry_lift = float(self.data.qpos[qpos_adr + 2]) - start_z
                 if retry_lift > lift:
+                    grasp_sensor = retry_sensor  # evidence from the attempt that actually won
                     lift = retry_lift
                     lift_pose = {"position_error_m": round(lift_error, 6), "retry_roll_rad": round(candidate, 6)}
                     roll_hint = candidate
