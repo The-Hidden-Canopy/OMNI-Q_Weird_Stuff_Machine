@@ -216,8 +216,20 @@ plate would be pruned too. Receipt-backed result
 (`evidence/benchmark_results/authority_change_2026-09-14/seed-901.json`):
 arms used before the instruction `['left']`, after it `['right']`; fork and
 napkin pruned "out of the right arm's reach"; objective preserved for the
-spoon (placed by the right arm). Known: the cup's top-down pick fails when it
-follows the spoon in this ordering (grasp slips at 9 mm; the cup has not
-moved) — not yet understood.
+spoon and the cup (both placed by the right arm after the instruction);
+`resolved: false` is the honest verdict — the objective cannot complete
+without the left arm, and the receipt says exactly which steps were dropped
+and why. (Two engine fixes on the way: a constraint-triggered replan no longer
+counts the next, never-attempted step as an attempt — that had pushed the cup
+behind the spoon; and the drawer step is dropped once no cutlery remains
+planned. `_go_home` now waits for the servos to arrive rather than assuming
+a fixed schedule.)
+
+Second harness range, seeds 910–919
+(`evidence/benchmark_results/realistic_models_2026-09-14/harness_seed910_x10/`):
+**10/10 trials fully successful, 50/50 placements.** Rigid (honest) contact
+through the engine, seeds 900–902
+(`rigid_contact_engine_3seeds.json`): held 15/15, placed 13/15, max
+penetration 7.7 mm (the cloth napkin), 2–3 mm on the cutlery.
 
 Run it live: `python integrations/intel/scripts/demo_authority_change.py --seed 901 --live`

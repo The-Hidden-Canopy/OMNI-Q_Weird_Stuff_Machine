@@ -2090,6 +2090,19 @@ class IntelTableWorld(MockWorld):
             self._mujoco.mj_step(self.model, self.data)
         self._mujoco.mj_step(self.model, self.data, nstep=40)
         self._controller_steps += steps + 40
+        # Wait for arrival, don't assume it. A place can leave the wrist roll
+        # near its +2.79 limit (spoon at the right zone: 2.69 rad); the swing
+        # back to HOME is over 4 rad and the servo is still travelling when
+        # the fixed schedule ends, so the next pick started from the wrong
+        # posture (cup after spoon: reach error 66 mm vs 38 mm, slipped at
+        # 9 mm; measured 2026-09-14). Bounded: up to 0.8 s more.
+        import numpy as np
+        for _ in range(400):
+            err = np.abs(self.data.qpos[arm_offset:arm_offset + 5] - target[:5]).max()
+            if err < 0.02:
+                break
+            self._mujoco.mj_step(self.model, self.data)
+            self._controller_steps += 1
 
     def _edge_seed_joints(self, arm_offset: int, tip_target, outward_xy) -> Any:
         """Joint configuration (5 arm joints) whose forward kinematics puts the
@@ -2842,6 +2855,11 @@ class IntelTablePlanner(RulePlanner):
             pruned_ids = {pid for pid, _, _ in pruned}
             for step in keep:
                 step.deps = tuple(d for d in step.deps if d not in pruned_ids)
+            # The drawer only needs opening for cutlery that is still planned.
+            if not any(st.op == "PICK" and st.args.get("object") in self._DRAWER_OBJECTS for st in keep):
+                keep = [st for st in keep if st.id != "open_drawer"]
+                for step in keep:
+                    step.deps = tuple(d for d in step.deps if d != "open_drawer")
             graph.steps = keep
             self.last_authority_report = {
                 "prefer_arm": prefer, "withdrawn_arm": forbidden,
@@ -2922,13 +2940,20 @@ class IntelTablePlanner(RulePlanner):
         reached at all."""
         tracked = set(self._OBJECT_ORDER)
         still_misplaced = {det.object_id for det in world.misplaced()}
-        for step in current.steps:
-            if step.op != "PICK":
-                continue
-            object_id = step.args.get("object")
-            if object_id in tracked and object_id in still_misplaced:
-                self._attempt_counts[object_id] = self._attempt_counts.get(object_id, 0) + 1
-                break
+        # Only a failure-triggered replan means the head object was
+        # attempted. A replan for a queued operator constraint ("constraint
+        # change") happens BEFORE the next step runs; counting that step as
+        # an attempt deprioritised the cup behind the spoon the moment the
+        # operator withdrew the left arm (2026-09-14), for a pick that had
+        # never been tried.
+        if "constraint" not in (reason or "").lower():
+            for step in current.steps:
+                if step.op != "PICK":
+                    continue
+                object_id = step.args.get("object")
+                if object_id in tracked and object_id in still_misplaced:
+                    self._attempt_counts[object_id] = self._attempt_counts.get(object_id, 0) + 1
+                    break
         return super().replan(current, world, reason)
 
 
