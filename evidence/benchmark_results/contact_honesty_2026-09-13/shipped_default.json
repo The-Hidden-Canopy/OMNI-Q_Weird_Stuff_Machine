@@ -1,0 +1,43 @@
+{
+ "label": "shipped_default",
+ "solref": "0.02 1",
+ "solimp": "0.90 0.99 0.0015",
+ "seeds": [
+  900,
+  901,
+  902
+ ],
+ "held": {
+  "cup_1": 3,
+  "napkin_1": 3,
+  "plate_1": 2,
+  "fork_1": 2,
+  "spoon_1": 3
+ },
+ "placed": {
+  "cup_1": 3,
+  "napkin_1": 2,
+  "plate_1": 0,
+  "fork_1": 2,
+  "spoon_1": 3
+ },
+ "max_penetration_mm": {
+  "arm|plate_1": 24.2,
+  "plate_1|world": 23.8,
+  "pad|plate_1": 21.3,
+  "arm|napkin_1": 9.5,
+  "napkin_1|world": 9.1,
+  "arm|cup_1": 9.0,
+  "napkin_1|pad": 8.5,
+  "cup_1|pad": 7.7,
+  "fork_1|world": 6.6,
+  "arm|spoon_1": 4.7,
+  "fork_1|pad": 4.7,
+  "pad|world": 4.4,
+  "pad|spoon_1": 4.4,
+  "arm|fork_1": 4.3,
+  "spoon_1|world": 4.3,
+  "arm|world": 3.0,
+  "cup_1|world": 1.4
+ }
+}

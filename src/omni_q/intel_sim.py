@@ -484,8 +484,60 @@ OBJECT_GRASP_SEED_BIAS: dict[str, tuple[float, float]] = {
 # Overridable by env var so a probe never has to edit physics in the working
 # tree: OMNIQ_PAD_FRICTION="3.00 0.050 0.001"
 PAD_FRICTION = os.environ.get("OMNIQ_PAD_FRICTION", "3.00 0.020 0.001")
+# Pad contact compliance. The scene shipped with solref ".050 1" /
+# solimp ".80 .95 .010" on the pads and the cup -- a "soft rubber" contact
+# whose impedance only reaches 95% after 10 mm (the solimp width) of
+# penetration. Measured over one seed-900 trial (2026-09-13): pads sank up
+# to 22 mm into the plate, 16 mm into the cup, and the cup was pushed 14 mm
+# into the table. A fork is 7 mm thick; a pad 10 mm deep is not gripping it,
+# it is inside it. Real pad rubber compresses about a millimetre, so the
+# default now saturates within ~1.5 mm (still compliant, no longer hollow).
+# Overridable for probes: OMNIQ_PAD_SOLREF="0.05 1" OMNIQ_PAD_SOLIMP="0.8 0.95 0.01"
+#
+# Second finding, same day: MuJoCo's default (time-constant) solref scales
+# contact stiffness with the mass of the body in contact, so a 0.18 kg plate
+# at the default 20 ms is ~450 N/m -- the arm pressing on it sank it 24 mm
+# into the table whatever the pads were set to. Direct stiffness
+# (negative solref = "-k -b", N/m and N.s/m) is mass-independent: measured
+# in isolation, 80 N of push penetrates 3.3 mm at -50000 -200 instead of
+# 24 mm. Tableware, table and drawer get priority="1" so their parameters
+# govern contact with the arm's default-parameter links (no averaging).
+# Pads are the softer partner (rubber); pad<->object contacts average the
+# two, both in direct mode.
+#
+# Status 2026-09-13 (end of day), measured on seeds 900-902 with the
+# 32 mm-puck plate and solid cup still in the scene:
+#   soft (shipped)         placed 9/15   pad->cup 16.5 mm, plate->table 22.5 mm
+#   firm time-constant     placed 10/15  pad->cup  7.7 mm, plate->table 23.8 mm
+#   rigid direct-stiffness placed  8/15  pad->cup  3.8 mm, but the plate rim
+#       jams in the V between fixed pad and jaw body and the wedge pops it
+#       off the table at 2.9 m/s (1.2-4.7 kN contact), and cup_1 goes 3 -> 0
+#       because its grasp was resting on the penetration.
+# So the DEFAULT is the firm time-constant contact (a measured improvement,
+# no regression), and rigid contact is opt-in (OMNIQ_RIGID_CONTACT=1) as the
+# physics the realistic models -- thin-lipped plate, hollow cup, bent-handle
+# cutlery -- have to be built and tuned against. See
+# docs/contact-honesty-2026-09-13.md.
+RIGID = os.environ.get("OMNIQ_RIGID_CONTACT", "0") not in {"", "0", "false", "no"}
+PAD_SOLREF = os.environ.get("OMNIQ_PAD_SOLREF", "-30000 -150" if RIGID else "0.02 1")
+PAD_SOLIMP = os.environ.get("OMNIQ_PAD_SOLIMP", "0.90 0.95 0.001" if RIGID else "0.90 0.99 0.0015")
+RIGID_CONTACT = ({"solref": os.environ.get("OMNIQ_RIGID_SOLREF", "-50000 -200"),
+                  "solimp": "0.90 0.95 0.001", "priority": "1"} if RIGID else {})
+NAPKIN_CONTACT = {**RIGID_CONTACT, "solref": "-8000 -60"} if RIGID else {}
+# The isolated contact-handoff scene was tuned and gated (10/10) against the
+# original compliant pads; it keeps them until it is re-tuned against the
+# firm default (its deterministic gate failed on first try with them).
+HANDOFF_PAD_SOLREF = ".050 1"
+HANDOFF_PAD_SOLIMP = ".80 .95 .010"
 
 GRASP_CLEARANCE = 0.015  # m -- gap kept above an object's top surface before closing on it
+# Descent stops when a jaw geom presses the target harder than this (0 =
+# off). Opt-in: at 10 N it did not prevent the plate-rim wedge jam (the rim
+# is already in the notch by the time the reading crosses the threshold)
+# and it aborted good descents that brush the object -- seeds 900-902 went
+# 10/15 -> 7/15 placed with it on. Kept as the hook for the edge-pinch
+# plate grasp, where a force stop is the right primitive.
+DESCEND_CONTACT_STOP_N = float(os.environ.get("OMNIQ_DESCEND_CONTACT_STOP_N", "0"))
 # How far a grasped object is raised to prove it is held. This used to be
 # clear_z - start_z = half_height + GRASP_CLEARANCE, which SHRINKS with the
 # object: 70 mm for the cup, 31 mm for the plate, and 18.5 mm for a 7 mm fork
@@ -574,7 +626,7 @@ def _cutlery(name: str, pos: str, *, handle: dict[str, str], head: dict[str, str
         attrs["euler"] = euler
     body = ET.Element("body", attrs)
     ET.SubElement(body, "freejoint", {"name": f"{name}_free"})
-    common = {"rgba": rgba, "friction": friction}
+    common = {"rgba": rgba, "friction": friction, **RIGID_CONTACT}
     ET.SubElement(body, "geom", {"name": name, "type": "box", "mass": mass,
                                  "pos": handle_offset, **handle, **common})
     ET.SubElement(body, "geom", {"name": f"{name}_head", "type": "box", "pos": head_offset,
@@ -595,6 +647,7 @@ def _drawer(pos: str) -> ET.Element:
     ET.SubElement(body, "geom", {
         "name": "drawer", "type": "box", "size": ".12 .045 .015",
         "rgba": ".30 .19 .11 1", "mass": ".2", "friction": "1.20 .006 .0002",
+        **RIGID_CONTACT,
     })
     return body
 
@@ -687,6 +740,7 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     # resting on this surface instead of dropping onto it.
     ET.SubElement(worldbody, "geom", {
         "name": "table", "type": "box", "pos": "0 -0.10 -0.05", "size": ".42 .36 .05",
+        **RIGID_CONTACT,
         "rgba": ".23 .14 .08 1", "friction": "1 .005 .0001",
     })
     ET.SubElement(worldbody, "camera", {"name": "third_person", "pos": "0 -1.15 .85", "euler": "1.05 0 0"})
@@ -734,8 +788,10 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
             name = geom.attrib.get("name", "")
             if "jaw_pad_" in name:
                 geom.set("friction", PAD_FRICTION)
-                geom.set("solref", ".050 1")
-                geom.set("solimp", ".80 .95 .010")
+                geom.set("solref", PAD_SOLREF)
+                geom.set("solimp", PAD_SOLIMP)
+                if RIGID:
+                    geom.set("priority", "1")
         # Wrist camera, mounted on the fixed jaw looking down the finger at the
         # pinch. The challenge allows up to 6 cameras and this scene used 2.
         #
@@ -802,6 +858,7 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
         _body("plate_1", plate_pos, {
             "type": "cylinder", "size": ".095 .016", "rgba": tableware_rgba(".93 .93 .91 1"),
             "mass": ".18", "friction": "1.20 .006 .0002",  # ceramic
+            **RIGID_CONTACT,
         }, euler=plate_euler),
         _body("cup_1", cup_pos, {
             # Calibrated to the measured SO-101 pad envelope: the previous
@@ -809,7 +866,7 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
             # not distinguish a bad grasp from an impossible geometry.
             "type": "cylinder", "size": ".022 .050", "rgba": tableware_rgba(".22 .58 .78 1"),
             "mass": ".08", "friction": "3.00 .020 .001",
-            "solref": ".050 1", "solimp": ".80 .95 .010",
+            **(RIGID_CONTACT or {"solref": PAD_SOLREF, "solimp": PAD_SOLIMP}),
         }, euler=cup_euler),
         # fork/spoon start inside the drawer -- retrieval is gated on OPEN, matching
         # the brief's scenario ("open the top drawer, retrieve spoons and forks").
@@ -839,6 +896,8 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
             # uniform 1.20 across every material lost that distinction;
             # restoring it, not inventing it.
             "mass": ".02", "friction": "1.60 .006 .0002",
+            # Cloth compresses: ~2.5 mm under 20 N, not ceramic-rigid.
+            **NAPKIN_CONTACT,
         }, euler=napkin_euler),
     ])
     # A real, narrower fix for the same order-dependence bug the reverted
@@ -1319,6 +1378,7 @@ class IntelTableWorld(MockWorld):
     def _ik_reach_pad(
         self, arm_offset: int, target_pos, *, iters: int = 300, max_dq: float = 0.04, tol: float = 0.01,
         roll: float | None = None, track_tcp: bool | None = None,
+        stop_on_contact: tuple[str, float] | None = None,
     ) -> float:
         """4-DOF (Rotation/Pitch/Elbow/Wrist_Pitch) IK tracking the fixed-jaw
         pad geom toward ``target_pos`` with wrist-roll pinned to
@@ -1373,7 +1433,44 @@ class IntelTableWorld(MockWorld):
             self.data.ctrl[arm_offset:arm_offset + 4] = np.clip(q_now + dq, lo, hi)
             mujoco.mj_step(self.model, self.data, nstep=3)
             self._controller_steps += 3
+            if stop_on_contact is not None:
+                # Force-guarded descent. Measured 2026-09-13 (seed 900, plate):
+                # the open gripper landed its fixed pad on the plate rim at
+                # 19 N and the solve kept driving toward a target below the
+                # rim; the rim jammed into the V between pad and jaw body --
+                # a wedge, which turned ~1 N.m of wrist servo into 1.2-4.7 kN
+                # of contact force and popped the plate off the table at
+                # 2.9 m/s. A controller with a force reading stops pushing
+                # at first firm contact; this is that reading.
+                obj, limit = stop_on_contact
+                force = self._jaw_object_force(arm_offset, obj)
+                if force > limit:
+                    self._descend_contact_stop = round(force, 2)
+                    # Hold the pose reached, don't keep leaning on the command.
+                    self.data.ctrl[arm_offset:arm_offset + 4] = self.data.qpos[arm_offset:arm_offset + 4]
+                    break
         return err_norm
+
+    def _jaw_object_force(self, arm_offset: int, obj: str) -> float:
+        """Largest contact force (N) between any geom of this arm's jaw --
+        pads, fixed jaw body, moving jaw body -- and any geom of ``obj``.
+        Read from the contact buffer; the pads-only reading in
+        ``_set_gripper`` misses a rim jammed against the jaw body."""
+        import numpy as np
+
+        mujoco = self._mujoco
+        prefix = "left_" if arm_offset == 0 else "right_"
+        jaw_bodies = {f"{prefix}Fixed_Jaw", f"{prefix}Moving_Jaw"}
+        f = np.zeros(6)
+        best = 0.0
+        for c in range(self.data.ncon):
+            con = self.data.contact[c]
+            b1 = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, self.model.geom_bodyid[con.geom1]) or ""
+            b2 = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_BODY, self.model.geom_bodyid[con.geom2]) or ""
+            if {b1, b2} & jaw_bodies and obj in (b1, b2):
+                mujoco.mj_contactForce(self.model, self.data, c, f)
+                best = max(best, float(np.linalg.norm(f[:3])))
+        return best
 
     def _object_yaw(self, obj: str) -> float:
         """Read tableware yaw from its live freejoint pose.
@@ -1425,7 +1522,7 @@ class IntelTableWorld(MockWorld):
     def _ik_reach_pad_pose(
         self, arm_offset: int, target_pos, target_rotation, *, roll_hint: float,
         iters: int = 360, max_dq: float = 0.04, position_tol: float = 0.012,
-        orientation_tol: float = 0.18,
+        orientation_tol: float = 0.18, stop_on_contact: tuple[str, float] | None = None,
     ) -> dict[str, Any]:
         """Bounded 6D damped-least-squares solve for a pad pose.
 
@@ -1473,6 +1570,16 @@ class IntelTableWorld(MockWorld):
             self.data.ctrl[arm_offset:arm_offset + 5] = np.clip(q_now + delta, lo, hi)
             mujoco.mj_step(self.model, self.data, nstep=3)
             self._controller_steps += 3
+            if stop_on_contact is not None:
+                # Same force guard as _ik_reach_pad: this solve is the first
+                # to reach grasp height, and it was the one leaning on the
+                # plate rim for 1.4 s before the guarded final descent ran.
+                obj, limit = stop_on_contact
+                force = self._jaw_object_force(arm_offset, obj)
+                if force > limit:
+                    self._descend_contact_stop = round(force, 2)
+                    self.data.ctrl[arm_offset:arm_offset + 5] = self.data.qpos[arm_offset:arm_offset + 5]
+                    break
         self.data.ctrl[arm_offset + 4] = float(np.clip(self.data.ctrl[arm_offset + 4], lo[4], hi[4]))
         return {
             "position_error_m": round(position_error, 6),
@@ -1843,9 +1950,10 @@ class IntelTableWorld(MockWorld):
         z_now = float(self.data.qpos[qpos_adr + 2])
         grasp_z = z_now + OBJECT_GRASP_VERTICAL_OFFSET.get(obj, 0.0)
         grasp_xy = xy_now - opening_xy * grasp_offset
+        self._descend_contact_stop = None
         pinch_pose = self._ik_reach_pad_pose(
             arm_offset, (grasp_xy[0], grasp_xy[1], grasp_z), target_rotation,
-            roll_hint=roll_hint, iters=80,
+            roll_hint=roll_hint, iters=80, stop_on_contact=((obj, DESCEND_CONTACT_STOP_N) if DESCEND_CONTACT_STOP_N > 0 else None),
         )
         # The final vertical approach is position-dominant: the reachable
         # orientation frame is already established above, and this 4-DOF
@@ -1856,12 +1964,15 @@ class IntelTableWorld(MockWorld):
         # 19.3 mm at pad_4 -- so a thin object can only ever be pinched at the
         # tip, and pad_4 sits ~43 mm further up the finger besides. Opt-in
         # while the downstream constants are re-tuned around it.
+        # pinch_pose above is the first solve to reach grasp height; keep its
+        # contact-stop reading if it fired, and guard this final descent too.
         pinch_error = self._ik_reach_pad(
             arm_offset, (grasp_xy[0], grasp_xy[1], grasp_z),
-            iters=180, roll=roll_hint,
+            iters=180, roll=roll_hint, stop_on_contact=((obj, DESCEND_CONTACT_STOP_N) if DESCEND_CONTACT_STOP_N > 0 else None),
         )
 
         grasp_sensor = self._set_gripper(arm_offset, GRIPPER_CLOSED, settle_steps=180, obj=obj)  # stall-aware; let the grip settle
+        grasp_sensor["descend_stopped_by_contact_n"] = self._descend_contact_stop
         lift_rise = max(clear_z - start_z, LIFT_VERIFY_MIN)
         lift_error = self._ik_reach_pad(
             arm_offset, (xy_now[0], xy_now[1], grasp_z + lift_rise),
@@ -1944,11 +2055,13 @@ class IntelTableWorld(MockWorld):
                 z_retry = float(self.data.qpos[qpos_adr + 2])
                 grasp_z_retry = z_retry + OBJECT_GRASP_VERTICAL_OFFSET.get(obj, 0.0) + dz
                 grasp_xy_retry = xy_retry - opening_xy * grasp_offset + along * shift
+                self._descend_contact_stop = None
                 self._ik_reach_pad(
                     arm_offset, (grasp_xy_retry[0], grasp_xy_retry[1], grasp_z_retry),
-                    iters=180, roll=roll_c,
+                    iters=180, roll=roll_c, stop_on_contact=((obj, DESCEND_CONTACT_STOP_N) if DESCEND_CONTACT_STOP_N > 0 else None),
                 )
                 retry_sensor = self._set_gripper(arm_offset, GRIPPER_CLOSED, settle_steps=180, obj=obj)
+                retry_sensor["descend_stopped_by_contact_n"] = self._descend_contact_stop
                 self._ik_reach_pad(
                     arm_offset,
                     (grasp_xy_retry[0], grasp_xy_retry[1], grasp_z_retry + lift_rise),
@@ -2503,6 +2616,13 @@ class ContactHandoffConfig:
     randomized: bool = False
     position_jitter_m: float = 0.002
     orientation_jitter_rad: float = 0.025
+    # Wider variation axes (2026-09-13), all drawn from ``seed`` when
+    # ``randomized``: where the cup is handed over, and how the receiving
+    # arm starts. With only the 2 mm build-time jitter above, twenty trials
+    # were twenty near-identical trajectories; a success rate over those is
+    # a repeatability number, not a robustness one.
+    shared_point_jitter_m: float = 0.0     # handoff location, +/- in x and y
+    receiver_pose_jitter_rad: float = 0.0  # right-arm start joints 0-3, +/-
     ik_damping: float = 0.001
     ik_iterations: int = 700
     ik_tolerance_m: float = 0.002
@@ -2643,8 +2763,8 @@ def _configure_contact_arm(arm_body: ET.Element) -> None:
             geom.set("conaffinity", "0")
             geom.set("group", "3")
             geom.set("friction", PAD_FRICTION)
-            geom.set("solref", ".050 1")
-            geom.set("solimp", ".80 .95 .010")
+            geom.set("solref", HANDOFF_PAD_SOLREF)
+            geom.set("solimp", HANDOFF_PAD_SOLIMP)
         else:
             geom.set("contype", "0")
             geom.set("conaffinity", "0")
@@ -2720,8 +2840,8 @@ def contact_handoff_xml(config: ContactHandoffConfig | None = None) -> str:
         "mass": ".010",
         "rgba": ".22 .58 .78 1",
         "friction": PAD_FRICTION,
-        "solref": ".050 1",
-        "solimp": ".80 .95 .010",
+        "solref": HANDOFF_PAD_SOLREF,
+        "solimp": HANDOFF_PAD_SOLIMP,
         "contype": "16",
         "conaffinity": "4",
         "group": "1",
@@ -2777,6 +2897,15 @@ class IntelContactHandoffWorld(MockWorld):
         # ``contact_handoff_xml`` (including any randomized build-time offset).
         self.data.qpos[:12] = list(HOME) * 2
         self.data.ctrl[:12] = list(HOME) * 2
+        if self.config.randomized and self.config.receiver_pose_jitter_rad > 0:
+            # The receiving (right) arm does not start from the same posture
+            # every trial. A joint-space start offset, commanded through the
+            # servos like any other pose -- the arm settles there itself.
+            rng = random.Random(self.config.seed * 7919 + 11)
+            for j in range(6, 10):
+                offset = rng.uniform(-self.config.receiver_pose_jitter_rad, self.config.receiver_pose_jitter_rad)
+                lo, hi = self.model.jnt_range[j]
+                self.data.qpos[j] = self.data.ctrl[j] = float(min(max(HOME[j - 6] + offset, lo), hi))
         self.data.qpos[5] = self.config.gripper_open_rad
         self.data.qpos[11] = self.config.gripper_open_rad
         self.data.ctrl[5] = self.config.gripper_open_rad
@@ -2904,6 +3033,14 @@ class _ContactHandoffController:
             # the measured OQ-003 proxy sweep.  A tighter operator-configured
             # bound rejects entry before either arm crosses it.
             left_shared = self.np.array([-0.040, -0.110, 0.134])
+            if self.config.randomized and self.config.shared_point_jitter_m > 0:
+                rng = random.Random(self.config.seed * 7919 + 23)
+                left_shared = left_shared + self.np.array([
+                    rng.uniform(-self.config.shared_point_jitter_m, self.config.shared_point_jitter_m),
+                    rng.uniform(-self.config.shared_point_jitter_m, self.config.shared_point_jitter_m),
+                    0.0,
+                ])
+            self.handoff_point = [round(float(v), 4) for v in left_shared]
             if abs(float(left_shared[0])) > self.config.shared_workspace_x_limit_m:
                 raise ContactHandoffRejected("unsafe shared-workspace entry")
             self._run_phase("left_lift_transfer", lambda: self._move_to(
@@ -2964,7 +3101,7 @@ class _ContactHandoffController:
             schema_version=CONTACT_HANDOFF_SCHEMA_VERSION,
             mode=CONTACT_HANDOFF_MODE,
             mjcf_sha256=self.world.mjcf_sha256,
-            controller=self.config.as_dict(),
+            controller={**self.config.as_dict(), "handoff_point": getattr(self, "handoff_point", None)},
             seed=self.config.seed,
             deterministic=not self.config.randomized,
             randomized=self.config.randomized,
@@ -3429,8 +3566,14 @@ def run_randomized_contact_handoff_report(
     *,
     trials: int = 20,
     seed: int = 700,
+    variation: dict[str, float] | None = None,
 ) -> dict[str, Any]:
-    """Retain every bounded randomized trial; report outcomes without promotion."""
+    """Retain every bounded randomized trial; report outcomes without promotion.
+
+    ``variation`` overrides ContactHandoffConfig jitter fields, e.g.
+    ``{"position_jitter_m": 0.02, "shared_point_jitter_m": 0.03,
+    "receiver_pose_jitter_rad": 0.15}`` for the wide-variation sweep.
+    """
     if trials <= 0:
         raise ValueError("trials must be positive")
     root_path = Path(root)
@@ -3440,7 +3583,7 @@ def run_randomized_contact_handoff_report(
     for index in range(trials):
         trial_seed = seed + index
         receipt = run_contact_handoff(
-            ContactHandoffConfig(seed=trial_seed, randomized=True),
+            ContactHandoffConfig(seed=trial_seed, randomized=True, **(variation or {})),
             receipt_path=root_path / f"trial-{index:02d}-seed-{trial_seed}.json",
         )
         if receipt.success:
@@ -3454,6 +3597,13 @@ def run_randomized_contact_handoff_report(
             "seed": trial_seed,
             "success": receipt.success,
             "failure_reason": receipt.failure_reason,
+            # A phase that raises is never appended, so the failure sits
+            # right after the last completed phase.
+            "failed_after_phase": (receipt.phase_timings[-1]["phase"] if receipt.phase_timings else "initial")
+                                  if not receipt.success else None,
+            "handoff_point": receipt.controller.get("handoff_point"),
+            "phases_completed": len(receipt.phase_timings),
+            "final_owner": receipt.final_owner,
             "receipt": f"trial-{index:02d}-seed-{trial_seed}.json",
         })
     report = {
@@ -3462,6 +3612,7 @@ def run_randomized_contact_handoff_report(
         "kind": "exploratory robustness report; not a promotion claim",
         "trials": trials,
         "seed_start": seed,
+        "variation": variation or {},
         "outcomes": outcomes,
         "receipts": receipts,
     }
