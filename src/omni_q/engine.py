@@ -9,6 +9,7 @@ fails, or verification finds a mismatch. Every transition is published on the
 
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import replace
 from typing import Any, Iterable
@@ -371,8 +372,14 @@ class OmniQ:
                 executed.clear()
                 continue
 
-            outcome = self._run_step(step, world)
-            executed.add(step.id)
+            companion = self._companion_step(step, executed) if self.parallel_arms else None
+            if companion is not None:
+                outcome = self._run_steps_parallel([step, companion], world)
+                executed.add(step.id)
+                executed.add(companion.id)
+            else:
+                outcome = self._run_step(step, world)
+                executed.add(step.id)
 
             if not outcome:
                 revisions += 1
@@ -449,6 +456,107 @@ class OmniQ:
         if callable(planner_context):
             config["planner_context"] = planner_context()
         return config
+
+    #: Simultaneous two-arm execution (2026-09-14): when the next ready step
+    #: has a companion ready on the other arm, the pair is submitted as one
+    #: revision-checked transition and the world runs both primitives at
+    #: once. OMNIQ_PARALLEL_ARMS=0 restores strict one-step execution.
+    parallel_arms = os.environ.get("OMNIQ_PARALLEL_ARMS", "1") not in {"", "0", "false", "no"}
+
+    def _companion_step(self, step: Step, executed: set[str]) -> Step | None:
+        """A second ready manipulation step for the OTHER arm that can run at
+        the same time as ``step``: different object, neither depends on the
+        other, both plain single-arm ops, and the world offers the parallel
+        path. The two-arm plate (bimanual) never pairs."""
+        if self.graph is None or step.contract != "manipulate" or not step.arm:
+            return None
+        if not hasattr(self.world, "apply_transitions_parallel"):
+            return None
+        if step.op not in {"PICK", "MOVE", "PLACE", "OPEN"}:
+            return None
+        bimanual = getattr(self.world, "bimanual_objects", frozenset())
+        if step.args.get("object") in bimanual:
+            return None
+        # A pending two-arm step needs both grippers free: pairing before it
+        # let one arm pick the cup, and the plate's two-arm pinch then opened
+        # that jaw and dropped it (seed 903, 2026-09-14). Both arms stay
+        # unpaired until every bimanual step in the graph has run.
+        if any(o.id not in executed and o.args.get("object") in bimanual for o in self.graph.steps):
+            return None
+        for other in self.graph.topo_order():
+            if other.id in executed or other.id == step.id or other.contract != "manipulate":
+                continue
+            if other.op not in {"PICK", "MOVE", "PLACE", "OPEN"} or not other.arm or other.arm == step.arm:
+                continue
+            if other.args.get("object") == step.args.get("object") or other.args.get("object") in bimanual:
+                continue
+            if step.id in other.deps or other.id in step.deps:
+                continue
+            if not all(dep in executed for dep in other.deps):
+                continue
+            if not self.manipulator.supports(other.op):
+                continue
+            return other
+        return None
+
+    def _run_steps_parallel(self, steps: list[Step], world: WorldState) -> bool:
+        """Execute two steps on different arms as one composite transition."""
+        requests: list[TransitionRequest] = []
+        for step in steps:
+            authorization = self._authorize(step, world)
+            if authorization.verdict is not AuthorizationVerdict.ALLOW:
+                step.state = "denied"
+                step.result = {"authorization": authorization.as_dict()}
+                self._actions.append({"step": step.id, "op": step.op, "arm": step.arm,
+                                      "device": step.device, "state": step.state, "result": step.result})
+                self.bus.publish("step.denied", **step.as_dict())
+                return False
+        for step in steps:
+            try:
+                step.device = self.device.route(step, world)
+            except RuntimeError as exc:
+                step.state = "failed"
+                step.result = {"error": str(exc)}
+                return False
+            step.state = "running"
+            self.bus.publish("step.started", **step.as_dict(), state_revision=world.revision,
+                             graph_revision=self.graph.revision, parallel_with=[s.id for s in steps if s is not step])
+            res = self.manipulator.execute(step, world)
+            if not res.ok:
+                step.state = "failed"
+                step.result = res.detail
+                self._actions.append({"step": step.id, "op": step.op, "arm": step.arm,
+                                      "device": step.device, "state": step.state, "result": step.result})
+                return False
+            requests.append(TransitionRequest(step_id=step.id, op=step.op, args=dict(step.args),
+                                              expected_revision=world.revision, actor=step.device,
+                                              org_id=self.envelope.org_id))
+        try:
+            transitions = self.world.apply_transitions_parallel(requests)
+        except TransitionRejected as exc:
+            for step in steps:
+                step.state = "failed"
+                step.result = {"error": str(exc)}
+                self._actions.append({"step": step.id, "op": step.op, "arm": step.arm,
+                                      "device": step.device, "state": step.state, "result": step.result})
+            return False
+        ok_all = True
+        for step, transition in zip(steps, transitions):
+            step.result = dict(transition.detail)
+            step.state = "done" if transition.ok else "failed"
+            ok_all = ok_all and transition.ok
+            self._actions.append({"step": step.id, "op": step.op, "arm": step.arm,
+                                  "device": step.device, "state": step.state, "result": step.result,
+                                  "parallel_with": [s.id for s in steps if s is not step]})
+            self.bus.publish("step.finished", **step.as_dict(), state_revision=self.world.state().revision,
+                             graph_revision=self.graph.revision)
+        if ok_all:
+            for step in steps:
+                if step.contract in {"manipulate", "verify"}:
+                    result = self._verify_step(step)
+                    if not result.ok:
+                        return False
+        return ok_all
 
     def _next_step(self, executed: set[str]) -> Step | None:
         if self.graph is None or self.mode is AutonomyMode.HOLD:

@@ -495,8 +495,25 @@ BIMANUAL_MAX_TILT_RAD = 0.21  # 12 deg: a plate carried flat, not dragged
 # cutlery and napkin picks are 10/10 from HOME and are left alone.
 TOPDOWN_SEED_OBJECTS: frozenset[str] = (frozenset() if LEGACY_MODELS_FLAG else
                                         (frozenset({"cup_1", "fork_1", "spoon_1"}) if REAL_DRAWERS else frozenset({"cup_1"})))
+# Objects whose jaw is re-pinned at its stall angle (+ a bounded squeeze)
+# instead of left to ramp toward fully closed. Measured 2026-09-14 while the
+# arms started working in parallel: a held cup with the jaw still driving
+# toward -0.174 creeps 0.69 -> 0.34 -> -0.17 and slides out of the pinch
+# within ~10 s of holding -- sequential runs only "worked" because the MOVE
+# followed the PICK immediately. The plate is NOT in this set (see
+# _gripper_stall_hold).
+STALL_HOLD_OBJECTS: frozenset[str] = frozenset({"cup_1"})
+# Wall pinch for hollow objects (2026-09-14): the jaw descends only part-open
+# so the moving fingertip lands INSIDE the rim, the fixed pad outside, and the
+# close clamps the 3 mm wall between them -- a hold that does not depend on
+# the finger being vertical. The diameter pinch it replaces held the cup on a
+# tilted 45 deg contact and let it slide 35-45 mm down the pads while held.
+# jaw angle for the descent, and how far below the rim the fingertips go.
+WALL_PINCH_OBJECTS: dict[str, tuple[float, float]] = ({} if LEGACY_MODELS_FLAG else {"cup_1": (0.30, 0.030)})
 OBJECT_GRASP_VERTICAL_OFFSET: dict[str, float] = {
     "spoon_1": 0.0,
+    # cup: fingertips 30 mm below the rim (rim = centre + 45 mm)
+    **({} if LEGACY_MODELS_FLAG else {"cup_1": 0.045 - 0.030}),
 }
 # Empirically found, not a general principle: this exact (elbow, wrist_pitch)
 # joint bias, applied to qpos right after the transit approach and before the
@@ -1248,6 +1265,7 @@ class IntelTableWorld(MockWorld):
         self.data = mujoco.MjData(self.model)
         self._mujoco = mujoco
         self._controller_steps = 0
+        self.bimanual_objects = BIMANUAL_OBJECTS   # the engine never pairs these with another arm's step
         drawer_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "drawer_slide")
         self._drawer_qpos_adr = self.model.jnt_qposadr[drawer_joint_id]
         self._drawer_slide_adr = {"drawer": self._drawer_qpos_adr}
@@ -1359,7 +1377,8 @@ class IntelTableWorld(MockWorld):
             grasp_info = self._do_pick(arm_offset, obj)
             if not grasp_info["held"]:
                 self._ownership[obj] = prev_owner  # revert the scripted grasp claim
-                self._restore_physics(physics_snapshot)
+                # per-arm: the other arm may be holding something (2026-09-14)
+                self._restore_physics(physics_snapshot, arm_offset=arm_offset, obj=obj)
                 result = replace(result, ok=False)
         elif op in {"MOVE", "PLACE"} and obj in self._object_joints:
             grasp_info = self._do_place(arm_offset, obj, request.args.get("to"))
@@ -1546,17 +1565,194 @@ class IntelTableWorld(MockWorld):
         self._mujoco = FrozenArm()
         return dict(self._failed_arms[arm_offset])
 
-    def _restore_physics(self, snapshot) -> None:
-        """Restore a pre-attempt MuJoCo state after a rejected transition."""
+    def _set_pick_track(self, arm_offset: int, value: bool) -> None:
+        """Per-arm (2026-09-14): two arms run their primitives at the same
+        time now, and a shared flag let the cup's deep grasp on one arm switch
+        the other arm's fingertip tracking mid-pick."""
+        by_arm = getattr(self, "_pick_track_tcp_by_arm", None)
+        if by_arm is None:
+            by_arm = self._pick_track_tcp_by_arm = {}
+        by_arm[arm_offset] = value
+
+    # -- simultaneous two-arm execution (2026-09-14) ----------------------
+    #
+    # The engine executes one revision-bound transition per control boundary.
+    # To move both arms at once on independent objects it submits a PAIR
+    # under one revision check; each primitive runs in its own thread and
+    # every physics step is shared: a primitive's mj_step waits until all
+    # active primitives have asked for a step, then one real step advances the
+    # world for everyone. Each thread writes only its own arm's six actuator
+    # commands, so the two controllers never touch each other's state; the
+    # physics -- contacts between the two arms included -- is the same single
+    # simulation as before.
+
+    class _CoopStepper:
+        def __init__(self, real, workers: int) -> None:
+            import threading
+
+            self._real = real
+            self._cv = threading.Condition()
+            self._active = workers
+            self._waiting = 0
+            self._generation = 0
+            self.steps = 0
+
+        def __getattr__(self, name):
+            return getattr(self._real, name)
+
+        def mj_step(self, m, d, nstep: int = 1) -> None:
+            for _ in range(int(nstep)):
+                with self._cv:
+                    self._waiting += 1
+                    gen = self._generation
+                    if self._waiting >= self._active:
+                        self._advance(m, d)
+                    else:
+                        while gen == self._generation and self._active > 1:
+                            self._cv.wait(0.5)
+                        if gen == self._generation:      # partner finished: step alone
+                            self._advance(m, d)
+
+        def _advance(self, m, d) -> None:
+            self._real.mj_step(m, d)
+            self.steps += 1
+            self._waiting = 0
+            self._generation += 1
+            self._cv.notify_all()
+
+        def finish(self) -> None:
+            with self._cv:
+                self._active -= 1
+                if self._waiting and self._waiting >= self._active > 0:
+                    # the partner is parked at the barrier waiting for us
+                    self._waiting = 0
+                    self._generation += 1
+                    self._cv.notify_all()
+
+    def apply_transitions_parallel(self, requests: list[TransitionRequest]) -> list[TransitionResult]:
+        """Run two manipulation transitions on different arms at the same time.
+
+        One revision check for the pair; physical primitives run concurrently
+        under a cooperative stepper; then each request's symbolic transition is
+        applied in order (the second against the revision the first produced).
+        A failed primitive is reported like the sequential path: PICK reverts
+        the ownership claim; MOVE/PLACE leaves the object where it landed and
+        clears ownership. Physics is never rewound here -- the other arm's
+        real motion cannot be undone.
+        """
+        import threading
+        from dataclasses import replace as _replace
+
+        if not requests:
+            return []
+        for request in requests:
+            if request.expected_revision != self.revision:
+                raise TransitionRejected(
+                    f"{request.step_id}: expected revision {request.expected_revision}, "
+                    f"current revision is {self.revision}"
+                )
+        arms = [6 if (r.actor and "right" in r.actor) else 0 for r in requests]
+        if len(set(arms)) != len(arms):
+            raise TransitionRejected("parallel transitions must use different arms")
+
+        def physical(request: TransitionRequest, arm_offset: int) -> dict[str, Any]:
+            op, obj = request.op, request.args.get("object")
+            if op == "PICK" and obj in self._object_joints:
+                if request.actor:
+                    held = [o for o, owner in self._ownership.items() if owner == request.actor and o != obj]
+                    if held:
+                        return {"grasp": "refused", "held": False, "lift_height_m": 0.0,
+                                "reason": f"{request.actor} is already holding {held[0]}"}
+                return self._do_pick(arm_offset, obj)
+            if op in {"MOVE", "PLACE"} and obj in self._object_joints:
+                return self._do_place(arm_offset, obj, request.args.get("to"))
+            if op == "OPEN" and obj in getattr(self, "_drawer_slide_adr", {}):
+                if REAL_DRAWERS:
+                    return self._do_open_drawer(arm_offset, obj)
+                self.data.qpos[self._drawer_slide_adr[obj]] = DRAWER_OPEN
+                return {"opened": True, "symbolic": True}
+            if op == "CLOSE" and obj in getattr(self, "_drawer_slide_adr", {}):
+                self.data.qpos[self._drawer_slide_adr[obj]] = DRAWER_CLOSED
+                return {"closed": True, "symbolic": True}
+            return {"noop": True}
+
+        real = self._mujoco
+        stepper = IntelTableWorld._CoopStepper(real, len(requests))
+        self._mujoco = stepper
+        results: dict[int, dict[str, Any]] = {}
+        errors: dict[int, BaseException] = {}
+
+        def worker(i: int) -> None:
+            try:
+                results[i] = physical(requests[i], arms[i])
+            except BaseException as exc:  # noqa: BLE001 - surface, never hang the partner
+                errors[i] = exc
+                results[i] = {"held": False, "placed": False, "opened": False, "reason": f"{type(exc).__name__}: {exc}"}
+            finally:
+                stepper.finish()
+
+        threads = [threading.Thread(target=worker, args=(i,), name=f"arm-{arms[i]}") for i in range(len(requests))]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self._mujoco = real
+        self._parallel_steps = stepper.steps
+
+        out: list[TransitionResult] = []
+        for i, request in enumerate(requests):
+            info = results[i]
+            op, obj = request.op, request.args.get("object")
+            prev_zone = self._objects[obj].zone if obj in self._objects else None
+            prev_owner = self._ownership.get(obj)
+            symbolic = super().apply_transition(_replace(request, expected_revision=self.revision))
+            ok = symbolic.ok
+            if op == "PICK" and obj in self._object_joints:
+                if not info.get("held"):
+                    self._ownership[obj] = prev_owner
+                    ok = False
+            elif op in {"MOVE", "PLACE"} and obj in self._object_joints:
+                if not info.get("placed"):
+                    if prev_zone is not None:
+                        self._objects[obj] = _replace(self._objects[obj], zone=prev_zone)
+                    self._ownership[obj] = None
+                    ok = False
+            elif op == "OPEN" and not info.get("opened", True):
+                ok = False
+            detail = {**symbolic.detail, **info, "parallel_with": [r.step_id for r in requests if r is not request],
+                      "parallel_physics_steps": stepper.steps}
+            out.append(TransitionResult(request.step_id, ok, self.revision, detail))
+        return out
+
+    def _restore_physics(self, snapshot, *, arm_offset: int | None = None, obj: str | None = None) -> None:
+        """Restore a pre-attempt MuJoCo state after a rejected transition.
+
+        With ``arm_offset`` (and optionally ``obj``) only that arm's six joints
+        and commands and that object's free joint are restored -- the
+        per-attempt retry rollback (2026-09-14). The whole-world form rewound
+        the OTHER arm too: while both arms picked at once, the fork's retry
+        put the right arm's joints and jaw back to before it had lifted the
+        cup, and the cup was on the table when its MOVE began.
+        """
         if snapshot is None:
             return
         qpos, qvel, ctrl, sim_time, controller_steps = snapshot
-        self.data.qpos[:] = qpos
-        self.data.qvel[:] = qvel
-        self.data.ctrl[:] = ctrl
-        self.data.time = sim_time
+        if arm_offset is None:
+            self.data.qpos[:] = qpos
+            self.data.qvel[:] = qvel
+            self.data.ctrl[:] = ctrl
+            self.data.time = sim_time
+            self._controller_steps = controller_steps
+        else:
+            a = arm_offset
+            self.data.qpos[a:a + 6] = qpos[a:a + 6]
+            self.data.qvel[a:a + 6] = qvel[a:a + 6]
+            self.data.ctrl[a:a + 6] = ctrl[a:a + 6]
+            if obj in self._object_joints:
+                qa, da = self._object_joints[obj]
+                self.data.qpos[qa:qa + 7] = qpos[qa:qa + 7]
+                self.data.qvel[da:da + 6] = qvel[da:da + 6]
         self._mujoco.mj_forward(self.model, self.data)
-        self._controller_steps = controller_steps
 
     # -- OQ-010: real IK + contact grasp for tracked tableware ----------
 
@@ -1684,6 +1880,8 @@ class IntelTableWorld(MockWorld):
             return False
         if obj is None:
             return True
+        if obj in WALL_PINCH_OBJECTS:
+            return True   # the fingertips are what go inside the rim
         height = 2.0 * OBJECT_HALF_HEIGHT.get(obj, 0.01)
         return height < self.DEEP_GRASP_MIN_HEIGHT
 
@@ -1742,7 +1940,7 @@ class IntelTableWorld(MockWorld):
         # along the finger mid-sequence, which showed up as an 88 mm XY error
         # the 180-iteration pinch solve could not close.
         if track_tcp is None:
-            track_tcp = getattr(self, "_pick_track_tcp", None)
+            track_tcp = getattr(self, "_pick_track_tcp_by_arm", {}).get(arm_offset)
             if track_tcp is None:
                 track_tcp = self._fingertip_pinch
         tcp = self._tcp_geoms(arm_offset) if track_tcp else None
@@ -2011,9 +2209,20 @@ class IntelTableWorld(MockWorld):
                     and len(history) > window
                     and abs(q - history[-window]) < 0.005):   # ... and stopped for a while
                 stalled, stall_angle = True, q
-                if self._gripper_stall_hold:
+                if self._gripper_stall_hold or obj in STALL_HOLD_OBJECTS:
                     self.data.ctrl[jaw] = q - self.GRIPPER_STALL_SQUEEZE_RAD
         actual = float(self.data.qpos[jaw])
+        if closing and obj in STALL_HOLD_OBJECTS and not stalled and abs(actual - value) > 0.02:
+            # The jaw never "stopped" -- it was creeping on the object the whole
+            # settle -- so the stall rule above did not fire. Pin the command
+            # at the achieved angle plus the bounded squeeze anyway: a servo
+            # left driving toward fully-closed walked the cup out of the pinch
+            # within ~10 s (2026-09-14).
+            self.data.ctrl[jaw] = actual - self.GRIPPER_STALL_SQUEEZE_RAD
+            for _ in range(40):
+                mujoco.mj_step(self.model, self.data)
+                self._controller_steps += 1
+            actual = float(self.data.qpos[jaw])
 
         # Contact buffer: what is the jaw actually touching, and how hard?
         prefix = "left_" if arm_offset == 0 else "right_"
@@ -2466,7 +2675,7 @@ class IntelTableWorld(MockWorld):
         roll_hint = float(np.clip(self._GRASP_WRIST_ROLL[arm_offset] - yaw, -1.62, 1.62))
         clear_z = hpos[2] + 0.005 + GRASP_CLEARANCE + 0.02
         self._go_home(arm_offset)
-        self._pick_track_tcp = True
+        self._set_pick_track(arm_offset, True)
         self._set_gripper(arm_offset, GRIPPER_OPEN)
         # start from a scanned vertical-finger posture above the handle (the
         # plain solve arrived tilted and landed 36 mm along the bar)
@@ -2521,7 +2730,7 @@ class IntelTableWorld(MockWorld):
         if not safety["safe"]:
             return {"grasp": "edge", "reach_error_m": None, "lift_height_m": 0.0, "held": False,
                     "reason": safety["reason"], "safety": {"approach": safety}}
-        self._pick_track_tcp = False
+        self._set_pick_track(arm_offset, False)
         pinch = self._edge_approach_and_pinch(arm_offset, obj)
         lift_target = g["tip_grip"] + np.array([0.0, 0.0, LIFT_VERIFY_MIN + 0.02])
         lift_q, lift_scan_err = self._edge_seed_joints(arm_offset, lift_target, g["pad_y"][:2])
@@ -2538,7 +2747,7 @@ class IntelTableWorld(MockWorld):
         }
         if not held:
             self._set_gripper(arm_offset, GRIPPER_OPEN, settle_steps=40)
-            self._restore_physics(attempt_snapshot)
+            self._restore_physics(attempt_snapshot, arm_offset=arm_offset, obj=obj)
         return result
 
     def _do_pick_bimanual(self, obj: str) -> dict[str, Any]:
@@ -2563,7 +2772,7 @@ class IntelTableWorld(MockWorld):
                 return {"grasp": "bimanual_edge", "reach_error_m": None, "lift_height_m": 0.0, "held": False,
                         "reason": f"{'left' if arm_offset == 0 else 'right'}: {safety['reason']}",
                         "safety": {"approach": safety}, "arms": per_arm}
-            self._pick_track_tcp = False
+            self._set_pick_track(arm_offset, False)
             pinch = self._edge_approach_and_pinch(arm_offset, obj)
             per_arm["left" if arm_offset == 0 else "right"] = {k: v for k, v in pinch.items() if k != "geometry"}
             per_arm["left" if arm_offset == 0 else "right"]["_geom"] = pinch["geometry"]
@@ -2725,8 +2934,9 @@ class IntelTableWorld(MockWorld):
             }
 
         self._go_home(arm_offset)          # same ready pose for every pick; see _go_home
-        self._pick_track_tcp = self._track_tcp_for(obj)
-        self._set_gripper(arm_offset, GRIPPER_OPEN)
+        self._set_pick_track(arm_offset, self._track_tcp_for(obj))
+        open_to = WALL_PINCH_OBJECTS[obj][0] if obj in WALL_PINCH_OBJECTS else GRIPPER_OPEN
+        self._set_gripper(arm_offset, open_to)
         if obj in TOPDOWN_SEED_OBJECTS:
             # Vertical-finger posture above the grasp point, from the scan,
             # before the up-over-down move (see _topdown_seed_joints).
@@ -2851,8 +3061,8 @@ class IntelTableWorld(MockWorld):
                 roll_c = float(np.clip(roll_c, -1.65, 1.65))
                 tried.append(key)
 
-                self._restore_physics(attempt_snapshot)
-                self._set_gripper(arm_offset, GRIPPER_OPEN)
+                self._restore_physics(attempt_snapshot, arm_offset=arm_offset, obj=obj)
+                self._set_gripper(arm_offset, open_to)
                 self._move_to(arm_offset, (grasp_xy[0], grasp_xy[1], clear_z))
                 if elbow_bias or wrist_pitch_bias:
                     self.data.qpos[arm_offset + 2] += elbow_bias
@@ -2989,13 +3199,24 @@ class IntelTableWorld(MockWorld):
             arm_offset, pad_release_target, target_rotation,
             roll_hint=roll_hint, iters=300,
         )
+        # let the carried object stop swinging before the release
+        for _ in range(80):
+            self._mujoco.mj_step(self.model, self.data)
+            self._controller_steps += 1
         place_error = float(place_pose["position_error_m"])
-        self._set_gripper(arm_offset, GRIPPER_OPEN, settle_steps=40)  # let it drop/settle
+        # Wall pinch: opening fully from INSIDE the cup swings the moving
+        # finger across to the far inner wall (121 mm open vs 54 mm bore) and
+        # shoves the cup 60-120 mm (2026-09-14). Open only to the descent
+        # angle, lift clear of the rim, then open fully.
+        release_open = WALL_PINCH_OBJECTS[obj][0] if obj in WALL_PINCH_OBJECTS else GRIPPER_OPEN
+        self._set_gripper(arm_offset, release_open, settle_steps=40)  # let it drop/settle
         retract_pose = self._ik_reach_pad_pose(
             arm_offset, pad_release_target + clear, target_rotation,
             roll_hint=roll_hint, iters=240,
         )  # retract straight up
         lift_error = float(retract_pose["position_error_m"])
+        if release_open != GRIPPER_OPEN:
+            self._set_gripper(arm_offset, GRIPPER_OPEN, settle_steps=30)   # now clear of the rim
 
         # Withdraw to the ready pose after the release (2026-09-14): the arm
         # used to stay retracted right above the object it had just set down,
