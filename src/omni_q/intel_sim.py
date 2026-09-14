@@ -431,13 +431,20 @@ class IntelSceneConfig:
 # of approaching it cleanly. Not derived from the model at runtime because
 # _do_pick/_do_place need it before the arm ever gets there.
 OBJECT_HALF_HEIGHT: dict[str, float] = {
-    "plate_1": 0.016, "cup_1": 0.055, "fork_1": 0.0035, "spoon_1": 0.0035, "napkin_1": 0.003,
+    "plate_1": 0.016, "cup_1": 0.055, "fork_1": 0.0035, "spoon_1": 0.0035, "napkin_1": 0.009,
 }
 # Horizontal offset from an object's centre to the fixed pad target.  Large
 # flat fixtures are grasped at their rim/edge; targeting their centre puts the
 # pad inside the collision volume and drags them during the lift.
 OBJECT_GRASP_OFFSET: dict[str, float] = {
-    "plate_1": 0.078, "cup_1": 0.0, "fork_1": 0.006, "spoon_1": 0.0,
+    # cup_1: its RADIUS, so the fixed jaw lands on the cup's near wall. The
+    # SO-101 has one fixed jaw and one moving jaw; with the fixed pad aimed at
+    # the cup's centre (0.0) the moving jaw closed by shoving the cup sideways
+    # across the table until it met the fixed jaw, and a 110 mm cup pushed at
+    # its base tips over. Seen live by the operator on 2026-09-13 ("only one
+    # claw is moving, the other stayed out"). Land the fixed jaw first; then
+    # the moving jaw closes onto an object that cannot travel.
+    "plate_1": 0.078, "cup_1": 0.022, "fork_1": 0.006, "spoon_1": 0.0,
     # The cloth's broad, thin footprint is more stable under a centred pinch;
     # the earlier rim offset let the moving jaw skim past it during lift.
     "napkin_1": 0.0,
@@ -784,7 +791,7 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     # always symbolic and didn't literally reveal these bodies either way.
     fork_pos, fork_euler = tableware_pose((-.32, -.05, .004))
     spoon_pos, spoon_euler = tableware_pose((.32, -.05, .004))
-    napkin_pos, napkin_euler = tableware_pose((-.22, .02, .003))
+    napkin_pos, napkin_euler = tableware_pose((-.22, .02, .009))
     worldbody.extend([
         # Rim half-height .016 (32mm full thickness), not the original .007
         # (14mm): the SO-101 gripper's own fully-closed pad gap is 21.3mm
@@ -818,8 +825,15 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
                  head={"size": ".013 .02 .004"}, head_offset="0 .07 0",
                  mass=".04", friction="1.20 .006 .0002",
                  rgba=tableware_rgba(".72 .73 .75 1"), euler=spoon_euler),
+        # A FOLDED napkin -- 70 x 50 x 18 mm -- as it sits on a set table, not
+        # a 140 x 100 x 6 mm sheet laid flat. The flat sheet was unpickable by
+        # construction: 8 mm-tall fingertip pads cannot straddle a 6 mm slab
+        # with no narrow feature (2026-09-13: 76 evidence-driven retries, 22
+        # with pad contact, zero lifts). Folding is what people actually do
+        # with a napkin; the block it makes is thick enough to pinch and
+        # narrow enough to close across. Same 10 g.
         _body("napkin_1", napkin_pos, {
-            "type": "box", "size": ".07 .05 .003", "rgba": tableware_rgba(".90 .40 .38 1"),
+            "type": "box", "size": ".035 .025 .009", "rgba": tableware_rgba(".90 .40 .38 1"),
             # Cloth genuinely grips more than metal cutlery or glazed
             # ceramic (higher real sliding-friction coefficient) -- a
             # uniform 1.20 across every material lost that distinction;
@@ -1252,6 +1266,24 @@ class IntelTableWorld(MockWorld):
         offset = float(self.data.geom_xpos[tracked][2] - self.data.geom_xpos[tip][2])
         return max(0.0, offset)
 
+    #: Objects at least this tall are grasped DEEP in the fingers (pad_4
+    #: tracking, all four pads along the object) rather than at the fingertips.
+    #: A two-fingertip pinch on a 110 mm cup is a line contact on a cylinder:
+    #: the cup swings like a pendulum during the carry and is set down ~45 deg
+    #: tilted -- watched directly on the table_grazing camera, seed 701,
+    #: 2026-09-13. Fingertips for cutlery, wrapped fingers for a cup, which is
+    #: what a person does. The threshold is the finger span from tip to pad_4.
+    DEEP_GRASP_MIN_HEIGHT = 0.045  # m
+
+    def _track_tcp_for(self, obj: str | None) -> bool:
+        """Fingertip tracking for thin objects, deep grasp for tall ones."""
+        if not self._fingertip_pinch:
+            return False
+        if obj is None:
+            return True
+        height = 2.0 * OBJECT_HALF_HEIGHT.get(obj, 0.01)
+        return height < self.DEEP_GRASP_MIN_HEIGHT
+
     @property
     def _fingertip_pinch(self) -> bool:
         """Track the fingertip midpoint (not pad_4) for every pick IK solve."""
@@ -1306,7 +1338,9 @@ class IntelTableWorld(MockWorld):
         # along the finger mid-sequence, which showed up as an 88 mm XY error
         # the 180-iteration pinch solve could not close.
         if track_tcp is None:
-            track_tcp = self._fingertip_pinch
+            track_tcp = getattr(self, "_pick_track_tcp", None)
+            if track_tcp is None:
+                track_tcp = self._fingertip_pinch
         tcp = self._tcp_geoms(arm_offset) if track_tcp else None
         roll = self._GRASP_WRIST_ROLL[arm_offset] if roll is None else float(roll)
         jacp = np.zeros((3, self.model.nv))
@@ -1377,7 +1411,15 @@ class IntelTableWorld(MockWorld):
         pad_y = np.array([0.0, 0.0, 1.0])
         pad_z = np.cross(pad_x, pad_y)
         target_rotation = np.column_stack((pad_x, pad_y, pad_z))
-        roll_hint = self._GRASP_WRIST_ROLL[arm_offset] - yaw
+        base_roll = self._GRASP_WRIST_ROLL[arm_offset]
+        if obj == "napkin_1":
+            # Measured, not derived (2026-09-13): with the arm's base roll the
+            # napkin's first attempt never made contact, and every successful
+            # pick was rescued by the retry's MIRRORED roll on the third or
+            # fourth try (lifts 79-84 mm once it landed). Closing across the
+            # folded block's short side wants the jaw the other way round.
+            base_roll = -base_roll
+        roll_hint = base_roll - yaw
         return target_rotation, float(np.clip(roll_hint, -1.62, 1.62))
 
     def _ik_reach_pad_pose(
@@ -1566,9 +1608,19 @@ class IntelTableWorld(MockWorld):
         relative_distance = 0.0
         if obj is not None and obj in self._object_joints:
             qpos_adr, _ = self._object_joints[obj]
+            # Measure from the point the grasp actually tracks. Under fingertip
+            # tracking the object sits at the fingertip midpoint, ~43 mm down
+            # the finger from pad_4; measuring from pad_4 read a 0.138 m
+            # "separation" on a correctly held cup and rejected every carry
+            # (2026-09-13, seed 701). The guard's job is to catch an object
+            # that has left the grip, so it must use the grip's own reference.
+            tcp = self._tcp_geoms(arm_offset) if self._track_tcp_for(obj) else None
+            if tcp is not None:
+                reference = 0.5 * (self.data.geom_xpos[tcp[0]] + self.data.geom_xpos[tcp[1]])
+            else:
+                reference = self.data.geom_xpos[self._pad_geom[arm_offset]]
             relative_distance = float(np.linalg.norm(
-                self.data.qpos[qpos_adr:qpos_adr + 3]
-                - self.data.geom_xpos[self._pad_geom[arm_offset]]
+                self.data.qpos[qpos_adr:qpos_adr + 3] - reference
             ))
             if relative_distance > LEGACY_MAX_CARRY_OFFSET_M:
                 return {
@@ -1691,7 +1743,7 @@ class IntelTableWorld(MockWorld):
         return self._ik_track_line(arm_offset, cur, (x, y, z))
 
     def _go_home(self, arm_offset: int, *, steps: int = 150) -> None:
-        """Return one arm to its verified HOME posture with the gripper open.
+        """Return one arm to its verified HOME posture, jaw command unchanged.
 
         Every pick used to start from wherever the previous action left the
         arm. _move_to is an up-over-down waypoint move, so the *fingertip*
@@ -1707,7 +1759,13 @@ class IntelTableWorld(MockWorld):
         import numpy as np
 
         target = np.array(HOME, dtype=float)
-        target[5] = GRIPPER_OPEN
+        # A posture reset, not a release: keep whatever jaw command is in
+        # force. A failed MOVE restores physics to a snapshot in which the arm
+        # is still holding the previous object; opening the jaw here dropped
+        # that object at a random point along the homing path (measured
+        # 2026-09-13: fork_1 10/10 -> 6/10 after a failed plate MOVE preceded
+        # it). The pick opens the gripper explicitly, right after this.
+        target[5] = float(self.data.ctrl[arm_offset + 5])
         start = self.data.ctrl[arm_offset:arm_offset + 6].copy()
         for k in range(1, steps + 1):
             self.data.ctrl[arm_offset:arm_offset + 6] = start + (target - start) * (k / steps)
@@ -1750,6 +1808,7 @@ class IntelTableWorld(MockWorld):
             }
 
         self._go_home(arm_offset)          # same ready pose for every pick; see _go_home
+        self._pick_track_tcp = self._track_tcp_for(obj)
         self._set_gripper(arm_offset, GRIPPER_OPEN)
         self._move_to(arm_offset, (grasp_xy[0], grasp_xy[1], clear_z))
 

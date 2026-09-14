@@ -63,3 +63,6 @@ data/interim/
 
 # ultralytics / YOLO training scratch output
 runs/
+
+# HF-hosted Omni checkpoints (re-download via hf: KissTheHabit/IDA_OMNI_Q); 977 MB, over the GitHub limit
+models/hf_ida_omni_q/
