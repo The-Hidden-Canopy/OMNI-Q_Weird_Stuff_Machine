@@ -115,6 +115,11 @@ that window. Close it to exit.
 #    shared point, right takes it while left still holds, left releases.
 .venv/Scripts/python integrations/intel/scripts/watch_sim.py --live --handoff --seed 19
 
+# 4b. One arm FAILS mid-run (left servo bus freezes after the fork); the fault
+#    handler withdraws it, the plan recompiles, the right arm finishes cup,
+#    spoon and the napkin (shared band) -- whole table still set, resolved.
+.venv/Scripts/python integrations/intel/scripts/demo_arm_failure.py --seed 903 --live
+
 # 5. Perception in the loop: four scene cameras -> scene-trained YOLO (OpenVINO)
 #    -> fused, back-projected detections -> OMNI plan -> controllers -> the
 #    cameras look again and grade each object independently of the receipts.

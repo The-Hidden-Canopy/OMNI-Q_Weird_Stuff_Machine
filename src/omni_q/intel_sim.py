@@ -620,7 +620,7 @@ ZONE_POSITIONS: dict[str, tuple[float, float, float]] = (
         "left": (-0.16, -0.12, 0.010),        # fork, grip segment arched up
         "right": (0.16, -0.12, 0.010),        # spoon
         "lower_left": (-0.20, 0.00, 0.012) if os.environ.get("OMNIQ_REAL_DRAWERS", "0") not in {"", "0", "false", "no"}
-                      else (-0.25, -0.12, 0.012),   # napkin, outside the fork (real drawers: clear of the left unit)
+                      else (0.0, 0.04, 0.012),      # napkin above the plate, reachable by BOTH arms (0.30 m each)
     }
 )
 
@@ -1105,7 +1105,11 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     elif not REAL_DRAWERS:
         fork_pos, fork_euler = tableware_pose((-.32, -.05, .009))
         spoon_pos, spoon_euler = tableware_pose((.34, .02, .009))
-        napkin_pos, napkin_euler = tableware_pose((-.22, .02, .009))
+        # napkin in the SHARED band between the arms (0.24 m from the left
+        # base, 0.32 m from the right): the one left-side task the right arm
+        # can take over when the left arm fails (2026-09-14, arm-failure
+        # continuation demo). Everything else is single-arm by reach.
+        napkin_pos, napkin_euler = tableware_pose((-.04, .10, .009))
     else:
         # cutlery lying inside its drawer tray (tray bottom top face at z .008),
         # along the tray's long axis; the napkin off the left unit's footprint
@@ -1514,6 +1518,33 @@ class IntelTableWorld(MockWorld):
             ), 6),
             "simulation_mode": self.mode,
         }
+
+    def fail_arm(self, arm_offset: int, *, reason: str = "servo communication lost") -> dict[str, Any]:
+        """Make an arm physically stop responding (2026-09-14): its six
+        actuator commands are frozen at their current values on every physics
+        step from now on, as a servo bus with no host would hold its last
+        target. Nothing about the world state is edited -- the arm is simply
+        a fixture that no longer moves. Whatever the planner sends it will
+        fail on the physics, which is the point of the failure demo.
+        Returns the frozen command so the receipt can quote it."""
+        frozen = self.data.ctrl[arm_offset:arm_offset + 6].copy()
+        real = self._mujoco
+        self._failed_arms = getattr(self, "_failed_arms", {})
+        self._failed_arms[arm_offset] = {"reason": reason, "frozen_ctrl": [round(float(v), 4) for v in frozen],
+                                         "at_controller_step": self._controller_steps}
+        world = self
+
+        class FrozenArm:
+            def __getattr__(self, name):
+                return getattr(real, name)
+
+            def mj_step(self, m, d, nstep=1):
+                for _ in range(nstep):
+                    for a, info in world._failed_arms.items():
+                        d.ctrl[a:a + 6] = info["frozen_ctrl"]
+                    real.mj_step(m, d)
+        self._mujoco = FrozenArm()
+        return dict(self._failed_arms[arm_offset])
 
     def _restore_physics(self, snapshot) -> None:
         """Restore a pre-attempt MuJoCo state after a rejected transition."""

@@ -112,6 +112,34 @@ def authority(seed: int):
     return world, run
 
 
+def arm_failure(seed: int):
+    from omni_q.intel_sim import IntelSceneConfig, TABLE_SETTING_PHRASINGS, build_intel_sim_engine, _per_object_pick_place_outcomes
+
+    def world():
+        eng = build_intel_sim_engine(IntelSceneConfig(seed=seed, randomized=True))
+        eng.world._engine = eng
+        return eng.world
+
+    def run(w):
+        eng = w._engine
+        orig = w.apply_transition
+        done = {"x": False}
+
+        def apply(req):
+            res = orig(req)
+            if not done["x"] and req.op == "MOVE" and req.args.get("object") == "fork_1" and res.ok:
+                done["x"] = True
+                w.fail_arm(0, reason="left arm servo bus: no response")
+                eng.add_constraint("prefer_arm", "right", source="operator",
+                                   justification="fault handler: left arm servo bus no response; withdrawn from authority")
+            return res
+        w.apply_transition = apply
+        r = eng.run(TABLE_SETTING_PHRASINGS[0])
+        po = _per_object_pick_place_outcomes(r)
+        return "placed " + "".join("P" if v["placed"] else "-" for v in po.values()) + f" resolved={r.metrics.get('resolved')}"
+    return world, run
+
+
 def handoff(seed: int):
     from omni_q.intel_sim import ContactHandoffConfig, build_intel_contact_handoff_engine
 
@@ -222,6 +250,7 @@ RUNS = {
     "authority_901": (authority, 901, [("third_person", "third_person"), ("grid", GRID), ("director", DIRECTOR)]),
     "handoff_19": (handoff, 19, [("third_person", "handoff_third_person"), ("director", "free:160,-25,0.8,0,-0.10,0.08")]),
     "handshake_903": (handshake, 903, [("director", "free:180,-15,0.7,0,0.02,0.12"), ("grid", GRID)]),
+    "arm_failure_903": (arm_failure, 903, [("director", DIRECTOR), ("grid", GRID)]),
     "camera_e2e_903": (camera_e2e, 903, [("third_person", "third_person"), ("grid", GRID), ("director_grid", DIRECTOR_GRID), ("six_cameras", SIX),
                                          ("vision_grid", [DIRECTOR, "table_overhead", "left_flank", "right_flank"]),
                                          ("vision_overhead", "table_overhead")]),

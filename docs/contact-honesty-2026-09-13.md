@@ -366,3 +366,26 @@ the symbolic-drawer one (47/50, 50/50 measured), and the real drawers are
 opt-in until the tray picks are at that level. The wrist cameras were also
 re-aimed (they looked at their own jaw) and the six-camera recording layout
 added.
+
+### One arm fails, the other finishes (2026-09-14 evening)
+
+`demo_arm_failure.py`: after the left arm sets the fork, `IntelTableWorld.fail_arm`
+freezes its six actuator commands on every physics step (a servo bus with no
+host holds its last target) -- a physical failure, the arm stays in frame not
+moving. The fault handler withdraws it through the same constraint path an
+operator's "don't use the left arm" takes (the constraint contract only lets an
+operator change graph authority, so the handler submits under the operator's
+standing authority with the fault as justification -- both are in the receipt);
+the engine recompiles; the planner re-routes what the right arm can reach. To
+make that a real re-route, the napkin now spawns in the **shared band** between
+the arms (0.24 m from the left base, 0.32 m from the right) with its zone above
+the plate at (0, 0.04), reachable by both (0.30 m); both arms pick and place it
+in isolation. Result, seed 903 (`evidence/benchmark_results/arm_failure_2026-09-14/`):
+plate (both arms), fork (left) before the failure; spoon, cup **and the napkin**
+by the right arm after it; all five placed, `resolved: true`.
+
+What the brief scores here: "adapts plan as scene state changes" (reasoning,
+20 pts) and robustness. What it is not: the `ScheduledPlanner`/`ManipulationFleet`
+lease path (`engine.report_fleet_fault`) -- the Intel engine uses
+`IntelTablePlanner` directly, so that path would HOLD; wiring the fleet into the
+Intel engine is the proper follow-up.
