@@ -170,9 +170,10 @@ def arm_failure(seed: int):
         done = {"x": False}
 
         def after(req, res):
-            # fault after the first single-arm placement, whatever the planner's order (the OMNI
-            # reasoner may move the fork last) -- the left arm must still have work to lose
-            if not done["x"] and req.op == "MOVE" and req.args.get("object") != "plate_1" and res.ok:
+            # The fault fires after the fork is set: the fork is the one piece only the left arm
+            # can reach (spawn and zone), everything left afterwards -- cup, spoon, napkin in the
+            # shared band -- is within the right arm's reach, so one arm can finish the table.
+            if not done["x"] and req.op == "MOVE" and req.args.get("object") == "fork_1" and res.ok:
                 done["x"] = True
                 w.fail_arm(0, reason="left arm servo bus: no response")
                 eng.add_constraint("prefer_arm", "right", source="operator",
@@ -189,7 +190,15 @@ def arm_failure(seed: int):
             return out
         w.apply_transition = apply
         w.apply_transitions_parallel = apply_pair
-        r = eng.run(TABLE_SETTING_PHRASINGS[0])
+        # plate first (its corridors), then the fork, so the fault lands while the right arm still
+        # has the cup, spoon and napkin to finish -- an OMNI-advised plan otherwise moves the fork last
+        from omni_q.intel_sim import IntelTablePlanner
+        saved = IntelTablePlanner._MUST_PRECEDE
+        IntelTablePlanner._MUST_PRECEDE = ("plate_1", "fork_1")
+        try:
+            r = eng.run(TABLE_SETTING_PHRASINGS[0])
+        finally:
+            IntelTablePlanner._MUST_PRECEDE = saved
         po = _per_object_pick_place_outcomes(r)
         return "placed " + "".join("P" if v["placed"] else "-" for v in po.values()) + f" resolved={r.metrics.get('resolved')}"
     return world, run

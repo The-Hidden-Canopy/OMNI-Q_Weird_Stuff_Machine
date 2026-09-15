@@ -425,6 +425,7 @@ class OmniPlanner:
             for s in first:
                 s.rationale = "core-reordered first: object already in the gripper is carried first"
             second = [s for s in steps if s.args.get("object") in precede and s.args.get("object") not in held]
+            second.sort(key=lambda s: precede.index(s.args.get("object")))   # stable: PICK/OPEN/MOVE order kept per object
             for s in second:
                 s.rationale = "core-reordered first: two-arm object must be set before its corridors are occupied"
             rest_ = [s for s in steps if s.args.get("object") not in held and s.args.get("object") not in precede]
