@@ -87,12 +87,17 @@ class OmniPlanner:
         self,
         reasoner: Reasoner,
         fallback: Any = None,
+        complete_with_fallback: bool = False,
         *,
         max_new_tokens: int = 64,
         session_prefix: str = "omniq",
     ) -> None:
         self.reasoner = reasoner
         self.fallback = fallback if fallback is not None else RulePlanner()
+        #: append the fallback planner's steps for objects the model did not
+        #: address (labelled "core-completed"); off by default -- the
+        #: original contract is "the model's accepted steps only"
+        self.complete_with_fallback = bool(complete_with_fallback)
         self.max_new_tokens = max_new_tokens
         self.session_prefix = session_prefix
         self.last_decision: PlanDecision | None = None
@@ -134,11 +139,14 @@ class OmniPlanner:
     def _parse(self, text: str) -> tuple[list[dict[str, str]], str]:
         steps: list[dict[str, str]] = []
         rationale = ""
-        in_plan = False
+        # The header is decoration: STEP lines are parsed whether or not the
+        # model emitted "PLAN" exactly (the r1 body tokenizes it as "PLA"+"N"
+        # and often drops the N; every step is validated regardless).
+        in_plan = True
         for raw in text.splitlines():
             line = raw.strip()
             upper = line.upper()
-            if upper == "PLAN":
+            if upper.startswith("PLA") and len(upper) <= 5:
                 in_plan = True
                 continue
             if upper in {"END", "END PLAN"}:
@@ -254,12 +262,55 @@ class OmniPlanner:
                 if to not in zones:
                     rejected[label] = f"unknown zone {to!r}"
                     continue
+                # Coherence (2026-09-15, the fenced r1 body): the goal fixes
+                # every object's target zone; a MOVE elsewhere is not a
+                # judgment call, it is wrong -- rejected with the target
+                # named. The model's real contribution is *which object
+                # next* and *which arm*.
+                if det.target_zone and to != det.target_zone:
+                    rejected[label] = f"zone {to!r} is not {oid}'s target ({det.target_zone!r})"
+                    continue
                 args["to"] = to
+            # Duplicates of an already-accepted proposal for the same object
+            # and op carry no information; keep the first.
+            if any(s_.op == op and s_.args.get("object") == oid for s_ in steps):
+                rejected[label] = f"duplicate {op} for {oid}"
+                continue
+            # A MOVE of an object nobody holds needs its PICK first: the
+            # governed core sequences it (the same PICK the rule planner
+            # would emit), credited as core-inserted, not model-proposed.
+            if op == "MOVE" and not holder and not any(s_.op == "PICK" and s_.args.get("object") == oid for s_ in steps):
+                steps.append(Step(f"omni_pick_{oid}_{seq}", "manipulate", "PICK", args={"object": oid}, arm=arm,
+                                  rationale="core-inserted PICK before the model-proposed MOVE"))
+                seq += 1
             steps.append(Step(f"omni_{op.lower()}_{oid}_{seq}",
                               "manipulate", op, args=args, arm=arm,
                               rationale="model-proposed step, core-validated"))
             seq += 1
-        return steps, rejected
+        # Arm assignment is governed, not guessed: a step the model left
+        # without ``arm=`` gets the same role the deterministic planner
+        # gives that object, and an operator ``prefer_arm`` constraint is
+        # honoured with the same reach check (out of reach -> rejected, so
+        # the plan says why rather than failing in the world).
+        prefer = next((c.value for c in world.constraints if c.kind == "prefer_arm"), None)
+        right_objects = getattr(self.fallback, "_RIGHT_OBJECTS", set())
+        can_reach = getattr(self.fallback, "_arm_can_reach", None)
+        kept: list[Step] = []
+        for step in steps:
+            oid = step.args.get("object")
+            if step.contract != "manipulate" or not oid:
+                kept.append(step)
+                continue
+            if step.arm is None:
+                step.arm = "right" if oid in right_objects else "left"
+            if prefer in {"left", "right"} and step.arm != prefer and not world.ownership.get(oid):
+                if can_reach is None or can_reach(prefer, oid, world):
+                    step.arm = prefer
+                else:
+                    rejected[f"omni:{step.op.lower()}:{oid}"] = f"{oid} out of reach for the preferred arm ({prefer})"
+                    continue
+            kept.append(step)
+        return kept, rejected
 
     @staticmethod
     def _link(steps: list[Step]) -> None:
@@ -293,13 +344,23 @@ class OmniPlanner:
         return graph
 
     # -- Plan contract -------------------------------------------------
+    def _reason(self, session: str, prompt: str, world: WorldState) -> ReasonerResult:
+        """A reasoner that accepts a vocabulary gets the world's legal ids so
+        it can fence its identifier slots (measured 2026-09-13: 3.8x step
+        acceptance for the same weights). The fence supplies vocabulary,
+        never plan content; every step is still validated below."""
+        if getattr(self.reasoner, "accepts_vocabulary", False):
+            from .plan_grammar import vocabulary_from_world
+            return self.reasoner.reason(session, prompt, max_new_tokens=self.max_new_tokens,
+                                        vocabulary=vocabulary_from_world(world))
+        return self.reasoner.reason(session, prompt, max_new_tokens=self.max_new_tokens)
+
     def plan(self, goal: str, world: WorldState) -> PlanGraph:
         self._turn += 1
         session = f"{self.session_prefix}-{self._turn}"
         prompt = self._render_prompt(goal, world, None)
         try:
-            result = self.reasoner.reason(session, prompt,
-                                          max_new_tokens=self.max_new_tokens)
+            result = self._reason(session, prompt, world)
         except ReasonerUnavailable as exc:
             return self._fallback_plan(goal, world, str(exc))
         return self._compile(goal, world, result, prompt)
@@ -309,8 +370,7 @@ class OmniPlanner:
         session = f"{self.session_prefix}-{self._turn}"
         prompt = self._render_prompt(current.goal, world, reason)
         try:
-            result = self.reasoner.reason(session, prompt,
-                                          max_new_tokens=self.max_new_tokens)
+            result = self._reason(session, prompt, world)
         except ReasonerUnavailable as exc:
             graph = self._fallback_plan(current.goal, world, str(exc))
             graph.revision = current.revision + 1
@@ -336,8 +396,26 @@ class OmniPlanner:
                     if proposals else "model proposed no steps")
             return self._fallback_plan(goal, world, note)
 
+        # The model's accepted steps lead; objects still misplaced that it
+        # did not address are completed by the governed planner's own steps,
+        # appended after them and labelled so receipts show the split
+        # (2026-09-15: the fenced r1 body typically names one or two objects
+        # per turn).
+        covered = {s.args.get("object") for s in manip}
+        rest = []
+        if self.complete_with_fallback:
+            try:
+                rest = self.fallback.plan(goal, world).steps
+            except Exception:  # noqa: BLE001 - completion is best-effort
+                rest = []
+        for s in rest:
+            if s.contract == "manipulate" and s.args.get("object") and s.args.get("object") not in covered:
+                s.rationale = "core-completed: object not addressed by the model this turn"
+                steps.append(s)
         graph = PlanGraph(goal=goal)
-        graph.steps = steps
+        graph.steps = [s for s in steps if s.op != "VERIFY"] + [s for s in steps if s.op == "VERIFY"]
+        if self.complete_with_fallback and not any(s.op == "VERIFY" for s in graph.steps):
+            graph.steps.append(Step("verify_final", "verify", "VERIFY", rationale="core-added verification"))
         self._link(graph.steps)
         gov = tuple(sorted({c.kind for c in world.constraints}))
         identity_note = ""

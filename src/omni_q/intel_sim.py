@@ -3960,19 +3960,21 @@ def _per_object_pick_place_outcomes(receipt: Any) -> dict[str, dict[str, bool]]:
     set by RulePlanner.plan), not the result payload, since a rejected or
     early-failed attempt may not carry object-specific result fields."""
     outcomes: dict[str, dict[str, bool]] = {}
+    import re as _re
     for action in receipt.actions:
         step_id = action.get("step", "")
         result = action.get("result") or {}
-        if action.get("op") == "PICK" and step_id.startswith("pick_"):
-            object_id = step_id.removeprefix("pick_")
-            entry = outcomes.setdefault(object_id, {"held": False, "placed": False})
-            if result.get("held") is True:
-                entry["held"] = True
-        elif action.get("op") == "MOVE" and step_id.startswith("move_"):
-            object_id = step_id.removeprefix("move_")
-            entry = outcomes.setdefault(object_id, {"held": False, "placed": False})
-            if result.get("placed") is True:
-                entry["placed"] = True
+        # object identity: ``pick_<obj>``/``move_<obj>`` (rule planner) or
+        # ``omni_pick_<obj>_<n>`` / ``omni_move_<obj>_<n>`` (reasoner-advised)
+        m = _re.match(r"^omni_(pick|move)_(.+)_\d+$", step_id) or _re.match(r"^(pick|move)_(.+)$", step_id)
+        if not m or m.group(1).upper() != action.get("op"):
+            continue
+        object_id = m.group(2)
+        entry = outcomes.setdefault(object_id, {"held": False, "placed": False})
+        if action.get("op") == "PICK" and result.get("held") is True:
+            entry["held"] = True
+        elif action.get("op") == "MOVE" and result.get("placed") is True:
+            entry["placed"] = True
     return outcomes
 
 

@@ -62,6 +62,9 @@ def _with_recorders(world, out: Path, stem: str, run, views):
             # live HUD: command, each arm's current action, plan progress
             from omni_q.intel_sim import TABLE_SETTING_PHRASINGS
             rec.attach(w, TABLE_SETTING_PHRASINGS[0])
+            import _reasoner_mode
+            if _reasoner_mode.enabled():
+                _reasoner_mode.compose(w._engine, rec)   # OMNI advises; governed core validates/completes
         t0 = time.time()
         info = run(w)
         results.append(f"{rec.close()}  {info}  ({time.time() - t0:.0f}s wall)")

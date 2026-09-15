@@ -1,0 +1,165 @@
+{
+ "date": "2026-09-15",
+ "host": "Intel64 Family 6 Model 186 Stepping 2, GenuineIntel",
+ "openvino": "2026.3.1-22476-759c5a6ab8c-releases/2026/3",
+ "devices": {
+  "CPU": "Intel(R) Core(TM) 5 210H",
+  "GPU.0": "Intel(R) Graphics (iGPU)",
+  "GPU.1": "NVIDIA GeForce RTX 4050 Laptop GPU (dGPU)"
+ },
+ "detector": "runs\\detect\\tmp\\yolo_runs\\table_yolo_v4_hfbase_2026-09-14\\weights\\best.pt",
+ "val_images": 268,
+ "quality": {
+  "fp32": {
+   "map50": 0.9795797814824897,
+   "map50_95": 0.9171567661492145
+  },
+  "fp16": {
+   "map50": 0.9794235243117773,
+   "map50_95": 0.9163243874815594
+  },
+  "int8": {
+   "map50": 0.9807507668295236,
+   "map50_95": 0.9154680674152215
+  }
+ },
+ "rows": [
+  {
+   "device": "CPU",
+   "hint": "LATENCY",
+   "iters": 200,
+   "latency_ms_mean": 45.537,
+   "latency_ms_p50": 44.44,
+   "latency_ms_p95": 53.935,
+   "fps": 22.0,
+   "optimal_requests": 1,
+   "precision": "fp32",
+   "ir_size_mb": 12.36
+  },
+  {
+   "device": "CPU",
+   "hint": "THROUGHPUT",
+   "iters": 200,
+   "throughput_fps": 39.4,
+   "wall_s": 5.08,
+   "infer_requests": 3,
+   "precision": "fp32",
+   "ir_size_mb": 12.36
+  },
+  {
+   "device": "GPU.0",
+   "hint": "LATENCY",
+   "iters": 200,
+   "latency_ms_mean": 13.449,
+   "latency_ms_p50": 13.109,
+   "latency_ms_p95": 15.816,
+   "fps": 74.4,
+   "optimal_requests": 1,
+   "precision": "fp32",
+   "ir_size_mb": 12.36
+  },
+  {
+   "device": "GPU.0",
+   "hint": "THROUGHPUT",
+   "iters": 200,
+   "throughput_fps": 95.7,
+   "wall_s": 2.091,
+   "infer_requests": 32,
+   "precision": "fp32",
+   "ir_size_mb": 12.36
+  },
+  {
+   "device": "CPU",
+   "hint": "LATENCY",
+   "iters": 200,
+   "latency_ms_mean": 45.365,
+   "latency_ms_p50": 44.452,
+   "latency_ms_p95": 50.94,
+   "fps": 22.0,
+   "optimal_requests": 1,
+   "precision": "fp16",
+   "ir_size_mb": 6.38
+  },
+  {
+   "device": "CPU",
+   "hint": "THROUGHPUT",
+   "iters": 200,
+   "throughput_fps": 39.0,
+   "wall_s": 5.133,
+   "infer_requests": 3,
+   "precision": "fp16",
+   "ir_size_mb": 6.38
+  },
+  {
+   "device": "GPU.0",
+   "hint": "LATENCY",
+   "iters": 200,
+   "latency_ms_mean": 14.5,
+   "latency_ms_p50": 14.38,
+   "latency_ms_p95": 18.258,
+   "fps": 69.0,
+   "optimal_requests": 1,
+   "precision": "fp16",
+   "ir_size_mb": 6.38
+  },
+  {
+   "device": "GPU.0",
+   "hint": "THROUGHPUT",
+   "iters": 200,
+   "throughput_fps": 95.2,
+   "wall_s": 2.101,
+   "infer_requests": 32,
+   "precision": "fp16",
+   "ir_size_mb": 6.38
+  },
+  {
+   "device": "CPU",
+   "hint": "LATENCY",
+   "iters": 200,
+   "latency_ms_mean": 17.98,
+   "latency_ms_p50": 17.891,
+   "latency_ms_p95": 20.619,
+   "fps": 55.6,
+   "optimal_requests": 1,
+   "precision": "int8",
+   "ir_size_mb": 3.62
+  },
+  {
+   "device": "CPU",
+   "hint": "THROUGHPUT",
+   "iters": 200,
+   "throughput_fps": 97.9,
+   "wall_s": 2.043,
+   "infer_requests": 3,
+   "precision": "int8",
+   "ir_size_mb": 3.62
+  },
+  {
+   "device": "GPU.0",
+   "hint": "LATENCY",
+   "iters": 200,
+   "latency_ms_mean": 11.433,
+   "latency_ms_p50": 11.021,
+   "latency_ms_p95": 14.111,
+   "fps": 87.5,
+   "optimal_requests": 1,
+   "precision": "int8",
+   "ir_size_mb": 3.62
+  },
+  {
+   "device": "GPU.0",
+   "hint": "THROUGHPUT",
+   "iters": 200,
+   "throughput_fps": 105.7,
+   "wall_s": 1.892,
+   "infer_requests": 64,
+   "precision": "int8",
+   "ir_size_mb": 3.62
+  }
+ ],
+ "protocol": {
+  "input": "real val images, letterboxed 640x640, batch 1",
+  "warmup": 50,
+  "iters": 200
+ }
+}

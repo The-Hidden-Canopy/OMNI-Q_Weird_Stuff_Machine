@@ -264,8 +264,48 @@ class OmniReferenceReasoner:
         self._artifact_identity = dict(getattr(model, "ida_artifact_identity", {}))
         self._tokenizer = AutoTokenizer.from_pretrained(str(self.tokenizer_path))
 
+    #: OmniPlanner passes the world's legal ids when this is true (see
+    #: OmniPlanner._reason); the fence is on unless OMNIQ_OMNI_FENCED=0.
+    accepts_vocabulary = True
+
+    def _generate_fenced(self, session_id: str, ids: list[int], max_new: int, vocabulary, eos_id: int) -> list[int]:
+        """Greedy decode with identifier slots fenced to ``vocabulary``
+        (omni_q.plan_grammar). Same forward call as the vendored generate,
+        same head; the only difference is the mask over the next token.
+        Measured on r1 (reasoner/README.md): acceptance 0.12 -> 0.46,
+        usable plans 0.33 -> 0.67, with no retraining."""
+        import torch  # lazy
+        from .plan_grammar import PlanGrammarConstraint
+
+        model = self._inference.model
+        device = model.get_input_embeddings().weight.device
+        fence = PlanGrammarConstraint(vocabulary, lambda s: self._tokenizer(s, add_special_tokens=False)["input_ids"])
+        sequence = list(ids)
+        out: list[int] = []
+        with torch.inference_mode():
+            for _ in range(max_new):
+                output = model(
+                    input_ids=torch.tensor([sequence], device=device),
+                    omni_prediction_boundary=torch.tensor([len(ids)], device=device),
+                    omni_stream_ids=(session_id,), omni_step_index=torch.tensor([0], device=device),
+                )
+                logits = output.logits[0, -1].float()
+                allowed = fence.allowed_tokens()
+                if allowed:
+                    mask = torch.full_like(logits, float("-inf"))
+                    index = torch.tensor(sorted(allowed), device=logits.device)
+                    mask[index] = logits[index]
+                    logits = mask
+                token = int(logits.argmax())
+                out.append(token)
+                sequence.append(token)
+                fence.accept(token, self._tokenizer.decode([token]))
+                if token == eos_id:
+                    break
+        return out
+
     def reason(self, session_id: str, prompt: str, *,
-               max_new_tokens: int | None = None) -> ReasonerResult:
+               max_new_tokens: int | None = None, vocabulary=None) -> ReasonerResult:
         if self._inference is None:
             try:
                 self._load()
@@ -275,16 +315,26 @@ class OmniReferenceReasoner:
         ids = self._tokenizer(prompt, add_special_tokens=False)["input_ids"]
         if not ids:
             raise ReasonerUnavailable("prompt produced no evidence tokens")
-        reply = self._inference.generate(
-            session_id, [int(t) for t in ids],
-            max_new_tokens=max_new_tokens or self.max_new_tokens,
-            eos_token_id=self._tokenizer.eos_token_id,
-        )
-        text = self._tokenizer.decode(list(reply.token_ids), skip_special_tokens=True)
+        fenced = vocabulary is not None and os.environ.get("OMNIQ_OMNI_FENCED", "1") not in {"", "0", "false", "no"}
+        if fenced:
+            # the tokenizer carries no eos id; training appended EOS_ID = 2
+            eos_id = int(self._tokenizer.eos_token_id) if self._tokenizer.eos_token_id is not None else 2
+            token_ids = self._generate_fenced(session_id, [int(t) for t in ids], max_new_tokens or self.max_new_tokens,
+                                              vocabulary, eos_id)
+            backend = self.backend + "+fenced"
+        else:
+            reply = self._inference.generate(
+                session_id, [int(t) for t in ids],
+                max_new_tokens=max_new_tokens or self.max_new_tokens,
+                eos_token_id=self._tokenizer.eos_token_id,
+            )
+            token_ids = list(reply.token_ids)
+            backend = self.backend
+        text = self._tokenizer.decode(list(token_ids), skip_special_tokens=True)
         return ReasonerResult(
             text=text,
-            token_ids=tuple(int(t) for t in reply.token_ids),
-            backend=self.backend,
+            token_ids=tuple(int(t) for t in token_ids),
+            backend=backend,
             prompt_tokens=len(ids),
             artifact_identity=dict(self._artifact_identity),
         )

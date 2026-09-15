@@ -1,0 +1,27 @@
+{
+ "name": "table_yolo_v4_int8_2026-09-15",
+ "base": "hf:KissTheHabit/yolov8n-table-yolo/yolov8n-table-yolo-ftv3-30ep.pt",
+ "epochs": 30,
+ "imgsz": 640,
+ "dataset": {
+  "yaml": "data\\table_yolo_v4\\data.yaml",
+  "train_images": 1332,
+  "val_images": 268,
+  "generator": "integrations/intel/scripts/make_table_yolo_dataset.py"
+ },
+ "val": {
+  "map50": 0.9807507668295236,
+  "map50_95": 0.9154680674152215,
+  "note": "measured on the same 268-image val split after quantisation"
+ },
+ "openvino": {
+  "xml": "best.xml",
+  "bin": "best.bin",
+  "precision": "INT8 (NNCF post-training quantisation, calibrated on data/table_yolo_v4 train renders)",
+  "bin_sha256": "5ec549a0afab63f3e2d5bc36acfa3e0e3664873014c80f85a6f9270f36d5d458",
+  "xml_sha256": "a00e9b182c822686298f2c264500a8153bbdce8875d03826b6b248ec8329f7ae"
+ },
+ "trained_at": "2026-09-14T12:48:26",
+ "derived_from": "table_yolo_v4_hfbase_2026-09-14 (same weights)",
+ "benchmark": "evidence/benchmark_results/openvino_table_detector_2026-09-15/README.md"
+}

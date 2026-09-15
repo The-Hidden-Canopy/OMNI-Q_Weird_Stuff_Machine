@@ -79,11 +79,16 @@ def main() -> int:
         goal = TABLE_SETTING_PHRASINGS[(seed - 900) % len(TABLE_SETTING_PHRASINGS)]   # the harness's phrasing for this seed
         engine = build_intel_sim_engine(IntelSceneConfig(seed=seed, randomized=True))
         world = engine.world
+        import _reasoner_mode
+        reasoner_on = _reasoner_mode.enabled()
         # each seed's run is recorded to a part file, then appended to the montage
         rec = Recorder(world, DIRECTOR, part, every=20 * args.speed,
                        label=f"seed {seed}   \"{goal}\"   {args.speed}x")
         if writer is None:
             writer = _open_writer(path, 25, rec.size)
+        if reasoner_on:
+            _reasoner_mode.compose(engine, rec)
+            rec.attach(world, goal)
         rec.frame()
         start = rec.last_bgr.copy()
         card(start, [(f"Seed {seed} ({i + 1} of {args.n})   command: \"{goal}\"", 0.9),
