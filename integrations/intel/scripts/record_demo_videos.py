@@ -361,7 +361,7 @@ def _write_readme(out: Path) -> None:
             "integrations/intel/vla/) drives every single-arm PICK and MOVE from the three cameras + arm state + the step's",
             "language; its Cartesian deltas are realised by a small IK solve each tick. When the policy stalls, or the",
             "grasp-integrity guard fires, the governed contact primitive continues from where the policy left the arm -- the",
-            "HUD tags each step [VLA: SmolVLA] or [VLA gave up -> governed primitive], and the receipts carry the same. The",
+            "HUD tags each step [VLA: SmolVLA] or [VLA-led -> governed completion], and the receipts carry the same. The",
             "two-arm plate carry is the governed bimanual primitive. In VLA mode arms execute one step at a time (the",
             "policy's cameras render on the main thread).",
             "checkpoint: " + ck,
