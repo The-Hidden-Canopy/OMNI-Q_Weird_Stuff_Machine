@@ -35,8 +35,8 @@ sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE.parents[3] / "src"))
 
 DEFAULT_OUT = Path.home() / "OneDrive" / "Desktop" / "OMNI-Q_demo_videos" / "showcase_experiments"
-UNITS = [  # unit, seed, variant
-    (1, 903, "plain"), (2, 905, "authority"), (3, 906, "arm_failure"), (4, 909, "plain"),
+UNITS = [  # unit, seed, variant  (unit 4 was seed 909 in the governed take; 909 is a known VLA-mode failure seed)
+    (1, 903, "plain"), (2, 905, "authority"), (3, 906, "arm_failure"), (4, 904, "plain"),
 ]
 DIRECTOR = "free:150,-30,0.95,0,-0.12,0.05"
 
@@ -76,7 +76,8 @@ def run_unit(unit: int, seed: int, variant: str, out: Path) -> dict:
     stack = ("OMNI reasoner plan + SmolVLA control" if omni_mode() and vla_mode() else
              "OMNI reasoner plan + contact controllers" if omni_mode() else
              "SmolVLA control, governed plan" if vla_mode() else "governed planner + contact controllers, both arms")
-    rec = Recorder(w, DIRECTOR, path, size=(640, 360), label=f"UNIT {unit}  seed {seed}  {stack}")
+    # OMNI/VLA mode has a 7-line HUD: record at 720p and let compose() downscale, or the HUD swallows the tile
+    rec = Recorder(w, DIRECTOR, path, size=(1280, 720) if (omni_mode() or vla_mode()) else (640, 360), label=f"UNIT {unit}  seed {seed}  {stack}")
     rec.attach(w, goal)
     if omni_mode():
         import _reasoner_mode
@@ -181,15 +182,16 @@ def compose(out: Path, results: list[dict]) -> Path:
         placed = sum(r["placed"] for r, e in zip(results, ended) if e)
         if omni_mode():
             dec = sum(int((r.get("omni_decisions") or {}).get("decisions", 0)) for r, e in zip(results, ended) if e)
-            text = (f"FLEET: 8 MANIPULATORS   4 OMNI-Q ENGINES, each planned by the IDA Omni reasoner + SmolVLA control, "
-                    f"run one after another on one GPU and composed   ACTIVE: {active}   OMNI DECISIONS: {dec}   "
-                    f"RE-PLANS: 2 (voice authority, servo fault)   COMPLETE: {sum(ended)}/4   PLACEMENTS: {placed}/{5 * sum(ended)}")
-            scale = 0.42
+            lines = [("FLEET: 8 MANIPULATORS   4 OMNI-Q ENGINES, each planned by the IDA Omni reasoner + SmolVLA control; "
+                      "units recorded one after another on one GPU and composed"),
+                     (f"ACTIVE: {active}   OMNI DECISIONS: {dec}   RE-PLANS: 2 (voice authority, servo fault)   "
+                      f"COMPLETE: {sum(ended)}/4   PLACEMENTS: {placed}/{5 * sum(ended)}")]
+            for k, t in enumerate(lines):
+                cv2.putText(band, t, (14, 18 + 18 * k), cv2.FONT_HERSHEY_SIMPLEX, 0.46, (255, 255, 255), 1, cv2.LINE_AA)
         else:
             text = (f"FLEET: 8 MANIPULATORS   4 OMNI-Q ENGINES, independent & simultaneous   ACTIVE UNITS: {active}   "
                     f"OBJECTIVES: 4 x set the table   RE-PLANS: 2 (voice authority, servo fault)   COMPLETE: {sum(ended)}/4   PLACEMENTS: {placed}/{5 * sum(ended)}")
-            scale = 0.52
-        cv2.putText(band, text, (14, 29), cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), 1, cv2.LINE_AA)
+            cv2.putText(band, text, (14, 29), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (255, 255, 255), 1, cv2.LINE_AA)
         writer.write(np.concatenate([band, grid], axis=0))
     writer.release()
     for c in caps:
