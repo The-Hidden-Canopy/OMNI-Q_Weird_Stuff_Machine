@@ -138,7 +138,19 @@ wrist cameras) are produced by
 ```
 
 into `Desktop/OMNI-Q_demo_videos/` — deliberately outside the repo; do not
-commit videos. 720p, 25 fps, real-time pace, labelled per clip.
+commit videos. 720p, 25 fps, real-time pace, labelled per clip. The brief's
+10-seed clip is `record_seed_montage.py --seeds 900 901 ... 909` (title card
+prints each seed's randomization factors, result card the end-of-run physical
+check). Clips are numbered in the brief's demonstration order; README.txt in
+the folder describes each.
+
+**VLA mode (2026-09-15, the set for submission):** with
+`OMNIQ_VLA_CHECKPOINT=<fine-tuned SmolVLA dir>` exported, both scripts run every
+engine on `integrations/intel/vla/vla_world.VLAWorld` — the policy leads
+every single-arm PICK/MOVE and the governed primitive completes it; the HUD
+tags each step `[VLA-led -> governed completion]` / `[VLA: SmolVLA]` and counts
+them. See `integrations/intel/vla/README.md` for the record → fine-tune →
+evaluate commands; measured numbers in `docs/submission-readiness-2026-09-15.md`.
 
 What the sim is and is not: the arms, joint limits, servo torque limits and
 gripper are the vendored MuJoCo Menagerie SO-ARM100 (unchanged); every grasp
