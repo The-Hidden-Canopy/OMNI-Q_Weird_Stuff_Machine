@@ -3526,6 +3526,20 @@ class IntelTableWorld(MockWorld):
         # angle, lift clear of the rim, then open fully.
         release_open = WALL_PINCH_OBJECTS[obj][0] if obj in WALL_PINCH_OBJECTS else GRIPPER_OPEN
         self._set_gripper(arm_offset, release_open, settle_steps=40)  # let it drop/settle
+        if obj in WALL_PINCH_OBJECTS:
+            # The released cup can still lean on the fixed pad outside its
+            # wall; lifting then drags the rim up (seed 901, 2026-09-14: 16
+            # deg wobble at release, knocked over by the next pass). Back
+            # the pad 8 mm away from the wall, horizontally, before rising.
+            pad_now = self.data.geom_xpos[self._pad_geom[arm_offset]].copy()
+            centre_now = self.data.qpos[qpos_adr:qpos_adr + 3].copy()
+            away = pad_now[:2] - centre_now[:2]
+            away = away / (np.linalg.norm(away) + 1e-9) * 0.008
+            self._ik_reach_pad_pose(
+                arm_offset, (pad_now[0] + away[0], pad_now[1] + away[1], pad_now[2]), target_rotation,
+                roll_hint=roll_hint, iters=60, orientation_tol=0.35,
+            )
+            pad_release_target = self.data.geom_xpos[self._pad_geom[arm_offset]].copy()
         retract_pose = self._ik_reach_pad_pose(
             arm_offset, pad_release_target + clear, target_rotation,
             roll_hint=roll_hint, iters=240,
@@ -3533,6 +3547,16 @@ class IntelTableWorld(MockWorld):
         lift_error = float(retract_pose["position_error_m"])
         if release_open != GRIPPER_OPEN:
             self._set_gripper(arm_offset, GRIPPER_OPEN, settle_steps=30)   # now clear of the rim
+        # Rise well above the tallest tableware before the swing home: from
+        # a 7 cm retract the fingertips were still under the 9 cm cup rim
+        # and _go_home's joint-space swing knocked the cup over (seed 901,
+        # 2026-09-14). 0.18 m pad height keeps the tips above 14 cm.
+        pad_now = self.data.geom_xpos[self._pad_geom[arm_offset]].copy()
+        if pad_now[2] < 0.18:
+            self._ik_reach_pad_pose(
+                arm_offset, (pad_now[0], pad_now[1], 0.18), target_rotation,
+                roll_hint=roll_hint, iters=200, orientation_tol=0.5,
+            )
 
         # Withdraw to the ready pose after the release (2026-09-14): the arm
         # used to stay retracted right above the object it had just set down,
