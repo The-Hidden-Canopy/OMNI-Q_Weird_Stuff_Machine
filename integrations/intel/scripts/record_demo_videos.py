@@ -170,7 +170,9 @@ def arm_failure(seed: int):
         done = {"x": False}
 
         def after(req, res):
-            if not done["x"] and req.op == "MOVE" and req.args.get("object") == "fork_1" and res.ok:
+            # fault after the first single-arm placement, whatever the planner's order (the OMNI
+            # reasoner may move the fork last) -- the left arm must still have work to lose
+            if not done["x"] and req.op == "MOVE" and req.args.get("object") != "plate_1" and res.ok:
                 done["x"] = True
                 w.fail_arm(0, reason="left arm servo bus: no response")
                 eng.add_constraint("prefer_arm", "right", source="operator",
