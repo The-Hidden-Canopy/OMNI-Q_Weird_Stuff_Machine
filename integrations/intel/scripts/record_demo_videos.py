@@ -70,6 +70,9 @@ def _with_recorders(world, out: Path, stem: str, run, views):
         t0 = time.time()
         info = run(w)
         results.append(f"{rec.close()}  {info}  ({time.time() - t0:.0f}s wall)")
+        vr = getattr(w, "_vla_renderer", None)   # free the policy's renderer now, not at GC time
+        if vr is not None:
+            vr.close()
     return results
 
 

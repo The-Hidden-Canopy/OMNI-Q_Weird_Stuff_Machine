@@ -55,6 +55,9 @@ class MuJoCoCameraSource:
     def __init__(self, model, data, camera_name: str, width: int = 640, height: int = 480):
         import mujoco
 
+        from . import gl_safety
+
+        gl_safety.install()
         self._mujoco = mujoco
         self.model = model
         self.data = data

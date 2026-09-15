@@ -79,6 +79,8 @@ class VLAWorld(IntelTableWorld):
     def __init__(self, *a, **k) -> None:
         super().__init__(*a, **k)
         import mujoco
+        from omni_q import gl_safety
+        gl_safety.install()   # two renderers share this process (policy cameras + recorder)
         self._vla_renderer = mujoco.Renderer(self.model, height=H, width=W)
         self._vla_render_requests: collections.deque = collections.deque()
         self._vla_render_lock = threading.Lock()

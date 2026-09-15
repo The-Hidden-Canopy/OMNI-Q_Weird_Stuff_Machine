@@ -105,6 +105,9 @@ def main() -> int:
         rec.frame()
         end = rec.last_bgr.copy()
         rec.close()
+        vr = getattr(world, "_vla_renderer", None)   # free the policy's renderer now, not at GC time
+        if vr is not None:
+            vr.close()
         cap = cv2.VideoCapture(str(part))
         while True:
             ok, f = cap.read()

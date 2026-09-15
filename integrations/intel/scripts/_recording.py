@@ -134,7 +134,9 @@ class Recorder:
                  label: str | None = None, detector=None, annotate=(), detect_every: int = 2):
         import cv2  # noqa: PLC0415
         import mujoco  # noqa: PLC0415
+        from omni_q import gl_safety  # noqa: PLC0415
 
+        gl_safety.install()   # a stale Renderer freed mid-run must not black out this one
         self.world = world
         # one camera name -> single view; a list of 2 or 4 -> side-by-side / 2x2 grid
         self.cameras = [camera] if isinstance(camera, str) else list(camera)
