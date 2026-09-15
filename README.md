@@ -64,6 +64,9 @@ tolerance.
 
 ## Hackathon context
 
+> **Judges start here:** [`SUBMISSION.md`](SUBMISSION.md) — architecture, what controls the arms,
+> 10-seed results, OpenVINO numbers, Intel hardware mapping, reproduction commands, known gaps.
+
 Built for a LabLab hackathon. **We qualify to enter only the Intel Online
 Physical AI Challenge** — that's the actual submission goal. Everything else
 below is optional bonus work explored during planning, not part of what we're
