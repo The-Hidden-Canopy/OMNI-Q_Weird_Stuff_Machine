@@ -633,7 +633,7 @@ ZONE_POSITIONS: dict[str, tuple[float, float, float]] = (
         # y -0.06..-0.26): fork and spoon beside it, napkin outside the fork,
         # cup upper right. The plate is set first, so nothing is in either
         # arm's sideways corridor when it is picked.
-        "upper_right": (0.12, 0.02, 0.046),   # hollow cup, 90 mm tall
+        "upper_right": (0.22, -0.06, 0.046),  # hollow cup: 18 cm from its spawn, 0.26 m from the right base
         "left": (-0.16, -0.12, 0.010),        # fork, grip segment arched up
         "right": (0.16, -0.12, 0.010),        # spoon
         "lower_left": (-0.20, 0.00, 0.012) if os.environ.get("OMNIQ_REAL_DRAWERS", "0") not in {"", "0", "false", "no"}
@@ -1095,7 +1095,11 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     # (y -0.13: the drawer opens toward the arms by 0.12 m and its open front
     # reaches y -0.275 with the drawer at the table edge -- at y -0.22 the
     # plate's rim sat in that path, 19 mm of drawer/plate penetration.)
-    plate_pos, plate_euler = tableware_pose((-.13, -.08, .016) if LEGACY_MODELS else (0.0, -.22, .0105))
+    # Slightly off-centre and further back so the carry to the centre zone
+    # is a visible ~9 cm slide; both near rims stay well inside the
+    # 0.30-0.48 m sideways-pinch band (left 0.44 m, right 0.40 m). At
+    # x=0.08 the right arm's pinch got no pad contact (2026-09-14).
+    plate_pos, plate_euler = tableware_pose((-.13, -.08, .016) if LEGACY_MODELS else (.04, -.24, .0105))
     # Cup: out of the right arm's corridor to the plate rim (it spawned on
     # that line and blocked the bimanual approach, 2026-09-14), still 0.30 m
     # from the right base.
