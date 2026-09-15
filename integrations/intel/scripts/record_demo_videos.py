@@ -46,6 +46,11 @@ def _with_recorders(world, out: Path, stem: str, run, views):
                        annotate=[c for c in ([cams] if isinstance(cams, str) else cams) if not c.startswith("free:")] if vision else ())
         w = rec.world
         w._mujoco = rec.spy()
+        w._rec = rec
+        if getattr(w, "_engine", None) is not None and hasattr(w, "apply_transitions_parallel"):
+            # live HUD: command, each arm's current action, plan progress
+            from omni_q.intel_sim import TABLE_SETTING_PHRASINGS
+            rec.attach(w, TABLE_SETTING_PHRASINGS[0])
         t0 = time.time()
         info = run(w)
         results.append(f"{rec.close()}  {info}  ({time.time() - t0:.0f}s wall)")
@@ -76,8 +81,11 @@ def plate_only(seed: int):
         return IntelTableWorld(IntelSceneConfig(randomized=True, seed=seed))
 
     def run(w):
+        w._rec.hud = ["two-arm plate: sideways rim pinch on opposite rims, lifted flat", "left arm + right arm: PICK plate (both arms)"]
         r = w._do_pick(0, "plate_1")
+        w._rec.hud[1] = f"lifted {r['lift_height_m'] * 1000:.0f} mm, tilt {r['tilt_rad'] * 57.3:.0f} deg   ->   MOVE plate -> center (lockstep carry)"
         r2 = w._do_place(0, "plate_1", "center") if r["held"] else {"placed": False}
+        w._rec.hud[1] = f"placed={r2['placed']}  offset {r2.get('placement_error_m', 0) * 1000:.0f} mm"
         for _ in range(500):
             w._mujoco.mj_step(w.model, w.data)
         return f"held={r['held']} placed={r2['placed']}"
@@ -104,6 +112,7 @@ def authority(seed: int):
                 done["x"] = True
                 for k, v in nlu.parse("don't use the left arm anymore").constraints:
                     eng.add_constraint(k, v, source="operator", justification="voice: don't use the left arm anymore")
+                w._rec.notify("OPERATOR (voice): 'don't use the left arm anymore'  ->  plan recompiled, right arm takes over", 6)
 
         def apply(req):
             res = orig(req); after(req, res); return res
@@ -141,6 +150,7 @@ def arm_failure(seed: int):
                 w.fail_arm(0, reason="left arm servo bus: no response")
                 eng.add_constraint("prefer_arm", "right", source="operator",
                                    justification="fault handler: left arm servo bus no response; withdrawn from authority")
+                w._rec.notify("FAULT: left arm servo bus - no response (commands frozen)  ->  withdrawn from authority, right arm continues", 7)
 
         def apply(req):
             res = orig(req); after(req, res); return res
@@ -167,8 +177,10 @@ def handoff(seed: int):
         return eng.world
 
     def run(w):
+        w._rec.hud = ['command: "transfer cup_1 from left arm to right arm"', "hand-off: giver presents, receiver closes on the cup, giver releases (real contact)"]
         w._engine.run("transfer cup_1 from left arm to right arm")
         rec = w.last_admitted_receipt or w.pending_contact_receipt
+        w._rec.hud[1] = f"hand-off success={getattr(rec, 'success', None)} (receiver holds the cup upright)"
         for _ in range(400):
             w._mujoco.mj_step(w.model, w.data)
         return f"handoff success={getattr(rec, 'success', None)}"
@@ -197,9 +209,12 @@ def camera_e2e(seed: int):
         eng.observer = FrameObserver(fusion, zone_map=make_camera_zone_map(cams["table_overhead"], zones, size),
                                      frame_source=lambda ws: None, target_zones=lambda oid, cls: target.get(cls, "unknown"))
         w._engine = eng
+        w._fusion = fusion
         return w
 
     def run(w):
+        w._rec.hud_extra = ["perception: YOLOv8n (OpenVINO, CPU) on 4 scene cameras, fused -> OMNI plans from detections, verifies each placement"]
+        w._rec.hud.extend(w._rec.hud_extra)
         r = w._engine.run(TABLE_SETTING_PHRASINGS[0])
         po = _per_object_pick_place_outcomes(r)
         return "placed " + "".join("P" if v["placed"] else "-" for v in po.values()) + f" resolved={r.metrics.get('resolved')}"
@@ -217,6 +232,7 @@ def handshake(seed: int):
         return IntelTableWorld(IntelSceneConfig(randomized=True, seed=seed))
 
     def run(w):
+        w._rec.hud = ["both arms meet over the shared band and shake: real fingertip contact, real servos"]
         meet = np.array([0.0, 0.02, 0.16])
         tips = {a: w.model.geom(f"{'left' if a == 0 else 'right'}_fixed_jaw_pad_1").id for a in (0, 6)}
         for a in (0, 6):

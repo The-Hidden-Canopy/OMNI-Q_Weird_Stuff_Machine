@@ -356,7 +356,8 @@ class MultiCameraFusion:
     # centre is back-projected onto the plane at that height, not the table:
     # from an oblique camera the 90 mm cup's centre landed 7 cm too far
     # along the ray when the table plane was assumed.
-    CLASS_CENTRE_Z = {"cup": 0.045, "plate": 0.020, "fork": 0.010, "spoon": 0.010, "napkin": 0.012, "drawer": 0.015}
+    # napkin: standing fan fold, 70 mm tall (2026-09-14), box centre ~35 mm up
+    CLASS_CENTRE_Z = {"cup": 0.045, "plate": 0.020, "fork": 0.010, "spoon": 0.010, "napkin": 0.035, "drawer": 0.015}
 
     def __init__(self, detector: "OpenVINODetector", cameras: dict, *, reference: str,
                  frame_size: tuple[int, int], merge_radius_m: float = 0.06, table_z: float = -0.005,

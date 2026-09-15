@@ -15,6 +15,41 @@ from __future__ import annotations
 from pathlib import Path
 
 
+class _FfmpegWriter:
+    """H.264 through the ffmpeg binary that imageio-ffmpeg ships (OpenCV's
+    own mp4v left ghosts of earlier HUD text at its default bitrate and this
+    build has no openh264). Same write()/release() shape as cv2.VideoWriter."""
+
+    def __init__(self, path, fps: int, size) -> None:
+        import subprocess
+        import imageio_ffmpeg  # noqa: PLC0415
+
+        w, h = size
+        self._proc = subprocess.Popen(
+            [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-loglevel", "error",
+             "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{w}x{h}", "-r", str(fps), "-i", "-",
+             "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+             str(path)],
+            stdin=subprocess.PIPE)
+
+    def write(self, bgr) -> None:
+        self._proc.stdin.write(bgr.tobytes())
+
+    def release(self) -> None:
+        if self._proc.stdin:
+            self._proc.stdin.close()
+        self._proc.wait()
+
+
+def _open_writer(path, fps: int, size):
+    try:
+        import imageio_ffmpeg  # noqa: F401,PLC0415
+        return _FfmpegWriter(path, fps, size)
+    except Exception:  # noqa: BLE001 - no bundled ffmpeg: OpenCV's mp4v
+        import cv2  # noqa: PLC0415
+        return cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), fps, size)
+
+
 class Recorder:
     def __init__(self, world, camera: str, path, *, every: int = 20, size=(1280, 720), fps: int = 25,
                  label: str | None = None, detector=None, annotate=(), detect_every: int = 2):
@@ -37,7 +72,8 @@ class Recorder:
         self._tile = (w, h) if n == 1 else ((w // 2, h) if n == 2 else ((w // 2, h // 2) if n <= 4 else (w // 3, h // 2)))
         tw, th = self._tile
         self._renderer = mujoco.Renderer(world.model, height=th, width=tw)
-        self._writer = cv2.VideoWriter(str(self.path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
+        self.fps = fps
+        self._writer = _open_writer(self.path, fps, (w, h))
         self.frames = 0
         self._count = 0
         # vision overlay: run ``detector`` (omni_q.vision.OpenVINODetector) on
@@ -46,6 +82,12 @@ class Recorder:
         self.annotate = set(annotate)
         self.detect_every = detect_every
         self._last_dets: dict = {}
+        self.last_bgr = None  # most recent composed frame (montage title/result cards reuse it)
+        # on-screen state: the command, what each arm is doing right now, the
+        # plan's progress (see attach()); a notice is a one-off banner
+        self.hud: list[str] = []
+        self.hud_extra: list[str] = []   # appended after attach()'s lines
+        self._notice: tuple[str, int] | None = None
 
     _COLORS = {"plate": (255, 255, 255), "cup": (255, 200, 60), "fork": (120, 220, 255), "spoon": (255, 150, 220),
                "napkin": (90, 90, 255), "drawer": (140, 200, 140), "knife": (200, 200, 200)}
@@ -79,11 +121,12 @@ class Recorder:
         cam.lookat[:] = (lx, ly, lz)
         return cam
 
-    def _render(self, camera: str):
+    def _render(self, camera: str, data=None):
+        data = self.world.data if data is None else data
         if camera.startswith("free:"):
-            self._renderer.update_scene(self.world.data, camera=self._free_camera(camera))
+            self._renderer.update_scene(data, camera=self._free_camera(camera))
         else:
-            self._renderer.update_scene(self.world.data, camera=camera)
+            self._renderer.update_scene(data, camera=camera)
         bgr = self._cv2.cvtColor(self._renderer.render(), self._cv2.COLOR_RGB2BGR)
         bgr = self._draw_detections(camera, bgr)
         if len(self.cameras) > 1:
@@ -93,10 +136,10 @@ class Recorder:
             self._cv2.putText(bgr, name, (10, 24), self._cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, self._cv2.LINE_AA)
         return bgr
 
-    def frame(self) -> None:
+    def frame(self, data=None) -> None:
         import numpy as np  # noqa: PLC0415
 
-        tiles = [self._render(c) for c in self.cameras]
+        tiles = [self._render(c, data) for c in self.cameras]
         if len(tiles) == 1:
             bgr = tiles[0]
         elif len(tiles) == 2:
@@ -113,12 +156,108 @@ class Recorder:
             bgr = self._cv2.resize(bgr, self.size)
         if self.label:
             self._cv2.putText(bgr, self.label, (16, self.size[1] - 16), self._cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, self._cv2.LINE_AA)
+        self._draw_hud(bgr)
         self._writer.write(bgr)
+        self.last_bgr = bgr
         self.frames += 1
 
+    def _draw_hud(self, bgr) -> None:
+        cv2 = self._cv2
+        y = 30 if len(self.cameras) == 1 else 52   # under the tile name in a grid
+        for i, line in enumerate(self.hud):
+            scale = 0.7 if i == 0 else 0.55
+            cv2.putText(bgr, line, (16, y), cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0), 4, cv2.LINE_AA)
+            cv2.putText(bgr, line, (16, y), cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), 1, cv2.LINE_AA)
+            y += int(34 * scale) + 6
+        if self._notice is not None:
+            text, until = self._notice
+            if self.frames <= until:
+                (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)
+                x = max(16, (self.size[0] - tw) // 2)
+                yb = self.size[1] - 60
+                cv2.rectangle(bgr, (x - 12, yb - th - 12), (x + tw + 12, yb + 10), (0, 0, 0), -1)
+                cv2.putText(bgr, text, (x, yb), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (80, 220, 255), 2, cv2.LINE_AA)
+            else:
+                self._notice = None
+
+    def notify(self, text: str, seconds: float = 4.0) -> None:
+        """Show a one-off banner (an operator command, a fault) for ``seconds`` of video."""
+        self._notice = (text, self.frames + int(seconds * self.fps))
+
+    def attach(self, world, command: str, objects=("plate_1", "cup_1", "fork_1", "spoon_1", "napkin_1")) -> None:
+        """Wrap the world's transition entry points so the HUD shows the
+        command, each arm's current action and the plan's progress. Wrap
+        BEFORE any demo-specific hooks so those compose on top."""
+        rec = self
+        state = {"left": "ready", "right": "ready", "placed": []}
+        short = {o: o.split("_")[0] for o in objects}
+
+        def text(req):
+            obj = short.get(req.args.get("object"), req.args.get("object") or "")
+            to = req.args.get("to")
+            return f"{req.op} {obj}" + (f" -> {to}" if to and req.op in {"MOVE", "PLACE"} else "")
+
+        def arm_of(req):
+            return "right" if (req.actor and "right" in req.actor) else "left"
+
+        def render():
+            done = " ".join(short[o] for o in objects if o in state["placed"]) or "-"
+            todo = " ".join(short[o] for o in objects if o not in state["placed"]) or "-"
+            rec.hud = [f'command: "{command}"',
+                       f"left arm:  {state['left']}",
+                       f"right arm: {state['right']}",
+                       f"placed: {done}   remaining: {todo}"] + list(rec.hud_extra)
+
+        def begin(reqs, paired):
+            for req in reqs:
+                state[arm_of(req)] = text(req) + ("   [both arms at once]" if paired else "")
+            render()
+
+        def end(reqs, results):
+            for req, res in zip(reqs, results):
+                ok = getattr(res, "ok", False)
+                if ok and req.op in {"MOVE", "PLACE"} and req.args.get("object") in short:
+                    state["placed"].append(req.args.get("object"))
+                state[arm_of(req)] = ("done: " if ok else "FAILED: ") + text(req)
+            render()
+
+        orig, orig_par = world.apply_transition, world.apply_transitions_parallel
+
+        def apply(req):
+            begin([req], False)
+            res = orig(req)
+            end([req], [res])
+            return res
+
+        def apply_pair(reqs):
+            begin(reqs, True)
+            out = orig_par(reqs)
+            end(reqs, out)
+            return out
+        world.apply_transition = apply
+        world.apply_transitions_parallel = apply_pair
+        render()
+
     def spy(self):
+        """A drop-in for the world's ``mujoco`` module that records a frame
+        every ``every`` physics steps.
+
+        Rendering must happen on the thread that owns the GL context (the
+        main thread; rendering from another thread produces black frames).
+        When both arms run at once the world steps physics from worker
+        threads, so a step that lands on a frame boundary snapshots the
+        physics state instead and ``main_thread_pump`` -- called by
+        ``IntelTableWorld.apply_transitions_parallel`` while it waits --
+        renders the queued snapshots in order.
+        """
+        import collections
+        import threading
+
         real = self.world._mujoco
         rec = self
+        main = threading.main_thread()
+        queue: collections.deque = collections.deque()
+        lock = threading.Lock()
 
         class Spy:
             def __getattr__(self, n):
@@ -129,7 +268,24 @@ class Recorder:
                     real.mj_step(m, d)
                     rec._count += 1
                     if rec._count % rec.every == 0:
-                        rec.frame()
+                        if threading.current_thread() is main:
+                            rec.frame()
+                        else:
+                            snap = rec._mujoco.MjData(m)
+                            rec._mujoco.mj_copyData(snap, m, d)
+                            with lock:
+                                queue.append(snap)
+                            if len(queue) > 200:   # never let the queue outgrow memory
+                                with lock:
+                                    queue.popleft()
+
+            def main_thread_pump(self):
+                while True:
+                    with lock:
+                        if not queue:
+                            return
+                        snap = queue.popleft()
+                    rec.frame(data=snap)
         return Spy()
 
     def close(self) -> str:

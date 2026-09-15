@@ -440,7 +440,7 @@ OBJECT_HALF_HEIGHT: dict[str, float] = (
     {"plate_1": 0.016, "cup_1": 0.055, "fork_1": 0.0035, "spoon_1": 0.0035, "napkin_1": 0.009}
     if LEGACY_MODELS_FLAG else
     # realistic models: origin -> top. plate: lip top; cup: rim; cutlery: grip segment top
-    {"plate_1": 0.0275, "cup_1": 0.045, "fork_1": 0.0035, "spoon_1": 0.0035, "napkin_1": 0.009}
+    {"plate_1": 0.0275, "cup_1": 0.045, "fork_1": 0.0035, "spoon_1": 0.0035, "napkin_1": 0.061}  # napkin: fan top
 )
 # Horizontal offset from an object's centre to the fixed pad target.  Large
 # flat fixtures are grasped at their rim/edge; targeting their centre puts the
@@ -454,9 +454,13 @@ OBJECT_GRASP_OFFSET: dict[str, float] = {
     # claw is moving, the other stayed out"). Land the fixed jaw first; then
     # the moving jaw closes onto an object that cannot travel.
     "plate_1": 0.078, "cup_1": 0.022 if LEGACY_MODELS_FLAG else 0.030, "fork_1": 0.006, "spoon_1": 0.0,
-    # The cloth's broad, thin footprint is more stable under a centred pinch;
-    # the earlier rim offset let the moving jaw skim past it during lift.
-    "napkin_1": 0.0,
+    # Folded block, 50 mm across the pinch: with the fixed pad aimed at its
+    # centre the finger came straight down onto the top face, the jaw closed
+    # above the block and flipped it onto its edge (2026-09-14). Land the
+    # fixed pad beside the block, as for the cup wall.
+    # Standing fan, a few mm thick at the centre: fixed pad just beside it
+    # (cup-wall style).
+    "napkin_1": 0.0 if LEGACY_MODELS_FLAG else 0.006,
 }
 # Small vertical calibration for thin proxies whose pad centre is not exactly
 # coincident with the object's geometric centre.  This remains a target
@@ -492,9 +496,14 @@ BIMANUAL_OBJECTS: frozenset[str] = frozenset() if LEGACY_MODELS_FLAG else frozen
 BIMANUAL_MAX_TILT_RAD = 0.21  # 12 deg: a plate carried flat, not dragged
 # Top-down picks that start from a scanned vertical-finger posture instead
 # of HOME (see IntelTableWorld._topdown_seed_joints). Opt-in per object: the
-# cutlery and napkin picks are 10/10 from HOME and are left alone.
+# cutlery picks are 10/10 from HOME and are left alone. The napkin joined
+# 2026-09-14: from HOME its fingers arrived nearly horizontal at (-0.04,
+# 0.10), closed on top of the block and flipped it onto its edge; the
+# retry then pinched the standing block across its thickness and carried
+# it hanging vertical, to be set down on its edge. (Now a standing fan.)
 TOPDOWN_SEED_OBJECTS: frozenset[str] = (frozenset() if LEGACY_MODELS_FLAG else
-                                        (frozenset({"cup_1", "fork_1", "spoon_1"}) if REAL_DRAWERS else frozenset({"cup_1"})))
+                                        (frozenset({"cup_1", "fork_1", "spoon_1", "napkin_1"}) if REAL_DRAWERS
+                                         else frozenset({"cup_1", "napkin_1"})))
 # Objects whose jaw is re-pinned at its stall angle (+ a bounded squeeze)
 # instead of left to ramp toward fully closed. Measured 2026-09-14 while the
 # arms started working in parallel: a held cup with the jaw still driving
@@ -502,18 +511,20 @@ TOPDOWN_SEED_OBJECTS: frozenset[str] = (frozenset() if LEGACY_MODELS_FLAG else
 # within ~10 s of holding -- sequential runs only "worked" because the MOVE
 # followed the PICK immediately. The plate is NOT in this set (see
 # _gripper_stall_hold).
-STALL_HOLD_OBJECTS: frozenset[str] = frozenset({"cup_1"})
+STALL_HOLD_OBJECTS: frozenset[str] = frozenset({"cup_1"}) if LEGACY_MODELS_FLAG else frozenset({"cup_1", "napkin_1"})
 # Wall pinch for hollow objects (2026-09-14): the jaw descends only part-open
 # so the moving fingertip lands INSIDE the rim, the fixed pad outside, and the
 # close clamps the 3 mm wall between them -- a hold that does not depend on
 # the finger being vertical. The diameter pinch it replaces held the cup on a
 # tilted 45 deg contact and let it slide 35-45 mm down the pads while held.
 # jaw angle for the descent, and how far below the rim the fingertips go.
-WALL_PINCH_OBJECTS: dict[str, tuple[float, float]] = ({} if LEGACY_MODELS_FLAG else {"cup_1": (0.30, 0.030)})
+WALL_PINCH_OBJECTS: dict[str, tuple[float, float]] = ({} if LEGACY_MODELS_FLAG else
+                                                      {"cup_1": (0.30, 0.030), "napkin_1": (0.30, 0.020)})
 OBJECT_GRASP_VERTICAL_OFFSET: dict[str, float] = {
     "spoon_1": 0.0,
-    # cup: fingertips 30 mm below the rim (rim = centre + 45 mm)
-    **({} if LEGACY_MODELS_FLAG else {"cup_1": 0.045 - 0.030}),
+    # cup: fingertips 30 mm below the rim (rim = centre + 45 mm);
+    # napkin: fingertips 20 mm below the fan's top edge (top = origin + 61 mm)
+    **({} if LEGACY_MODELS_FLAG else {"cup_1": 0.045 - 0.030, "napkin_1": 0.061 - 0.020}),
 }
 # Empirically found, not a general principle: this exact (elbow, wrist_pitch)
 # joint bias, applied to qpos right after the transit approach and before the
@@ -633,9 +644,14 @@ ZONE_POSITIONS: dict[str, tuple[float, float, float]] = (
         # y -0.06..-0.26): fork and spoon beside it, napkin outside the fork,
         # cup upper right. The plate is set first, so nothing is in either
         # arm's sideways corridor when it is picked.
-        "upper_right": (0.22, -0.06, 0.046),  # hollow cup: 18 cm from its spawn, 0.26 m from the right base
+        # hollow cup: upper right of the plate, 5 cm off its rim, 0.26 m
+        # from the right base. Two earlier spots failed for the same reason
+        # (2026-09-14): at (0.22,-0.06) the spoon's bowl landed against the
+        # cup; at (0.25,-0.01) the right arm reaching for the spoon at its
+        # (0.34,0.02) spawn knocked the placed cup over.
+        "upper_right": (0.13, -0.02, 0.046),
         "left": (-0.16, -0.12, 0.010),        # fork, grip segment arched up
-        "right": (0.16, -0.12, 0.010),        # spoon
+        "right": (0.20, -0.14, 0.010),        # spoon: outside the cup's footprint at any yaw
         "lower_left": (-0.20, 0.00, 0.012) if os.environ.get("OMNIQ_REAL_DRAWERS", "0") not in {"", "0", "false", "no"}
                       else (0.0, 0.04, 0.012),      # napkin above the plate, reachable by BOTH arms (0.30 m each)
     }
@@ -832,6 +848,47 @@ def _hollow_cup(name: str, pos: str, *, rgba: str, mass: str, friction: str, con
                                      "pos": f"{rc * math.cos(th):.4f} {rc * math.sin(th):.4f} 0",
                                      "euler": f"0 0 {th:.4f}",  # radians
                                      "mass": f"{float(mass) * 0.8 / N:.5f}", **common})
+    return body
+
+
+def _crest_napkin(name: str, pos: str, *, rgba: str, mass: str, friction: str, contact: dict[str, str],
+                  euler: str | None = None) -> ET.Element:
+    """A napkin in a standing fan fold (2026-09-14): a folded foot, a small
+    binding collar, and five pleated panels fanning out above it -- the
+    pleated fan a set table stands on the plate. Primitives only.
+
+    The flat folded block it replaces (70 x 50 x 18 mm) was unpickable by
+    construction with this jaw: the SO-101 closes as a wedge (3.6 mm gap at
+    the tips, 19 mm at the upper pad), so a 50 mm-wide block could only ever
+    be caught by a corner across its thickness -- and then hung vertical
+    from the pinch and was set down on its edge. The fan is a few
+    millimetres thick where the jaw meets it (the pleated panels overlap at
+    the centre), so it is pinched like the cup wall (part-open descent, tips
+    20 mm below the top edge) with the napkin's weight hanging below the
+    pinch: it carries level and lands on its foot. Body origin = centre of
+    the foot (18 mm thick), so the spawn and zone heights are unchanged.
+    Same 20 g. Top edge at origin + 61 mm (OBJECT_HALF_HEIGHT).
+    """
+    body = _free_body(name, pos, euler)
+    common = {"rgba": rgba, "friction": friction, **contact}
+    foot_top = 0.009
+    ET.SubElement(body, "geom", {"name": name, "type": "box", "size": ".035 .022 .009",
+                                 "mass": f"{float(mass) * 0.5:.4f}", **common})
+    # binding collar where the pleats gather
+    ET.SubElement(body, "geom", {"name": f"{name}_collar", "type": "box", "size": ".012 .006 .006",
+                                 "pos": f"0 0 {foot_top + 0.006:.4f}", "mass": f"{float(mass) * 0.1:.4f}", **common})
+    # five pleated panels, 30 x 2.4 x 50 mm, fanning +/-20 deg about the
+    # collar; alternate y offsets give the pleats their zig-zag
+    pivot_z = foot_top + 0.005
+    half_h = 0.025
+    angles = (-20.0, -10.0, 0.0, 10.0, 20.0)
+    for i, deg in enumerate(angles):
+        th = math.radians(deg)
+        cx, cz = half_h * math.sin(th), pivot_z + half_h * math.cos(th)
+        cy = (i - 2) * 0.0012
+        ET.SubElement(body, "geom", {"name": f"{name}_pleat_{i}", "type": "box", "size": ".015 .0012 .025",
+                                     "pos": f"{cx:.4f} {cy:.4f} {cz:.4f}", "euler": f"0 {th:.4f} 0",
+                                     "mass": f"{float(mass) * 0.4 / len(angles):.5f}", **common})
     return body
 
 
@@ -1191,16 +1248,17 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
         # with pad contact, zero lifts). Folding is what people actually do
         # with a napkin; the block it makes is thick enough to pinch and
         # narrow enough to close across. Same 10 g.
+        # Cloth genuinely grips more than metal cutlery or glazed ceramic
+        # (higher real sliding-friction coefficient) -- a uniform 1.20 across
+        # every material lost that distinction; restoring it, not inventing
+        # it. Cloth compresses: ~2.5 mm under 20 N, not ceramic-rigid.
         _body("napkin_1", napkin_pos, {
             "type": "box", "size": ".035 .025 .009", "rgba": tableware_rgba(".90 .40 .38 1"),
-            # Cloth genuinely grips more than metal cutlery or glazed
-            # ceramic (higher real sliding-friction coefficient) -- a
-            # uniform 1.20 across every material lost that distinction;
-            # restoring it, not inventing it.
-            "mass": ".02", "friction": "1.60 .006 .0002",
-            # Cloth compresses: ~2.5 mm under 20 N, not ceramic-rigid.
-            **NAPKIN_CONTACT,
-        }, euler=napkin_euler),
+            "mass": ".02", "friction": "1.60 .006 .0002", **NAPKIN_CONTACT,
+        }, euler=napkin_euler) if LEGACY_MODELS else
+        # standing fan fold: see _crest_napkin
+        _crest_napkin("napkin_1", napkin_pos, rgba=tableware_rgba(".90 .40 .38 1"), mass=".02",
+                      friction="1.60 .006 .0002", contact=NAPKIN_CONTACT, euler=napkin_euler),
     ])
     # A real, narrower fix for the same order-dependence bug the reverted
     # contype/conaffinity scheme above was also (over-broadly) solving: an
@@ -1698,8 +1756,18 @@ class IntelTableWorld(MockWorld):
         threads = [threading.Thread(target=worker, args=(i,), name=f"arm-{arms[i]}") for i in range(len(requests))]
         for t in threads:
             t.start()
-        for t in threads:
-            t.join()
+        # An observer (viewer, recorder) may only touch its GL context from
+        # the main thread; while the arm threads step physics, the main
+        # thread services it. ``real`` may wrap MuJoCo (a recording spy):
+        # anything it exposes as ``main_thread_pump`` is called here.
+        pump = getattr(real, "main_thread_pump", None)
+        while any(t.is_alive() for t in threads):
+            for t in threads:
+                t.join(0.01)
+            if pump is not None:
+                pump()
+        if pump is not None:
+            pump()
         self._mujoco = real
         self._parallel_steps = stepper.steps
 
@@ -2057,7 +2125,10 @@ class IntelTableWorld(MockWorld):
         pad_z = np.cross(pad_x, pad_y)
         target_rotation = np.column_stack((pad_x, pad_y, pad_z))
         base_roll = self._GRASP_WRIST_ROLL[arm_offset]
-        if obj == "napkin_1":
+        if obj == "napkin_1" and LEGACY_MODELS_FLAG:
+            # (Flat-block napkin only; the standing fan fold pinches at the
+            # base roll like the cup wall and mirrored, its first attempt
+            # landed on the base's corner every time, 2026-09-14.)
             # Measured, not derived (2026-09-13): with the arm's base roll the
             # napkin's first attempt never made contact, and every successful
             # pick was rescued by the retry's MIRRORED roll on the third or
@@ -2647,6 +2718,42 @@ class IntelTableWorld(MockWorld):
             self._mujoco.mj_step(self.model, self.data)
             self._controller_steps += 1
 
+    @staticmethod
+    def _placed_upright(obj: str, tilt: float) -> bool:
+        """Cup, napkin, plate: within 12 deg of upright. Cutlery lies flat
+        on either face (a fork dropped on a carry landed face-down and every
+        re-place kept it face-down at 1 cm, seed 911, 2026-09-14) -- for it,
+        only "on its side" (within 30 deg of vertical) is a failure. The
+        tilt is recorded either way."""
+        if obj in {"fork_1", "spoon_1"}:
+            return abs(tilt - math.pi / 2) > math.radians(30)
+        return tilt <= BIMANUAL_MAX_TILT_RAD
+
+    def final_state_check(self, zones: dict[str, str] | None = None, tol_m: float = 0.06) -> dict[str, Any]:
+        """Where every piece of tableware physically IS at the end of a run
+        (2026-09-14). A placement is scored when it happens; a cup knocked
+        over by a later reach still counted as placed (seen on the arm-
+        failure take, seed 903). This reads the final physics: distance from
+        each object's target zone and its tilt, and says which are in zone
+        and upright. ``zones`` maps object -> target zone name; default is
+        the table-setting plan's."""
+        import numpy as np
+
+        zones = zones or {"plate_1": "center", "cup_1": "upper_right", "fork_1": "left",
+                          "spoon_1": "right", "napkin_1": "lower_left"}
+        out: dict[str, Any] = {}
+        for obj, zone in zones.items():
+            if obj not in self._object_joints or zone not in ZONE_POSITIONS:
+                continue
+            adr, _ = self._object_joints[obj]
+            xy = self.data.qpos[adr:adr + 2]
+            dist = float(np.linalg.norm(xy - np.asarray(ZONE_POSITIONS[zone][:2])))
+            tilt = self._object_tilt(obj)
+            out[obj] = {"zone": zone, "distance_m": round(dist, 4), "tilt_rad": round(tilt, 4),
+                        "in_zone_upright": bool(dist < tol_m and self._placed_upright(obj, tilt))}
+        out["all_in_zone_upright"] = all(v["in_zone_upright"] for k, v in out.items() if k != "all_in_zone_upright")
+        return out
+
     def _object_tilt(self, obj: str) -> float:
         """Angle (rad) between the object's +z and world up."""
         import numpy as np
@@ -2792,7 +2899,9 @@ class IntelTableWorld(MockWorld):
         lift_targets = {}
         for name, arm_offset in (("left", 0), ("right", 6)):
             g = per_arm[name]["_geom"]
-            lift_tip = g["tip_grip"] + np.array([0.0, 0.0, LIFT_VERIFY_MIN + 0.02])
+            # +40 mm: aimed at +20 mm the drive arrived 1 mm under the
+            # verify height on two of ten seeds (59.0/59.4 mm, 2026-09-14)
+            lift_tip = g["tip_grip"] + np.array([0.0, 0.0, LIFT_VERIFY_MIN + 0.04])
             q, scan_err = self._edge_seed_joints(arm_offset, lift_tip, g["pad_y"][:2])
             lift_targets[arm_offset] = q
             per_arm[name]["lift_scan_error_m"] = round(scan_err, 4)
@@ -2862,13 +2971,56 @@ class IntelTableWorld(MockWorld):
             return max(errs[-2:]) if errs else 0.0
 
         carry_err = track_both(goal_high - centre_now, 12, 14)
-        lower_err = track_both(goal_low - centre_now, 6, 14)
+        # Close the loop on the plate itself (2026-09-14): the tips lag the
+        # commanded line and on the 9 cm slide the plate arrived 7-9 cm
+        # short. Measure where the plate centre actually is and walk both
+        # tips by the residual, up to three passes, before lowering.
+        corrections = []
+        for _ in range(3):
+            centre = self.data.qpos[qpos_adr:qpos_adr + 3].copy()
+            residual = np.array([goal_high[0] - centre[0], goal_high[1] - centre[1], 0.0])
+            corrections.append(round(float(np.linalg.norm(residual[:2])), 4))
+            if np.linalg.norm(residual[:2]) < 0.008:
+                break
+            tip_now = {a: self.data.geom_xpos[tips[a]].copy() for a in (0, 6)}
+            track_both(residual, 3, 40)
+        # Lower on the measured plate height, not the tips' (they lag, and
+        # on seed 909 the plate was released still hanging 9 mm above rest
+        # on the right pad, then dragged 16 cm by the retract). Once the
+        # plate is on the table, drop the pads 15 mm more so they carry
+        # none of its weight when the jaws open.
+        lower_err = 0.0
+        for _ in range(6):
+            centre = self.data.qpos[qpos_adr:qpos_adr + 3].copy()
+            dz = rest_centre_z - centre[2]
+            if dz > -0.003:
+                break
+            tip_now = {a: self.data.geom_xpos[tips[a]].copy() for a in (0, 6)}
+            lower_err = track_both(np.array([0.0, 0.0, dz]), 3, 20)
+        tip_now = {a: self.data.geom_xpos[tips[a]].copy() for a in (0, 6)}
+        track_both(np.array([0.0, 0.0, -0.015]), 2, 30)
         self._set_gripper(0, GRIPPER_OPEN, settle_steps=30)
         self._set_gripper(6, GRIPPER_OPEN, settle_steps=30)
-        # retract both straight up and out
-        for a in (0, 6):
-            self._ik_reach_pad(a, self.data.geom_xpos[tips[a]] + np.array([0.0, 0.0, 0.05]), iters=80, roll=0.0,
-                               track_tcp=False, geom_id=tips[a], tol=0.005, max_dq=0.02)
+        # Retract both up and outward with the same joint-space scan the
+        # lift uses: the straight-up pad-tracking solve does not climb from
+        # this near-extended posture (2026-09-14: tips still at grip height
+        # after it, and the right arm's swing home then shoved the plate
+        # 5 cm -- 2.5 cm placement became 7.4 cm on seed 904).
+        # The fixed pad sits under the lip and may still be carrying it
+        # after the jaws open (the plate was resting on the pads, not the
+        # table -- moving out dragged it 4 cm, moving up lifted it, seed
+        # 904). Drop the open jaws 3.5 cm so the pads clear the lip (a 2 cm
+        # drop moved the lagging right tip only 1 cm and it still dragged
+        # the plate on seed 911), clear the rim outward (toward each base),
+        # then climb.
+        geoms = {a: self._edge_geometry(a, obj) for a in (0, 6)}
+        for out, up in ((0.0, -0.035), (0.05, 0.0), (0.05, 0.07)):
+            retract_targets = {}
+            for a in (0, 6):
+                g = geoms[a]
+                away = self.data.geom_xpos[tips[a]] + g["pad_y"] * out + np.array([0.0, 0.0, up])
+                retract_targets[a], _ = self._edge_seed_joints(a, away, g["pad_y"][:2])
+            self._drive_joints_both(retract_targets, steps=250)
         # Both arms back to the ready pose: the extended sideways posture
         # sits near a wrist-pitch limit, and every later step on either arm
         # failed its joint-margin safety check from there (engine trace,
@@ -2888,7 +3040,7 @@ class IntelTableWorld(MockWorld):
         placed = bool(offset < 0.06 and settle["settled"] and tilt <= BIMANUAL_MAX_TILT_RAD and safety_after["safe"])
         return {
             "grasp": "bimanual_edge", "reach_error_m": round(float(lower_err), 6),
-            "carry_error_m": round(float(carry_err), 6),
+            "carry_error_m": round(float(carry_err), 6), "carry_corrections_m": corrections,
             "placement_error_m": round(offset, 4), "tilt_rad": round(tilt, 4), "placed": placed,
             "settle": settle, "safety": {"after": safety_after},
             "reason": None if placed else (safety_after["reason"] or (
@@ -3173,6 +3325,22 @@ class IntelTableWorld(MockWorld):
         pad_position = self.data.geom_xpos[self._pad_geom[arm_offset]].copy()
         object_position = self.data.qpos[qpos_adr:qpos_adr + 3].copy()
         carry_offset = object_position - pad_position
+        if obj in WALL_PINCH_OBJECTS:
+            # A wall-pinched cup is round: its yaw is irrelevant, and the
+            # pinch is unchanged when the whole arm turns about its base.
+            # Pinning the pad's *world* rotation across a carry that needs
+            # ~40 deg more base yaw than the pick left a 5-DOF solve 7 cm
+            # short (0.10 m/rad orientation weight), the cup set down 5 cm
+            # off and leaning on the finger, then knocked over on the way
+            # home (seed 900, 2026-09-14). Turn the pinned rotation and the
+            # carried offset with the base instead.
+            base_xy = self.data.xpos[self.model.body(f"{'right' if arm_offset else 'left'}_Base").id][:2]
+            yaw_now = float(np.arctan2(*(pad_position[:2] - base_xy)[::-1]))
+            yaw_tgt = float(np.arctan2(*(target_arr[:2] - base_xy)[::-1]))
+            d = yaw_tgt - yaw_now
+            rz = np.array([[np.cos(d), -np.sin(d), 0.0], [np.sin(d), np.cos(d), 0.0], [0.0, 0.0, 1.0]])
+            target_rotation = rz @ target_rotation
+            carry_offset = rz @ carry_offset
         safety_before = self._workspace_safety(
             arm_offset, obj=obj, target_xy=target_arr,
         )
@@ -3197,13 +3365,19 @@ class IntelTableWorld(MockWorld):
         # at the requested zone.  This is an observed correction, not a write
         # to the object's freejoint pose.
         pad_release_target = release_target - carry_offset
+        # The cup's carry swings the base ~37 deg; at max_dq per iteration
+        # the default budget left the pad 9 cm short (2026-09-14: 240 iters
+        # -> 0.09 m, 480 -> 0.03, 1080 -> 0.01). Give it the time, and let
+        # the solve stop on position since a round cup's yaw is free.
+        wall = obj in WALL_PINCH_OBJECTS
+        carry_iters, carry_tol = (720, 0.35) if wall else (240, 0.18)
         self._ik_reach_pad_pose(
             arm_offset, (pad_release_target[0], pad_release_target[1], cur_pad_z),
-            target_rotation, roll_hint=roll_hint, iters=240,
+            target_rotation, roll_hint=roll_hint, iters=carry_iters, orientation_tol=carry_tol,
         )
         place_pose = self._ik_reach_pad_pose(
             arm_offset, pad_release_target, target_rotation,
-            roll_hint=roll_hint, iters=300,
+            roll_hint=roll_hint, iters=(720 if wall else 300), orientation_tol=carry_tol,
         )
         # let the carried object stop swinging before the release
         for _ in range(80):
@@ -3236,14 +3410,19 @@ class IntelTableWorld(MockWorld):
         final_xy = self.data.qpos[qpos_adr:qpos_adr + 2].copy()
         offset = float(np.linalg.norm(final_xy - target_arr[:2]))
         safety_after = self._workspace_safety(arm_offset, obj=None)
-        placed = bool(offset < 0.06 and settle["settled"] and safety_after["safe"])
+        # A cup on its side inside the zone is not "placed" (seed 911 on
+        # the 2026-09-14 layout: the receipt said placed, the video showed
+        # it tipped). Same tilt limit the bimanual plate verdict uses.
+        tilt = self._object_tilt(obj)
+        upright = self._placed_upright(obj, tilt)
+        placed = bool(offset < 0.06 and settle["settled"] and safety_after["safe"] and upright)
         return {
             "grasp": "contact", "reach_error_m": round(place_error, 6),
-            "placement_error_m": round(offset, 4), "placed": placed,
+            "placement_error_m": round(offset, 4), "tilt_rad": round(tilt, 4), "placed": placed,
             "settle": settle,
             "safety": {"before": safety_before, "after": safety_after},
             "reason": None if placed else (
-                safety_after["reason"] or "unstable placement"
+                safety_after["reason"] or ("tipped over" if not upright else "unstable placement")
             ),
             "orientation": {
                 "place": {**place_pose},
@@ -3690,16 +3869,21 @@ def run_intel_table_evaluation_report(
     }
     per_object_holds: dict[str, int] = {}
     per_object_places: dict[str, int] = {}
+    final_ok = 0
     entries: list[dict[str, Any]] = []
     for index in range(trials):
         trial_seed = seed + index
         goal = TABLE_SETTING_PHRASINGS[index % len(TABLE_SETTING_PHRASINGS)]
         scene_config = IntelSceneConfig(seed=trial_seed, randomized=True)
-        receipt = build_intel_sim_engine(scene_config).run(goal)
+        engine = build_intel_sim_engine(scene_config)
+        receipt = engine.run(goal)
         if receipt.content_hash != content_hash_of(receipt.as_dict()):
             raise RuntimeError(f"receipt hash mismatch for trial seed {trial_seed}")
         outcome = _classify_intel_table_receipt(receipt)
         outcomes[outcome] += 1
+        final_state = engine.world.final_state_check() if hasattr(engine.world, "final_state_check") else {}
+        if final_state.get("all_in_zone_upright"):
+            final_ok += 1
         per_object = _per_object_pick_place_outcomes(receipt)
         for object_id, result in per_object.items():
             if result["held"]:
@@ -3716,6 +3900,8 @@ def run_intel_table_evaluation_report(
             "outcome": outcome,
             "resolved": bool(receipt.metrics.get("resolved")),
             "per_object": per_object,
+            # end-of-run physics, not the per-step verdicts (see final_state_check)
+            "final_state": final_state,
             "run_id": receipt.run_id,
             "content_hash": receipt.content_hash,
             "receipt": receipt_name,
@@ -3740,6 +3926,9 @@ def run_intel_table_evaluation_report(
             "held_in_trials": per_object_holds,
             "placed_in_trials": per_object_places,
         },
+        # trials whose final physical state has every object in its zone and
+        # upright -- the number a viewer can check against the last frame
+        "final_state_all_in_zone_upright": final_ok,
         "receipts": entries,
     }
     _write_json_once(root_path / "report.json", report)
