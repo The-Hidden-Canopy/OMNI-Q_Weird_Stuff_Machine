@@ -76,7 +76,7 @@ def main() -> int:
         return "  ".join(f"{k.split('_')[0]}: mass x{d['mass_factor']:.2f} friction x{d['friction_factor']:.2f}" for k, d in v.items())
 
     for i, seed in enumerate(seeds):
-        goal = TABLE_SETTING_PHRASINGS[i % len(TABLE_SETTING_PHRASINGS)]   # a different phrasing per seed, as the harness does
+        goal = TABLE_SETTING_PHRASINGS[(seed - 900) % len(TABLE_SETTING_PHRASINGS)]   # the harness's phrasing for this seed
         engine = build_intel_sim_engine(IntelSceneConfig(seed=seed, randomized=True))
         world = engine.world
         # each seed's run is recorded to a part file, then appended to the montage

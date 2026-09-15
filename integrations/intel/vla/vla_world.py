@@ -171,6 +171,8 @@ class VLAWorld(IntelTableWorld):
         if os.environ.get("OMNIQ_VLA_STOCHASTIC", "0") in {"", "0", "false", "no"}:
             import torch
             import zlib
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
             base = int(getattr(getattr(self, "scene_config", None), "seed", 0) or 0)
             torch.manual_seed((base * 1000003 + zlib.crc32(instruction.encode()) + arm_offset) % (2 ** 31))
         # The engine authorized this step before it reached the world (apply_transition
