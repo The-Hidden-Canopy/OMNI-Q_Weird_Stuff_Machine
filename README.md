@@ -234,6 +234,55 @@ demonstrations can now be captured with optional MuJoCo telemetry through
 but the current trained artifact is not an end-to-end motor policy and there is
 no hardware or OpenVINO policy-deployment claim here.
 
+### Governed learned motor seam: SmolVLA → supervisor → IK
+
+The repository now contains the executable boundary for a future motor-level
+VLA without pretending that a trained motor checkpoint already exists:
+
+```text
+RGB cameras + arm state + language instruction
+                    ↓
+              LeRobot SmolVLA
+                    ↓  proposal only
+             seven Cartesian deltas
+                    ↓
+             SkillSupervisor
+       org / ACTIVE stage / revision / force /
+       workspace / speed / safety-stop checks
+                    ↓
+          MuJoCo Cartesian differential IK
+                    ↓
+             named position actuators
+                    ↓
+             physics + verification
+```
+
+`ControllerType.VLA` is promotion-gated like the existing learned
+controllers: a manifest must carry a `sha256:` artifact digest and at least
+one verification channel, and only an `ACTIVE` manifest can reach
+`SkillRuntime`. The proposal-only controller is
+[`src/omni_q/skills/controllers/smolvla.py`](src/omni_q/skills/controllers/smolvla.py);
+the actuator boundary is
+[`src/omni_q/skills/actuators/mujoco_cartesian.py`](src/omni_q/skills/actuators/mujoco_cartesian.py).
+It requires explicit named joints, actuators, and an end-effector site, so a
+missing or mismatched robot binding fails closed rather than silently mapping
+the VLA output to the wrong arm.
+
+Install the optional runtime/data-plane dependency with:
+
+```text
+.venv\Scripts\python.exe -m pip install -e ".[smolvla]"
+```
+
+The adapter follows the current official
+[LeRobot SmolVLA documentation](https://huggingface.co/docs/lerobot/smolvla)
+and [inference example](https://github.com/huggingface/lerobot/blob/main/examples/tutorial/smolvla/using_smolvla_example.py).
+Use [`scripts/record_smolvla_dataset.py`](scripts/record_smolvla_dataset.py)
+to write camera/state/action demonstrations from an already governed expert;
+it finalizes before any Hub push. A dataset, fine-tuned checkpoint, digest,
+promotion evidence, and hardware result are still separate follow-up work and
+are intentionally not implied by this code seam.
+
 ### Bimanual handoff
 
 One SO-101 acquires an object, transfers it within the shared workspace to the

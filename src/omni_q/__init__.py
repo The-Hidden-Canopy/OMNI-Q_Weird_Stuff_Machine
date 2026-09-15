@@ -92,7 +92,9 @@ from .skills import (
     GraspPolicy,
     GraspVerification,
     GraspVerificationPolicy,
+    MuJoCoCartesianIKActuator,
     RLGraspController,
+    SmolVLAController,
     verify_grasp,
 )
 from .expressive import (
@@ -285,6 +287,8 @@ __all__ = [
     "FakeVerifier",
     "RulePlanner",
     "MockWorld",
+    "MuJoCoCartesianIKActuator",
+    "SmolVLAController",
     "build_mock_engine",
 ]
 

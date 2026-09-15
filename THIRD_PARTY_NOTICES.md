@@ -37,6 +37,19 @@ grant the policy authority over OMNI-Q objectives, world state, or replanning.
 The vendored asset remains separately identified and retains its upstream
 license. OMNI-Q's root MIT license does not replace that Apache-2.0 license.
 
+## Optional runtime dependencies (not vendored)
+
+### Hugging Face LeRobot
+
+- Source: [huggingface/lerobot](https://github.com/huggingface/lerobot)
+- License: Apache License 2.0
+- OMNI-Q treatment: optional dependency for the SmolVLA controller and the
+  LeRobot demonstration recorder; no LeRobot source code or checkpoint is
+  copied into this repository.
+- Integration points:
+  [`src/omni_q/skills/controllers/smolvla.py`](src/omni_q/skills/controllers/smolvla.py)
+  and [`scripts/record_smolvla_dataset.py`](scripts/record_smolvla_dataset.py)
+
 ## Reference-only sources
 
 The following repositories were inspected for controller, simulator, training,

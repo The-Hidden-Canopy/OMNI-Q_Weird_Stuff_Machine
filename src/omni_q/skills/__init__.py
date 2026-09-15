@@ -28,7 +28,8 @@ from .registry import (
     SkillUnavailable,
 )
 from .supervisor import SkillSupervisor
-from .controllers import GraspPolicy, RLGraspController
+from .controllers import GraspPolicy, RLGraspController, SmolVLAController
+from .actuators import MuJoCoCartesianIKActuator
 from .verification import (
     GraspEvidence,
     GraspVerification,
@@ -63,6 +64,8 @@ __all__ = [
     "GraspPolicy",
     "GraspVerification",
     "GraspVerificationPolicy",
+    "MuJoCoCartesianIKActuator",
     "RLGraspController",
+    "SmolVLAController",
     "verify_grasp",
 ]

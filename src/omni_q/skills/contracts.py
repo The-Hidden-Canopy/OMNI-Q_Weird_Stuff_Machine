@@ -40,6 +40,7 @@ class ControllerType(str, Enum):
     SCRIPTED = "scripted"
     RL = "rl"
     RESIDUAL_RL = "residual_rl"
+    VLA = "vla"
 
 
 class SkillStage(str, Enum):
@@ -226,7 +227,11 @@ class SkillManifest:
         if not isinstance(self.controller_type, ControllerType):
             raise SkillContractError("controller_type must be a ControllerType")
         object.__setattr__(self, "artifact_digest", _text(self.artifact_digest, "artifact_digest"))
-        if self.controller_type in {ControllerType.RL, ControllerType.RESIDUAL_RL}:
+        if self.controller_type in {
+            ControllerType.RL,
+            ControllerType.RESIDUAL_RL,
+            ControllerType.VLA,
+        }:
             if not self.artifact_digest.startswith("sha256:"):
                 raise SkillContractError("learned skills require a sha256 artifact digest")
             if not self.verification:

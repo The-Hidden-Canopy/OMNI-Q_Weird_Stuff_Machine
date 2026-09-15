@@ -47,7 +47,36 @@ on-device inference, same shape as the onsite track. **OMPL is not named in the
 official brief** — the brief only requires MuJoCo/LeRobot-Gym + LeRobot +
 OpenVINO. Treat classical motion planning (OMPL or otherwise) as an optional
 internal implementation detail behind `MOVE`/`GRASP`, not a scored/required
-component.
+ component.
+
+### Implemented motor-control boundary
+
+The learned motor path is now explicit and remains subordinate to OMNI-Q
+governance:
+
+```text
+camera RGB + arm state + instruction
+              ↓
+          SmolVLA
+              ↓ proposal only
+        7D Cartesian delta
+              ↓
+       SkillSupervisor
+              ↓
+     MuJoCo differential IK
+              ↓
+      named SO-101 actuators
+```
+
+`ControllerType.VLA` is an artifact- and verification-gated skill type. The
+implementation in
+[`src/omni_q/skills/controllers/smolvla.py`](../../src/omni_q/skills/controllers/smolvla.py)
+uses LeRobot's current observation preprocessing and action-selection seam;
+[`src/omni_q/skills/actuators/mujoco_cartesian.py`](../../src/omni_q/skills/actuators/mujoco_cartesian.py)
+converts only supervisor-approved deltas to named position-actuator targets.
+No VLA controller can write MuJoCo controls, change the objective, alter
+constraints, or select a fallback skill. The path is an implemented runtime
+seam, not evidence that a motor VLA has been trained or promoted.
 
 ## Intel onsite (bonus, not an entry)
 
@@ -162,8 +191,14 @@ alongside the YOLO perception node.
   artifact. This remains provenance-bearing input for a later motor-level
   LeRobot conversion; it is separate from the published OMNI reasoner
   checkpoint and is **not** hardware evidence.
-- [ ] Motor-level LeRobot dataset/demonstration conversion from the MuJoCo
-  scene
+- [x] LeRobot-compatible motor-demonstration recorder contract —
+  [`scripts/record_smolvla_dataset.py`](../../scripts/record_smolvla_dataset.py)
+  records governed Cartesian actions, proprioception, and rendered camera
+  frames, with explicit shape/finite-value checks and finalize-before-push;
+  it is not yet a claim that a complete task dataset has been recorded
+- [x] Proposal-only SmolVLA adapter + MuJoCo Cartesian IK actuator —
+  [`src/omni_q/skills/controllers/smolvla.py`](../../src/omni_q/skills/controllers/smolvla.py)
+  and [`src/omni_q/skills/actuators/mujoco_cartesian.py`](../../src/omni_q/skills/actuators/mujoco_cartesian.py)
 - [x] Published multimodal OMNI reasoner runtime — HF artifact, identity-gated
   loader, constrained `OmniPlanner`, and governed Intel rollout path documented
   below

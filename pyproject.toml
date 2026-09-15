@@ -58,6 +58,13 @@ g1 = [
     "pyyaml>=6.0",
     "torch>=2.0",
 ]
+# Optional SmolVLA inference and LeRobot demonstration recording.  The
+# checkpoint, dataset, and promotion evidence remain external artifacts.
+smolvla = [
+    "lerobot[smolvla]>=0.6.1",
+    "numpy>=1.24",
+    "torch>=2.0",
+]
 
 [project.scripts]
 omni-q-demo = "omni_q.demo:main"
