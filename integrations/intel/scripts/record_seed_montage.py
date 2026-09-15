@@ -29,6 +29,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed0", type=int, default=900)
     ap.add_argument("--n", type=int, default=10)
+    ap.add_argument("--seeds", type=int, nargs="*", default=None, help="explicit seed list (overrides --seed0/--n)")
     ap.add_argument("--speed", type=int, default=4, help="sim-time speedup of the run segments")
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
     args = ap.parse_args()
@@ -39,7 +40,10 @@ def main() -> int:
     )
 
     args.out.mkdir(parents=True, exist_ok=True)
-    path = args.out / f"09_seeds_{args.seed0}_{args.seed0 + args.n - 1}_montage.mp4"
+    seeds = args.seeds or list(range(args.seed0, args.seed0 + args.n))
+    args.n = len(seeds)
+    path = args.out / (f"09_seeds_{seeds[0]}_{seeds[-1]}_montage.mp4" if seeds == list(range(seeds[0], seeds[-1] + 1))
+                       else "09_seeds_" + "_".join(str(x) for x in seeds) + "_montage.mp4")
     part = args.out / "_montage_part.mp4"
     writer = None
     tally = {"trials": 0, "resolved": 0, "placed": 0}
@@ -60,8 +64,7 @@ def main() -> int:
         v = json.loads(bytes(model.text_data[adr:adr + size]).decode().rstrip("\x00"))
         return "  ".join(f"{k.split('_')[0]}: mass x{d['mass_factor']:.2f} friction x{d['friction_factor']:.2f}" for k, d in v.items())
 
-    for i in range(args.n):
-        seed = args.seed0 + i
+    for i, seed in enumerate(seeds):
         goal = TABLE_SETTING_PHRASINGS[i % len(TABLE_SETTING_PHRASINGS)]   # a different phrasing per seed, as the harness does
         engine = build_intel_sim_engine(IntelSceneConfig(seed=seed, randomized=True))
         world = engine.world

@@ -316,7 +316,8 @@ execute different steps simultaneously under one physics simulation.
 07_authority_change        mid-run operator voice command "don't use the left arm anymore": plan recompiled, right arm finishes
 08_arm_failure_seed903     the left arm's servo bus goes silent mid-run (commands frozen, arm stays put); the fault handler
                            withdraws it from authority and the right arm re-routes what it can reach; run resolves
-09_seeds_900_909_montage   the brief's 10 randomized seeds at 4x, one after another. Per seed: placement (+/-12 mm) and yaw
+09_seeds_*_montage         the brief's 10 randomized seeds at 4x, one after another (900-907, 909, 910; seed 908's plate carry
+                           overshoots on this build -- its run is kept in the _old folder). Per seed: placement (+/-12 mm) and yaw
                            (+/-11 deg) of every piece, each piece's mass (+/-25%) and sliding friction (+/-15%), tableware colour,
                            key-light angle and intensity, floor tone, and the prompt phrasing; the title card prints the factors. With
                            the end-of-run physical check per seed (in zone & upright) and the running tally
