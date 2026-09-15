@@ -78,8 +78,9 @@ overhead + front + wrist cameras, arm state, per-step instruction
 ```
 
 * Demonstrations: `record_expert_demos.py` — 20 seeds × 2 arms, 10 Hz, three
-  320×240 cameras, 9-d state, 7-d Cartesian-delta action, per-step language
-  (LeRobot v3 dataset, `datasets/so101_table_vla`, local).
+  320×240 cameras, 9-d state, 7-d Cartesian-delta action with an absolute jaw
+  command, per-step language
+  (LeRobot v3 dataset, `datasets/so101_table_vla_absjaw`, local).
 * Fine-tune: `lerobot-train --policy.path=lerobot/smolvla_base` on the RTX 4050
   (see `tmp/vla_train.sh` / `integrations/intel/vla/README.md`).
 * Evaluation: `run_vla_eval.py` — per op, VLA-completed vs fallback, task
@@ -108,6 +109,10 @@ overhead + front + wrist cameras, arm state, per-step instruction
   policy-driven. That is "VLA + IK combined" but **not yet VLA-dominant in
   the sense of the policy finishing grasps** — say exactly this in the README
   and video; do not claim more.
+* Promotion boundary: `VLAWorld` is an offline simulation/evaluation adapter;
+  these measurements are not an `ACTIVE` skill promotion. Production use
+  still requires the artifact manifest, adjacent promotion evidence, and the
+  normal `SkillRuntime` supervisor/actuator path.
 * Paired (both-arms-at-once) execution under the VLA loops does not work yet
   (1/5 in a test); VLA-mode clips execute one arm-step at a time.
 * Next steps that would move the needle (in order): more demonstrations

@@ -46,6 +46,7 @@ class SmolVLAController:
         device: str | None = None,
         robot_type: str = "so101",
         skill_id: str | None = None,
+        state_dim_override: int | None = None,
     ) -> None:
         if not isinstance(checkpoint, str) or not checkpoint.strip():
             raise ValueError("checkpoint must be a non-empty string")
@@ -57,6 +58,12 @@ class SmolVLAController:
             raise TypeError("instruction_provider must be callable")
         if not isinstance(robot_type, str) or not robot_type.strip():
             raise ValueError("robot_type must be a non-empty string")
+        if state_dim_override is not None and (
+            isinstance(state_dim_override, bool)
+            or not isinstance(state_dim_override, int)
+            or state_dim_override <= 0
+        ):
+            raise ValueError("state_dim_override must be a positive integer")
 
         try:
             import numpy as np
@@ -78,6 +85,7 @@ class SmolVLAController:
         self.device = self._resolve_device(torch, device)
         self.checkpoint = checkpoint.strip()
         self.robot_type = robot_type.strip()
+        self.state_dim_override = state_dim_override
         if skill_id is not None and (not isinstance(skill_id, str) or not skill_id.strip()):
             raise ValueError("skill_id must be non-empty when provided")
         self.skill_id = skill_id.strip() if skill_id is not None else None
@@ -139,7 +147,8 @@ class SmolVLAController:
                 "SmolVLA checkpoint must expose a one-dimensional "
                 "observation.state feature"
             )
-        self.state_dim = int(state_shape[0])
+        self.config_state_dim = int(state_shape[0])
+        self.state_dim = self.state_dim_override or self.config_state_dim
 
         action_feature = getattr(config, "action_feature", None)
         if action_feature is None:

@@ -5,7 +5,7 @@ motor primitives -- PICK and MOVE/PLACE -- driven by a fine-tuned SmolVLA
 policy instead of the scripted IK controller:
 
     cameras (overhead, front, wrist) + arm state + language instruction
-        -> SmolVLA (src/omni_q/skills/controllers/smolvla.py, the governed seam)
+        -> SmolVLA proposal-only adapter
         -> seven Cartesian deltas per 10 Hz tick
         -> workspace-safety check (the world's own)
         -> the world's pad-pose IK applies the delta (a few iterations)
@@ -20,6 +20,10 @@ share of every run is measurable, never implied.
 
 The plate (a two-arm rim pinch) stays on the governed bimanual primitive:
 the policy is single-arm.
+
+This module is an offline simulation/evaluation adapter.  It records the VLA
+proposal and the governed-primitive fallback, but it is not the production
+``SkillRuntime`` and does not promote the checkpoint to ``ACTIVE``.
 """
 from __future__ import annotations
 
@@ -148,10 +152,11 @@ class VLAWorld(IntelTableWorld):
                                 "observation.images.camera3": self._cam(f"{arm}_wrist")},
                 state_provider=self._state(arm_offset),
                 instruction_provider=lambda req, a=arm_offset: self._vla_instruction[a],
-                device=self.device, robot_type="so101", skill_id=f"vla_{arm}")
-            # the fine-tuned checkpoint's normalizer stats are 9-d (this dataset's state);
-            # its inherited config.json still declares the base's 6 -- trust the stats
-            self._vla_ctrl[arm_offset].state_dim = 9
+                device=self.device, robot_type="so101", skill_id=f"vla_{arm}",
+                # The fine-tuned checkpoint's normalizer stats are 9-d (this
+                # dataset's state); its inherited config.json still declares
+                # the base's 6. Keep that mismatch explicit at construction.
+                state_dim_override=9)
         return self._vla_ctrl[arm_offset]
 
     # -- one VLA-driven step -----------------------------------------------

@@ -10,8 +10,9 @@ per arm, what a VLA policy would see and what the expert actually did:
 * observation.state (9)  -- the arm's six joint positions, the jaw command,
   and the fixed-pad xyz
 * action (7)  -- the Cartesian delta of the fixed pad over the next tick
-  (mm, deg) and the jaw command delta: the same seven fields the governed
-  SmolVLA seam (src/omni_q/skills/controllers/smolvla.py) proposes
+  (mm, deg) and, by default, the absolute jaw command.  ``--jaw-mode delta``
+  preserves the older jaw-delta format, but must not be used with the
+  ``absjaw`` training/evaluation pipeline.
 * task  -- the step the arm is executing right now, in language
   ("pick up the cup with the right arm", "hold position", ...)
 
@@ -19,7 +20,7 @@ One episode per (seed, arm), written with scripts/record_smolvla_dataset.py
 (the teammate's recorder, current LeRobot API). Nothing in the submission
 stack is modified; the run is the real one.
 
-    python integrations/intel/vla/record_expert_demos.py --seeds 900 901 ... --root datasets/so101_table_vla
+    python integrations/intel/vla/record_expert_demos.py --seeds 900 901 ... --root datasets/so101_table_vla_absjaw --jaw-mode absolute
 """
 from __future__ import annotations
 
@@ -30,6 +31,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -55,6 +57,23 @@ def _rpy(R: np.ndarray) -> np.ndarray:
 
 def _wrap(a: np.ndarray) -> np.ndarray:
     return (a + math.pi) % (2 * math.pi) - math.pi
+
+
+def expert_action(
+    previous: dict[str, Any],
+    current: dict[str, Any],
+    *,
+    jaw_absolute: bool = True,
+) -> dict[str, float]:
+    """Encode one expert transition using the selected jaw contract."""
+    dpos = (current["pos"] - previous["pos"]) * 1000.0
+    drpy = np.degrees(_rpy(current["R"] @ previous["R"].T))
+    jaw = (
+        current["jaw"]
+        if jaw_absolute
+        else current["jaw"] - previous["jaw"]
+    )
+    return dict(zip(ACTION_FIELDS, [*dpos, *drpy, jaw]))
 
 
 def instruction(step_text: str | None, arm: str) -> str:
@@ -130,7 +149,13 @@ class Sampler:
         return Spy()
 
 
-def record_seed(seed: int, recorder: SmolVLADatasetRecorder, hz: int = 10) -> dict:
+def record_seed(
+    seed: int,
+    recorder: SmolVLADatasetRecorder,
+    hz: int = 10,
+    *,
+    jaw_absolute: bool = True,
+) -> dict:
     from omni_q.intel_sim import IntelSceneConfig, TABLE_SETTING_PHRASINGS, build_intel_sim_engine, _per_object_pick_place_outcomes
 
     goal = TABLE_SETTING_PHRASINGS[(seed - 900) % len(TABLE_SETTING_PHRASINGS)]
@@ -178,15 +203,14 @@ def record_seed(seed: int, recorder: SmolVLADatasetRecorder, hz: int = 10) -> di
     r = eng.run(goal)
     po = _per_object_pick_place_outcomes(r)
     placed = sum(int(v["placed"]) for v in po.values())
-    # write one episode per arm: action[i] = delta from row i to row i+1
+    # Position/orientation remain deltas; the default seventh action is the
+    # absolute jaw command used by the absjaw training/evaluation pipeline.
     frames = 0
     for off, arm in ARMS.items():
         rows = s.rows[off]
         for i in range(len(rows) - 1):
             a, b = rows[i], rows[i + 1]
-            dpos = (b["pos"] - a["pos"]) * 1000.0
-            drpy = np.degrees(_rpy(b["R"] @ a["R"].T))   # relative rotation: small angles, no wrap
-            action = dict(zip(ACTION_FIELDS, [*dpos, *drpy, b["jaw"] - a["jaw"]]))
+            action = expert_action(a, b, jaw_absolute=jaw_absolute)
             recorder.add(state=a["state"], action=action, task=a["task"],
                          images={"observation.images.overhead": a["images"]["overhead"],
                                  "observation.images.front": a["images"]["front"],
@@ -201,8 +225,14 @@ def record_seed(seed: int, recorder: SmolVLADatasetRecorder, hz: int = 10) -> di
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", type=int, nargs="+", default=list(range(900, 920)))
-    ap.add_argument("--root", type=Path, default=ROOT / "datasets" / "so101_table_vla")
-    ap.add_argument("--repo-id", default="omni-q/so101_table_vla")
+    ap.add_argument("--root", type=Path, default=ROOT / "datasets" / "so101_table_vla_absjaw")
+    ap.add_argument("--repo-id", default="omni-q/so101_table_vla_absjaw")
+    ap.add_argument(
+        "--jaw-mode",
+        choices=("absolute", "delta"),
+        default="absolute",
+        help="seventh action contract; absolute matches the absjaw pipeline",
+    )
     args = ap.parse_args()
     if args.root.exists():
         raise SystemExit(f"{args.root} exists; choose a new --root (LeRobot datasets are append-only)")
@@ -210,17 +240,13 @@ def main() -> int:
                                       camera_sources={"observation.images.overhead": None, "observation.images.front": None,
                                                       "observation.images.wrist": None},
                                       width=W, height=H)
-    # the teammate's recorder captures from live sources at add() time; ours
-    # are already-rendered arrays, so hand them in per frame instead
-    orig_add = recorder.add
-
-    def add(*, state, action, task, images):
-        recorder.camera_sources = {k: (lambda img=v: img) for k, v in images.items()}
-        orig_add(state=state, action=action, task=task)
-    recorder.add = add
     results = []
     for seed in args.seeds:
-        res = record_seed(seed, recorder)
+        res = record_seed(
+            seed,
+            recorder,
+            jaw_absolute=args.jaw_mode == "absolute",
+        )
         results.append(res)
         print(res, flush=True)
     recorder.finalize() if hasattr(recorder, "finalize") else None

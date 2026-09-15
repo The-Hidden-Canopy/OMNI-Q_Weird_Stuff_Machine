@@ -99,6 +99,12 @@ class SmolVLADatasetRecorder:
 
     @staticmethod
     def _capture(source: Any) -> np.ndarray:
+        if source is None or (
+            not hasattr(source, "capture") and not callable(source)
+        ):
+            raise ValueError(
+                "camera source must be callable or expose capture()"
+            )
         frame = source.capture() if hasattr(source, "capture") else source()
         frame = np.asarray(frame)
         if frame.ndim != 3 or frame.shape[2] != 3:
@@ -115,6 +121,7 @@ class SmolVLADatasetRecorder:
         state: np.ndarray,
         action: Mapping[str, float],
         task: str,
+        images: Mapping[str, np.ndarray] | None = None,
     ) -> None:
         if self._finalized:
             raise RuntimeError("cannot add frames after dataset finalization")
@@ -142,8 +149,21 @@ class SmolVLADatasetRecorder:
             "action": action_vector,
             "task": task.strip(),
         }
+        if images is not None:
+            supplied = set(images)
+            expected = set(self.camera_sources)
+            if supplied != expected:
+                raise ValueError(
+                    "images must contain exactly the configured camera names: "
+                    f"expected {sorted(expected)}, got {sorted(supplied)}"
+                )
+
         for name, source in self.camera_sources.items():
-            image = self._capture(source)
+            image = (
+                self._capture(source)
+                if images is None
+                else self._validate_image(images[name])
+            )
             if image.shape != (self.height, self.width, 3):
                 raise ValueError(
                     f"{name} shape mismatch: got {image.shape}, "
@@ -152,6 +172,18 @@ class SmolVLADatasetRecorder:
             frame[name] = image
 
         self.dataset.add_frame(frame)
+
+    @staticmethod
+    def _validate_image(image: Any) -> np.ndarray:
+        """Validate an already-rendered RGB frame supplied by a caller."""
+        frame = np.asarray(image)
+        if frame.ndim != 3 or frame.shape[2] != 3:
+            raise ValueError("image must be an HxWx3 RGB frame")
+        if not np.issubdtype(frame.dtype, np.number) or not np.isfinite(frame).all():
+            raise ValueError("image contains invalid RGB data")
+        if frame.dtype != np.uint8:
+            frame = np.clip(frame, 0, 255).astype(np.uint8)
+        return frame
 
     def finish_episode(self) -> None:
         if self._finalized:
