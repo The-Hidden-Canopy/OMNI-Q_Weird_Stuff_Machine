@@ -234,6 +234,16 @@ demonstrations can now be captured with optional MuJoCo telemetry through
 but the current trained artifact is not an end-to-end motor policy and there is
 no hardware or OpenVINO policy-deployment claim here.
 
+### OpenVINO on the Intel Core 5 210H (measured 2026-09-15)
+
+Scene-trained YOLOv8n table detector, real val images, 50 warm-up + 200 timed
+(`integrations/intel/scripts/benchmark_openvino_table.py`,
+[receipt](evidence/benchmark_results/openvino_table_detector_2026-09-15/README.md)):
+INT8 (NNCF post-training quantisation calibrated on this scene) keeps mAP50 at
+0.981 (FP32 0.980) and runs **18.0 ms / 98 FPS on the CPU (FP32: 45.5 ms)**
+and **11.4 ms / 106 FPS on the Intel iGPU**, with the IR shrunk 12.4 → 3.6 MB.
+The INT8 IR is the detector the perception loop loads.
+
 ### VLA-first table setting (2026-09-15, measured)
 
 `integrations/intel/vla/` turns the seam above into a running policy:
@@ -466,6 +476,18 @@ event surface and real provider work.
   first multi-source tabletop dataset haul (2,723 unique images, measured dedup; feeds `perception/finetune.py`)
 
 ## IDA Omni reasoner (brain)
+
+**In the loop, measured 2026-09-15:** `OmniReferenceReasoner` decodes the
+plan grammar with identifier slots fenced to the world's legal ids
+(`omni_q.plan_grammar`), and `OmniPlanner` validates coherence (target zone,
+duplicates, PICK-before-MOVE, arm by role/reach and operator authority, held
+objects first, the two-arm plate first) and can complete the rest of the
+table with the governed planner's steps — every step labelled in the receipt
+as model-proposed / core-inserted / core-completed. `OMNIQ_OMNI_REASONER=omni`
+in the recording scripts records this; see
+`docs/submission-readiness-2026-09-15.md` for the numbers and limits (the
+model chooses what to handle next; it does not plan the whole table).
+
 
 The planning seam is built for a local reasoner: `src/omni_q/omni_planner.py`
 (OmniPlanner — the model advises in a constrained grammar, the governed core

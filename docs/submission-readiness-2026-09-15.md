@@ -132,6 +132,51 @@ this checkpoint; HUD tags each step VLA / handed to governed primitive; the
 governed-planner set stays in `Desktop/OMNI-Q_demo_videos/` for the
 simultaneous-arms and vision showcase clips).
 
+## Reasoner in the loop (2026-09-15, afternoon)
+
+Why it never advised: the r1 body emits the plan grammar but free decoding
+hallucinated identifier slots (`object=setting_1`), so every proposal failed
+validation → 100 % fallback. Fix, measured: `OmniReferenceReasoner` now
+decodes with identifier slots **fenced to the world's legal object ids and
+zones** (`omni_q.plan_grammar`, the technique the 2026-09-13 probe measured
+at 3.8× acceptance), and `OmniPlanner` validates *coherence* on top of
+legality — MOVE only to the object's target zone, duplicates dropped, a
+PICK inserted before a MOVE of an un-held object, the arm assigned by the
+same role/reach rule the deterministic planner uses, operator `prefer_arm`
+honoured, held objects carried first, the two-arm plate first (its corridors)
+— and, opt-in, completes the objects the model did not address with the
+governed planner's steps. Receipts label every step: `model-proposed step,
+core-validated`, `core-inserted PICK`, `core-completed`, `core-reordered`.
+Measured on seed 903 with the real checkpoint: decision 1 proposed 4 steps,
+1 accepted (`MOVE spoon → right`), the run resolved 5/5 in 218 s of wall
+time (≈45 s per reasoner decision on the RTX 4050; decode time is invisible in
+the videos because frames are sim-time). The model's contribution is
+*which object next / which arm*; it does not plan the whole table. Recording
+mode: `OMNIQ_OMNI_REASONER=omni` (+ checkpoint/receipt env) in the recording
+scripts; the HUD prints each decision (proposed / accepted / rejected + why /
+core-completed). The OMNI-advised video set is `Desktop/OMNI-Q_demo_videos_OMNI/`
+(reasoner + SmolVLA motion + governed core in the same runs).
+
+## OpenVINO on our chip (2026-09-15)
+
+The hosts do not require a Core Ultra part; the requirement is to show the
+optimisation and that quality is preserved. On this laptop's Intel Core 5
+210H (CPU + Intel iGPU), OpenVINO 2026.3, the scene-trained YOLOv8n detector,
+real 640×640 val images, 50 warm-up + 200 timed (`integrations/intel/scripts/benchmark_openvino_table.py`,
+receipt `evidence/benchmark_results/openvino_table_detector_2026-09-15/`):
+
+| precision | mAP50 / mAP50-95 (268 val) | IR | CPU latency (mean) | CPU throughput | iGPU latency | iGPU throughput |
+|---|---|---|---|---|---|---|
+| FP32 | 0.980 / 0.917 | 12.4 MB | 45.5 ms | 39 FPS | 13.4 ms | 96 FPS |
+| FP16 | 0.979 / 0.916 | 6.4 MB | 45.4 ms | 39 FPS | 14.5 ms | 95 FPS |
+| **INT8 (NNCF PTQ, scene-calibrated)** | **0.981 / 0.915** | **3.6 MB** | **18.0 ms** | **98 FPS** | **11.4 ms** | **106 FPS** |
+
+INT8 is 2.5× faster than FP32 on the CPU with no accuracy loss on this
+task; the INT8 IR (`models/table_yolo_v4_int8_openvino_model/`) is what the
+perception loop now loads. Device selection is explicit (`--device CPU|GPU.0`)
+and the throughput hint uses OpenVINO's async queue (3 requests on CPU, 32–64
+on the iGPU). Not done: the SmolVLA policy and the reasoner under OpenVINO.
+
 ## Speechmatics bonus
 
 Voice path is real (transport, aggregation, authority checks, TTS sink) and
