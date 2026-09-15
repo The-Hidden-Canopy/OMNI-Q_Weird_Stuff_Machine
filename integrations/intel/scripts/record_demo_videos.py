@@ -148,7 +148,10 @@ def authority(seed: int):
         w.apply_transitions_parallel = apply_pair
         r = eng.run(TABLE_SETTING_PHRASINGS[0])
         arms = [a.get("arm") for a in r.as_dict()["actions"] if a["op"] in ("PICK", "MOVE")]
-        return f"arms in order: {arms}"
+        from omni_q.intel_sim import _per_object_pick_place_outcomes
+        po = _per_object_pick_place_outcomes(r)
+        tally = "".join("P" if v["placed"] else "-" for v in po.values())
+        return f"placed {tally} resolved={bool(r.metrics.get('resolved'))}  arms in order: {arms}"
     return world, run
 
 
