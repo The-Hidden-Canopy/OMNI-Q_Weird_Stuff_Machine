@@ -977,6 +977,19 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     visual = ET.SubElement(root, "visual")
     # offwidth/offheight: offscreen buffer for 1280x720 demo recordings (render-only)
     ET.SubElement(visual, "global", {"azimuth": "125", "elevation": "-28", "offwidth": "1280", "offheight": "720"})
+    ET.SubElement(visual, "headlight", {"ambient": ".30 .30 .30", "diffuse": ".35 .35 .35", "specular": ".1 .1 .1"})
+    # Render-only room: a gradient sky and a lit floor so the table reads as
+    # a table standing in a room (2026-09-14: a dark slab over a near-black
+    # plane looked sunk into the ground on every recording).
+    asset = root.find("asset")
+    if asset is None:
+        asset = ET.SubElement(root, "asset")
+    ET.SubElement(asset, "texture", {"name": "room_sky", "type": "skybox", "builtin": "gradient",
+                                     "rgb1": ".55 .62 .70", "rgb2": ".18 .20 .24", "width": "256", "height": "256"})
+    ET.SubElement(asset, "texture", {"name": "room_floor_tex", "type": "2d", "builtin": "checker",
+                                     "rgb1": ".32 .30 .28", "rgb2": ".26 .24 .22", "width": "256", "height": "256"})
+    ET.SubElement(asset, "material", {"name": "room_floor", "texture": "room_floor_tex", "texrepeat": "6 6",
+                                      "texuniform": "true", "reflectance": ".05"})
     worldbody = ET.SubElement(root, "worldbody")
     # A real, physics-inert "different lighting condition" axis: the light's
     # own base position/direction/intensity are fixed above, but a
@@ -1020,8 +1033,15 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
     # z-fought between them (torn table edges, moire in every recording) and
     # contacts were being booked against "floor" on the tabletop.
     ET.SubElement(worldbody, "geom", {
-        "name": "floor", "type": "plane", "pos": "0 0 -.75", "size": "0 0 .05", "rgba": ".08 .12 .12 1",
+        "name": "floor", "type": "plane", "pos": "0 0 -.75", "size": "0 0 .05", "material": "room_floor",
     })
+    # Table legs, tabletop to floor. Visual scale only: nothing in the task
+    # reaches below the tabletop, so they never take part in a contact.
+    for lx, ly in ((-.38, -.42), (.38, -.42), (-.38, .22), (.38, .22)):
+        ET.SubElement(worldbody, "geom", {
+            "name": f"table_leg_{'l' if lx < 0 else 'r'}{'f' if ly < 0 else 'b'}", "type": "box",
+            "pos": f"{lx} {ly} -.425", "size": ".025 .025 .325", "rgba": ".20 .12 .07 1",
+        })
     # pos.z -0.05 puts the box's top face at world z = 0 -- a real surface
     # flush with the floor plane. The previous -0.055 sank the top to
     # z = -0.005 (below the floor), so nothing ever rested on the table:
