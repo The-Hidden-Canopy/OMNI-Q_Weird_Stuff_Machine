@@ -73,3 +73,4 @@ external/unitree_rl_gym/
 
 # LeRobot demonstration datasets (local, large)
 datasets/
+outputs/

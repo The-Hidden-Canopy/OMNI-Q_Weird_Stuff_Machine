@@ -12,6 +12,7 @@ outcome are verifiable from the video alone.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 from pathlib import Path
@@ -20,6 +21,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _recording import Recorder, _open_writer, draw_text_block  # noqa: E402
+
+# VLA-first mode (2026-09-15): with OMNIQ_VLA_CHECKPOINT set, every engine in
+# this process runs on integrations/intel/vla/vla_world.VLAWorld -- SmolVLA
+# drives the single-arm PICK/MOVE steps; arms run one step at a time so the
+# policy's cameras render on the main thread.
+if os.environ.get("OMNIQ_VLA_CHECKPOINT"):
+    os.environ.setdefault("OMNIQ_PARALLEL_ARMS", "0")
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "vla"))
+    import vla_world  # noqa: E402
+    vla_world.install()
 
 DEFAULT_OUT = Path.home() / "OneDrive" / "Desktop" / "OMNI-Q_demo_videos"
 DIRECTOR = "free:150,-30,0.95,0,-0.12,0.05"
@@ -78,7 +89,9 @@ def main() -> int:
         card(start, [(f"Seed {seed} ({i + 1} of {args.n})   command: \"{goal}\"", 0.9),
                      ("randomized: placement (+/-12 mm) & yaw (+/-11 deg), object mass & friction, colour, light angle & intensity, background, prompt", 0.55),
                      (variation_text(world.model, seed), 0.5),
-                     ("two SO-101 arms, MuJoCo, real contact physics -- both arms work at once", 0.55)], 75)
+                     (("two SO-101 arms, MuJoCo, real contact physics -- SmolVLA (fine-tuned VLA) drives each arm's motion; governed primitive as counted fallback"
+                       if os.environ.get("OMNIQ_VLA_CHECKPOINT") else
+                       "two SO-101 arms, MuJoCo, real contact physics -- both arms work at once"), 0.55)], 75)
         world._mujoco = rec.spy()
         t0 = time.time()
         receipt = engine.run(goal)
@@ -103,8 +116,13 @@ def main() -> int:
         tally["final_ok"] = tally.get("final_ok", 0) + int(final["all_in_zone_upright"])
         status = "  ".join(f"{k.split('_')[0]}: {'in zone, upright' if v['in_zone_upright'] else 'NOT in zone'} ({v['distance_m'] * 100:.0f} cm)"
                            for k, v in final.items() if k != "all_in_zone_upright")
+        vla_line = []
+        stats = getattr(world, "vla_stats", None)
+        if stats:
+            ok = sum(1 for a in stats if a.get("ok")); fb = sum(1 for a in stats if not a.get("ok"))
+            vla_line = [(f"VLA (SmolVLA) completed {ok} single-arm steps itself; {fb} handed to the governed primitive", 0.5)]
         card(end, [(f"Seed {seed}: final state {final_n}/5 in zone & upright   (engine: {placed}/5 placed, resolved={resolved})", 0.8),
-                   (status, 0.5),
+                   (status, 0.5)] + vla_line + [
                    (f"running: {tally['final_ok']}/{tally['trials']} trials fully set, {tally['resolved']}/{tally['trials']} resolved", 0.6)], 75)
         print(f"seed {seed}: final {final_n}/5, placed {placed}/5 resolved={resolved} ({time.time() - t0:.0f}s)", flush=True)
     writer.release()

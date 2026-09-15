@@ -23,9 +23,11 @@ the policy is single-arm.
 """
 from __future__ import annotations
 
+import collections
 import math
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -39,6 +41,7 @@ from omni_q import intel_sim  # noqa: E402
 from omni_q.intel_sim import (  # noqa: E402
     BIMANUAL_OBJECTS, GRIPPER_CLOSED, GRIPPER_OPEN, LIFT_VERIFY_MIN, ZONE_POSITIONS, IntelTableWorld,
 )
+from omni_q.contracts import ActionAuthorization, AuthorizationVerdict  # noqa: E402
 from omni_q.skills.contracts import SkillRequest  # noqa: E402
 from omni_q.skills.controllers.smolvla import SmolVLAController  # noqa: E402
 
@@ -67,6 +70,8 @@ class VLAWorld(IntelTableWorld):
         super().__init__(*a, **k)
         import mujoco
         self._vla_renderer = mujoco.Renderer(self.model, height=H, width=W)
+        self._vla_render_requests: collections.deque = collections.deque()
+        self._vla_render_lock = threading.Lock()
         self._vla_ctrl: dict[int, SmolVLAController] = {}
         self._vla_instruction: dict[int, str] = {0: "", 6: ""}
         self.vla_stats: list[dict[str, Any]] = []
@@ -75,9 +80,48 @@ class VLAWorld(IntelTableWorld):
     # -- observation providers --------------------------------------------
     def _cam(self, name: str):
         def capture():
-            self._vla_renderer.update_scene(self.data, camera=name)
-            return self._vla_renderer.render().copy()
+            if threading.current_thread() is threading.main_thread():
+                self._vla_renderer.update_scene(self.data, camera=name)
+                return self._vla_renderer.render().copy()
+            # both arms at once: this arm's step runs on a worker thread and the
+            # GL context lives on the main thread -- ask it to render for us
+            done = threading.Event()
+            holder: dict = {}
+            with self._vla_render_lock:
+                self._vla_render_requests.append((name, done, holder))
+            done.wait()
+            return holder["img"]
         return capture
+
+    def _service_renders(self) -> None:
+        while True:
+            with self._vla_render_lock:
+                if not self._vla_render_requests:
+                    return
+                name, done, holder = self._vla_render_requests.popleft()
+            self._vla_renderer.update_scene(self.data, camera=name)
+            holder["img"] = self._vla_renderer.render().copy()
+            done.set()
+
+    def apply_transitions_parallel(self, requests):
+        inner = self._mujoco
+        world = self
+
+        class Pump:
+            def __getattr__(self, n):
+                return getattr(inner, n)
+
+            def main_thread_pump(self):
+                world._service_renders()
+                p = getattr(inner, "main_thread_pump", None)
+                if p is not None:
+                    p()
+        self._mujoco = Pump()
+        try:
+            return super().apply_transitions_parallel(requests)
+        finally:
+            self._mujoco = inner
+            self._service_renders()
 
     def _state(self, arm_offset: int):
         def provider():
@@ -92,12 +136,16 @@ class VLAWorld(IntelTableWorld):
             arm = "left" if arm_offset == 0 else "right"
             self._vla_ctrl[arm_offset] = SmolVLAController(
                 self.checkpoint,
-                camera_sources={"observation.images.overhead": self._cam("table_overhead"),
-                                "observation.images.front": self._cam("third_person"),
-                                "observation.images.wrist": self._cam(f"{arm}_wrist")},
+                # the base policy's camera slots: camera1 = overhead, camera2 = front, camera3 = wrist (train_smolvla.sh rename_map)
+                camera_sources={"observation.images.camera1": self._cam("table_overhead"),
+                                "observation.images.camera2": self._cam("third_person"),
+                                "observation.images.camera3": self._cam(f"{arm}_wrist")},
                 state_provider=self._state(arm_offset),
                 instruction_provider=lambda req, a=arm_offset: self._vla_instruction[a],
                 device=self.device, robot_type="so101", skill_id=f"vla_{arm}")
+            # the fine-tuned checkpoint's normalizer stats are 9-d (this dataset's state);
+            # its inherited config.json still declares the base's 6 -- trust the stats
+            self._vla_ctrl[arm_offset].state_dim = 9
         return self._vla_ctrl[arm_offset]
 
     # -- one VLA-driven step -----------------------------------------------
@@ -105,9 +153,16 @@ class VLAWorld(IntelTableWorld):
         ctrl = self._controller(arm_offset)
         self._vla_instruction[arm_offset] = instruction
         ctrl.reset()
+        # The engine authorized this step before it reached the world (apply_transition
+        # runs only after the mission-envelope check); bind the VLA request to that step.
+        step = getattr(self, "_current_request", None)
+        auth = ActionAuthorization(run_id="engine", step_id=getattr(step, "step_id", "vla"), op=getattr(step, "op", "PICK"),
+                                   verdict=AuthorizationVerdict.ALLOW, reason="governed step reached the world adapter (engine authorized)",
+                                   state_revision=int(self.revision), envelope_digest="engine:apply_transition")
         request = SkillRequest(request_id=f"vla-{int(time.time() * 1000)}", org_id="omni-q", capability="manipulate",
                                operation=instruction, arm_id="left" if arm_offset == 0 else "right",
-                               expected_world_revision=int(self.revision), skill_id=f"vla_{'left' if arm_offset == 0 else 'right'}")
+                               expected_world_revision=int(self.revision), authorization=auth,
+                               skill_id=f"vla_{'left' if arm_offset == 0 else 'right'}")
         iters = max(4, int(round(1.0 / (self.hz * float(self.model.opt.timestep)))) // 3)
         lo, hi = self.model.jnt_range[arm_offset + 5]
         ticks = int(budget_s * self.hz)
@@ -132,6 +187,13 @@ class VLAWorld(IntelTableWorld):
             if success():
                 return {"ok": True, "ticks": tick + 1, "reason": None, "wall_s": round(time.time() - t0, 1)}
         return {"ok": False, "ticks": ticks, "reason": "budget exhausted", "wall_s": round(time.time() - t0, 1)}
+
+    def apply_transition(self, request):
+        self._current_request = request
+        try:
+            return super().apply_transition(request)
+        finally:
+            self._current_request = None
 
     def _snapshot(self):
         return (self.data.qpos.copy(), self.data.qvel.copy(), self.data.ctrl.copy(), float(self.data.time), self._controller_steps)

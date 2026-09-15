@@ -10,6 +10,7 @@ here is evidence; the receipts for these runs live under evidence/.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 from pathlib import Path
@@ -18,6 +19,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _recording import Recorder  # noqa: E402
+
+# VLA-first mode (2026-09-15): with OMNIQ_VLA_CHECKPOINT set, every engine in
+# this process runs on integrations/intel/vla/vla_world.VLAWorld -- SmolVLA
+# drives the single-arm PICK/MOVE steps; arms run one step at a time so the
+# policy's cameras render on the main thread.
+if os.environ.get("OMNIQ_VLA_CHECKPOINT"):
+    os.environ.setdefault("OMNIQ_PARALLEL_ARMS", "0")
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "vla"))
+    import vla_world  # noqa: E402
+    vla_world.install()
 
 DEFAULT_OUT = Path.home() / "OneDrive" / "Desktop" / "OMNI-Q_demo_videos"
 GRID = ["third_person", "table_overhead", "left_flank", "right_flank"]

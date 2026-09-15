@@ -221,10 +221,13 @@ class Recorder:
         def render():
             done = " ".join(short[o] for o in objects if o in state["placed"]) or "-"
             todo = " ".join(short[o] for o in objects if o not in state["placed"]) or "-"
-            rec.hud = [f'command: "{rec.command}"',
-                       f"left arm:  {state['left']}",
-                       f"right arm: {state['right']}",
-                       f"placed: {done}   remaining: {todo}"] + list(rec.hud_extra)
+            lines = [f'command: "{rec.command}"',
+                     f"left arm:  {state['left']}",
+                     f"right arm: {state['right']}",
+                     f"placed: {done}   remaining: {todo}"]
+            if "vla_done" in state:
+                lines.append(f"VLA steps completed by SmolVLA: {state['vla_done']}   handed to governed primitive: {state['vla_fallback']}")
+            rec.hud = lines + list(rec.hud_extra)
 
         def begin(reqs, paired):
             for req in reqs:
@@ -236,7 +239,18 @@ class Recorder:
                 ok = getattr(res, "ok", False)
                 if ok and req.op in {"MOVE", "PLACE"} and req.args.get("object") in short:
                     state["placed"].append(req.args.get("object"))
-                state[arm_of(req)] = ("done: " if ok else "FAILED: ") + text(req)
+                detail = getattr(res, "detail", None) or {}
+                tag = ""
+                if detail.get("grasp") == "vla_smolvla":
+                    tag = "  [VLA: SmolVLA]"
+                elif detail.get("fallback"):
+                    tag = "  [VLA gave up -> governed primitive]"
+                elif detail.get("grasp") == "bimanual_edge":
+                    tag = "  [two-arm primitive]"
+                state[arm_of(req)] = ("done: " if ok else "FAILED: ") + text(req) + tag
+                if detail.get("grasp") == "vla_smolvla" or detail.get("fallback"):
+                    state["vla_done"] = state.get("vla_done", 0) + int(detail.get("grasp") == "vla_smolvla")
+                    state["vla_fallback"] = state.get("vla_fallback", 0) + int(bool(detail.get("fallback")))
             render()
 
         orig, orig_par = world.apply_transition, world.apply_transitions_parallel
