@@ -50,6 +50,45 @@ license. OMNI-Q's root MIT license does not replace that Apache-2.0 license.
   [`src/omni_q/skills/controllers/smolvla.py`](src/omni_q/skills/controllers/smolvla.py)
   and [`scripts/record_smolvla_dataset.py`](scripts/record_smolvla_dataset.py)
 
+### Hugging Face `lerobot/smolvla_base` (SmolVLA)
+
+- Source: [huggingface.co/lerobot/smolvla_base](https://huggingface.co/lerobot/smolvla_base)
+- License: Apache License 2.0
+- OMNI-Q treatment: the base policy is downloaded at fine-tune time
+  (`integrations/intel/vla/train_smolvla.sh`); it is not copied into this
+  repository. Our fine-tuned action expert is a derived work, published with
+  attribution under the same Apache-2.0 terms in the gated
+  [`The-Hidden-Canopy/omni-q-table-checkpoints`](https://huggingface.co/The-Hidden-Canopy/omni-q-table-checkpoints)
+  repo (`smolvla_so101_table/`), fetched by `scripts/fetch_checkpoints.sh`.
+
+### Ultralytics YOLOv8 (`ultralytics`)
+
+- Source: [ultralytics/ultralytics](https://github.com/ultralytics/ultralytics)
+- License: AGPL-3.0 (Ultralytics also offers an Enterprise license)
+- OMNI-Q treatment: optional dependency (`intel` extra) used to train, export
+  and validate the scene detector (`integrations/intel/scripts/train_table_yolo.py`,
+  `benchmark_openvino_table.py`, `make_table_yolo_dataset.py`); no Ultralytics
+  source is copied here. The fine-tuned detector weights start from the
+  `yolov8n` checkpoint and are therefore AGPL-3.0 derived works: the exported
+  OpenVINO IRs committed under `models/table_yolo_v4_*_openvino_model/` and the
+  `.pt` weights on [`KissTheHabit/yolov8n-table-yolo`](https://huggingface.co/KissTheHabit/yolov8n-table-yolo)
+  are distributed under AGPL-3.0. Inference in `src/omni_q/vision.py` runs the
+  IR through OpenVINO directly and does not import Ultralytics.
+
+### Google DeepMind MuJoCo
+
+- Source: [google-deepmind/mujoco](https://github.com/google-deepmind/mujoco)
+- License: Apache License 2.0
+- OMNI-Q treatment: runtime dependency (`mujoco` wheel); the Menagerie SO-ARM100
+  assets vendored above are covered by their own notice.
+
+### Intel OpenVINO / NNCF
+
+- Source: [openvinotoolkit/openvino](https://github.com/openvinotoolkit/openvino), [openvinotoolkit/nncf](https://github.com/openvinotoolkit/nncf)
+- License: Apache License 2.0
+- OMNI-Q treatment: runtime dependency for detector inference, IR export and
+  INT8 post-training quantisation; nothing copied.
+
 ## Reference-only sources
 
 The following repositories were inspected for controller, simulator, training,

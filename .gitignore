@@ -74,3 +74,6 @@ external/unitree_rl_gym/
 # LeRobot demonstration datasets (local, large)
 datasets/
 outputs/
+
+# OMNI-Q table checkpoints fetched by scripts/fetch_checkpoints.sh (gated HF repo)
+models/hf_omni_q_table/

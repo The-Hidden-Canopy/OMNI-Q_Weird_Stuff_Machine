@@ -15,7 +15,8 @@ vla_world.py             offline evaluation adapter: the proposal-only SmolVLA c
 run_vla_eval.py          seeds -> per-op VLA-vs-fallback counts, task outcome, end-of-run physical check; --record clips
 ```
 
-Reproduce:
+Reproduce (or skip the first two steps: `bash scripts/fetch_checkpoints.sh`
+downloads the fine-tune used for the submission clips):
 
 ```bash
 .venv/Scripts/python -m pip install -e ".[intel,smolvla]"

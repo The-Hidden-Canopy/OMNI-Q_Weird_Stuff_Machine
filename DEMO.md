@@ -147,12 +147,18 @@ check). Clips are numbered in the brief's demonstration order; README.txt in
 the folder describes each.
 
 **VLA mode (2026-09-15, the set for submission):** with
-`OMNIQ_VLA_CHECKPOINT=<fine-tuned SmolVLA dir>` exported, both scripts run every
-engine on `integrations/intel/vla/vla_world.VLAWorld` — the policy leads
-every single-arm PICK/MOVE and the governed primitive completes it; the HUD
-tags each step `[VLA-led -> governed completion]` / `[VLA: SmolVLA]` and counts
-them. See `integrations/intel/vla/README.md` for the record → fine-tune →
-evaluate commands; measured numbers in `docs/submission-readiness-2026-09-15.md`.
+`OMNIQ_VLA_CHECKPOINT=<fine-tuned SmolVLA dir>` exported (fetch it with
+`bash scripts/fetch_checkpoints.sh`), both scripts run every engine on
+`integrations/intel/vla/vla_world.VLAWorld` — the policy leads every
+single-arm PICK/MOVE and the governed primitive completes it; the HUD tags
+each step `[VLA-led -> governed completion]` / `[VLA: SmolVLA]` and counts
+them. **OMNI-advised mode:** add `OMNIQ_OMNI_REASONER=omni` plus
+`OMNIQ_OMNI_CHECKPOINT` / `OMNIQ_OMNI_RECEIPT` and the IDA Omni reasoner
+proposes each plan step (HUD prints every decision). Three recorded sets live
+side by side on the Desktop (`OMNI-Q_demo_videos`, `_VLA`, `_OMNI`), each with
+a README.txt that states what controlled the arms. See
+`integrations/intel/vla/README.md` for the record → fine-tune → evaluate
+commands; measured numbers in `SUBMISSION.md`.
 
 What the sim is and is not: the arms, joint limits, servo torque limits and
 gripper are the vendored MuJoCo Menagerie SO-ARM100 (unchanged); every grasp

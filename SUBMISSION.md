@@ -142,9 +142,13 @@ seed, 03 perception e2e with YOLO/OpenVINO overlays, 04 two-arm plate,
 09 ten-seed montage. Three sets exist, each with a README that states what
 controlled the arms:
 
-* governed set (both arms simultaneous, 10/10 montage);
-* VLA-first set (SmolVLA leads every single-arm step; HUD tags);
-* OMNI-advised set (reasoner decisions printed on the HUD + SmolVLA motion).
+* governed set (both arms simultaneous; 10/10 montage on seeds 900–907, 909, 910);
+* VLA-first set (SmolVLA leads every single-arm step; HUD tags; 10/10 montage on seeds 901, 903, 905–907, 910–914);
+* OMNI-advised set (reasoner decisions printed on the HUD + SmolVLA motion; 10/10 montage on seeds 902–906, 910, 911, 913, 917, 918 — OMNI-mode takes vary between runs, so failed takes were swapped for other seeds and every failed take is kept in `replaced/` with its tally).
+
+Every clip's end state is checked from physics after the run (all five objects
+in zone and upright), not only "placed at some point"; the recording log prints
+`final N/5 in zone & upright` per clip.
 
 Extras (labelled on screen): a 4-unit / 8-arm fleet where each unit is a real
 engine run; a 6-arm relay and a drone/rover escalation that are scripted
@@ -159,7 +163,14 @@ and provenance are recorded in [`evidence/demo/README.md`](evidence/demo/README.
 ```bash
 py -3 -m venv .venv
 .venv/Scripts/python -m pip install -e ".[intel,smolvla,speechmatics]"
-PYTHONPATH=src .venv/Scripts/python -m pytest tests -q                             # 643 tests collected in this checkout; full pass not claimed here
+PYTHONPATH=src .venv/Scripts/python -m pytest tests -q                             # 719 passed, 9 skipped (2026-09-15)
+
+# trained artifacts (gitignored; gated HF repo, access auto-approved after `hf auth login`):
+#   our SmolVLA fine-tune + the OMNI planner checkpoint -> models/hf_omni_q_table/
+bash scripts/fetch_checkpoints.sh
+export OMNIQ_VLA_CHECKPOINT=$PWD/models/hf_omni_q_table/smolvla_so101_table
+export OMNIQ_OMNI_CHECKPOINT=models/hf_omni_q_table/omni_planner/omni_planner_r1_final.pt OMNIQ_OMNI_RECEIPT=models/hf_omni_q_table/omni_planner/omni_planner_r1_final_receipt.json
+# the scene detector's OpenVINO IRs (FP32, INT8) are committed under models/; nothing else to download
 
 # 10-seed randomized evaluation (governed core; add OMNIQ_VLA_CHECKPOINT / OMNIQ_OMNI_REASONER for the other modes)
 PYTHONPATH=src .venv/Scripts/python -c "from omni_q.intel_sim import run_intel_table_evaluation_report as r; print(r('tmp/harness_seed900_x10', trials=10, seed=900))"
@@ -167,16 +178,18 @@ PYTHONPATH=src .venv/Scripts/python -c "from omni_q.intel_sim import run_intel_t
 # VLA: record demos -> fine-tune -> evaluate (integrations/intel/vla/README.md)
 .venv/Scripts/python integrations/intel/vla/record_expert_demos.py --seeds 900 901 902 903 904 --root datasets/so101_table_vla_absjaw --repo-id omni-q/so101_table_vla_absjaw --jaw-mode absolute
 bash integrations/intel/vla/train_smolvla.sh 8000 8
-OMNIQ_VLA_CHECKPOINT=outputs/train/<run>/checkpoints/008000/pretrained_model .venv/Scripts/python integrations/intel/vla/run_vla_eval.py --seeds 900 901 902 903 904 905 906 907 908 909
+.venv/Scripts/python integrations/intel/vla/run_vla_eval.py --seeds 900 901 902 903 904 905 906 907 908 909   # uses OMNIQ_VLA_CHECKPOINT
 
 # Intel inference benchmark (every OpenVINO device on the box, FP32/FP16/INT8, LATENCY + THROUGHPUT, mAP check)
-.venv/Scripts/python integrations/intel/scripts/benchmark_openvino_table.py
+.venv/Scripts/python integrations/intel/scripts/benchmark_openvino_table.py      # falls back to the committed IRs + live scene renders on a fresh clone
+.venv/Scripts/python integrations/intel/scripts/plot_openvino_benchmark.py evidence/benchmark_results/openvino_table_detector_2026-09-15/receipt.json
 
 # Demo clips (writes outside the repo, Desktop/OMNI-Q_demo_videos*)
 .venv/Scripts/python integrations/intel/scripts/record_demo_videos.py
 .venv/Scripts/python integrations/intel/scripts/record_seed_montage.py --seeds 900 901 902 903 904 905 906 907 909 910
-#   VLA-first:     OMNIQ_VLA_CHECKPOINT=<checkpoint dir>  (same commands)
-#   OMNI-advised:  + OMNIQ_OMNI_REASONER=omni OMNIQ_OMNI_CHECKPOINT=models/omni_planner_r1_final.pt OMNIQ_OMNI_RECEIPT=models/omni_planner_r1_final_receipt.json
+#   VLA-first:     with OMNIQ_VLA_CHECKPOINT exported (same commands; --out Desktop/OMNI-Q_demo_videos_VLA)
+#   OMNI-advised:  + OMNIQ_OMNI_REASONER=omni (and the two OMNIQ_OMNI_* variables above; --out Desktop/OMNI-Q_demo_videos_OMNI)
+#   the montage caches passing seeds per mode (_montage_cache*/) so a failed seed costs one seed's re-run
 ```
 
 Live viewer versions of every clip: [`DEMO.md`](DEMO.md). Full status against
@@ -185,6 +198,9 @@ the rubric, with gaps: [`docs/submission-readiness-2026-09-15.md`](docs/submissi
 ## 9. Known gaps (stated, not hidden)
 
 * SmolVLA and the reasoner are not yet under OpenVINO; the detector is.
+* OMNI-advised runs are not deterministic across takes (the reasoner's proposals
+  depend on the policy's rollouts): ~40 % of OMNI-mode seed attempts failed
+  while recording, versus 2/10 in the VLA-first harness. Reported as measured.
 * Benchmarks were taken on a Core 5 210H, not a Core Ultra Series 2/3; the
   script is device-agnostic and will pick up the NPU there.
 * The policy does not finish grasps on its own yet; the governed primitive
