@@ -407,17 +407,29 @@ class IntelSceneConfig:
 
     seed: int = 0
     randomized: bool = False
-    position_jitter_m: float = 0.003
-    yaw_jitter_rad: float = 0.08
+    # 2026-09-14: widened from 3 mm / 0.08 rad -- the brief scores robustness
+    # under placement, weight, friction, lighting and background across 10
+    # seeds, and +/-3 mm was not a visibly different placement.
+    position_jitter_m: float = 0.012
+    yaw_jitter_rad: float = 0.20
     color_jitter: float = 0.12
     light_diffuse_jitter: float = 0.30
     light_angle_jitter_rad: float = 0.35
+    # real physics axes: each piece's mass x U(1-m, 1+m), sliding friction x U(1-f, 1+f)
+    mass_jitter: float = 0.25
+    friction_jitter: float = 0.15
+    # background: floor checker tones
+    background_jitter: float = 0.10
 
     def __post_init__(self) -> None:
-        if not math.isfinite(self.position_jitter_m) or not 0.0 <= self.position_jitter_m <= 0.010:
-            raise ValueError("position_jitter_m must be between 0 and 0.010 m")
-        if not math.isfinite(self.yaw_jitter_rad) or not 0.0 <= self.yaw_jitter_rad <= 0.25:
-            raise ValueError("yaw_jitter_rad must be between 0 and 0.25 rad")
+        if not math.isfinite(self.position_jitter_m) or not 0.0 <= self.position_jitter_m <= 0.030:
+            raise ValueError("position_jitter_m must be between 0 and 0.030 m")
+        if not math.isfinite(self.yaw_jitter_rad) or not 0.0 <= self.yaw_jitter_rad <= 0.40:
+            raise ValueError("yaw_jitter_rad must be between 0 and 0.40 rad")
+        for name, hi in (("mass_jitter", 0.5), ("friction_jitter", 0.4), ("background_jitter", 0.3)):
+            v = getattr(self, name)
+            if not math.isfinite(v) or not 0.0 <= v <= hi:
+                raise ValueError(f"{name} must be between 0 and {hi}")
         if not math.isfinite(self.color_jitter) or not 0.0 <= self.color_jitter <= 0.40:
             raise ValueError("color_jitter must be between 0 and 0.40")
         if not math.isfinite(self.light_diffuse_jitter) or not 0.0 <= self.light_diffuse_jitter <= 0.80:
@@ -990,8 +1002,10 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
         asset = ET.SubElement(root, "asset")
     ET.SubElement(asset, "texture", {"name": "room_sky", "type": "skybox", "builtin": "gradient",
                                      "rgb1": ".55 .62 .70", "rgb2": ".18 .20 .24", "width": "256", "height": "256"})
+    bg = rng.uniform(-config.background_jitter, config.background_jitter) if config.randomized else 0.0
+    tone = lambda r, g, b: "%.3f %.3f %.3f" % (min(1, max(0, r + bg)), min(1, max(0, g + bg)), min(1, max(0, b + bg)))  # noqa: E731
     ET.SubElement(asset, "texture", {"name": "room_floor_tex", "type": "2d", "builtin": "checker",
-                                     "rgb1": ".32 .30 .28", "rgb2": ".26 .24 .22", "width": "256", "height": "256"})
+                                     "rgb1": tone(.32, .30, .28), "rgb2": tone(.26, .24, .22), "width": "256", "height": "256"})
     ET.SubElement(asset, "material", {"name": "room_floor", "texture": "room_floor_tex", "texrepeat": "6 6",
                                       "texuniform": "true", "reflectance": ".05"})
     worldbody = ET.SubElement(root, "worldbody")
@@ -1263,7 +1277,30 @@ def dual_so101_xml(config: IntelSceneConfig | None = None) -> str:
                      mass=".04", friction="1.20 .006 .0002",
                      rgba=tableware_rgba(".72 .73 .75 1"), euler=spoon_euler),
         ]
+    # Weight and friction variation (2026-09-14): one factor per piece for
+    # its mass, one for its sliding friction, applied to every geom of the
+    # piece. These are real contact-physics changes -- a heavier cup, a
+    # slipperier fork -- recorded in the receipt's scene config, not tuned
+    # per object.
+    physics_variation: dict[str, dict[str, float]] = {}
+    if config.randomized:
+        for body in tableware:
+            mf = rng.uniform(1.0 - config.mass_jitter, 1.0 + config.mass_jitter)
+            ff = rng.uniform(1.0 - config.friction_jitter, 1.0 + config.friction_jitter)
+            physics_variation[body.get("name")] = {"mass_factor": round(mf, 3), "friction_factor": round(ff, 3)}
+            for geom in body.iter("geom"):
+                if "mass" in geom.attrib:
+                    geom.set("mass", "%.5f" % (float(geom.get("mass")) * mf))
+                if "friction" in geom.attrib:
+                    parts = geom.get("friction").split()
+                    parts[0] = "%.4f" % (float(parts[0]) * ff)
+                    geom.set("friction", " ".join(parts))
     worldbody.extend(tableware)
+    if physics_variation:
+        # readable from the compiled model (mjOBJ_TEXT "omniq_variation"), so
+        # a recording can print the seed's actual variation on screen
+        custom = ET.SubElement(root, "custom")
+        ET.SubElement(custom, "text", {"name": "omniq_variation", "data": json.dumps(physics_variation, sort_keys=True)})
     worldbody.extend([
         # A FOLDED napkin -- 70 x 50 x 18 mm -- as it sits on a set table, not
         # a 140 x 100 x 6 mm sheet laid flat. The flat sheet was unpickable by

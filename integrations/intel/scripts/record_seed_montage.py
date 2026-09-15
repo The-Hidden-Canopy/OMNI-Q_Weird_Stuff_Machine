@@ -43,16 +43,26 @@ def main() -> int:
     part = args.out / "_montage_part.mp4"
     writer = None
     tally = {"trials": 0, "resolved": 0, "placed": 0}
-    goal = TABLE_SETTING_PHRASINGS[0]
-
     def card(frame, lines, hold_frames):
         f = frame.copy()
         draw_text_block(f, [t for t, _ in lines], 40, 40, scales=[sc for _, sc in lines], alpha=0.6, pad=16)
         for _ in range(hold_frames):
             writer.write(f)
 
+    import json
+    import mujoco
+
+    def variation_text(model, seed):
+        tid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_TEXT, "omniq_variation")
+        if tid < 0:
+            return ""
+        adr, size = model.text_adr[tid], model.text_size[tid]
+        v = json.loads(bytes(model.text_data[adr:adr + size]).decode().rstrip("\x00"))
+        return "  ".join(f"{k.split('_')[0]}: mass x{d['mass_factor']:.2f} friction x{d['friction_factor']:.2f}" for k, d in v.items())
+
     for i in range(args.n):
         seed = args.seed0 + i
+        goal = TABLE_SETTING_PHRASINGS[i % len(TABLE_SETTING_PHRASINGS)]   # a different phrasing per seed, as the harness does
         engine = build_intel_sim_engine(IntelSceneConfig(seed=seed, randomized=True))
         world = engine.world
         # each seed's run is recorded to a part file, then appended to the montage
@@ -63,8 +73,9 @@ def main() -> int:
         rec.frame()
         start = rec.last_bgr.copy()
         card(start, [(f"Seed {seed} ({i + 1} of {args.n})   command: \"{goal}\"", 0.9),
-                     ("randomized: object positions & yaw, tableware colour, light direction & intensity", 0.6),
-                     ("two SO-101 arms, MuJoCo, real contact physics -- both arms work at once", 0.6)], 50)
+                     ("randomized: placement (+/-12 mm) & yaw (+/-11 deg), object mass & friction, colour, light angle & intensity, background, prompt", 0.55),
+                     (variation_text(world.model, seed), 0.5),
+                     ("two SO-101 arms, MuJoCo, real contact physics -- both arms work at once", 0.55)], 75)
         world._mujoco = rec.spy()
         t0 = time.time()
         receipt = engine.run(goal)

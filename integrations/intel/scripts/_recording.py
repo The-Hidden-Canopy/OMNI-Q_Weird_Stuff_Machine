@@ -206,6 +206,7 @@ class Recorder:
         command, each arm's current action and the plan's progress. Wrap
         BEFORE any demo-specific hooks so those compose on top."""
         rec = self
+        rec.command = command
         state = {"left": "ready", "right": "ready", "placed": []}
         short = {o: o.split("_")[0] for o in objects}
 
@@ -220,7 +221,7 @@ class Recorder:
         def render():
             done = " ".join(short[o] for o in objects if o in state["placed"]) or "-"
             todo = " ".join(short[o] for o in objects if o not in state["placed"]) or "-"
-            rec.hud = [f'command: "{command}"',
+            rec.hud = [f'command: "{rec.command}"',
                        f"left arm:  {state['left']}",
                        f"right arm: {state['right']}",
                        f"placed: {done}   remaining: {todo}"] + list(rec.hud_extra)
@@ -253,6 +254,7 @@ class Recorder:
             return out
         world.apply_transition = apply
         world.apply_transitions_parallel = apply_pair
+        rec.render_hud = render
         render()
 
     def spy(self):

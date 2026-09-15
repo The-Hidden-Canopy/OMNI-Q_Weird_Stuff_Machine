@@ -68,7 +68,10 @@ def table_trial(seed: int):
         return eng.world
 
     def run(w):
-        r = w._engine.run(TABLE_SETTING_PHRASINGS[0])
+        goal = TABLE_SETTING_PHRASINGS[seed % len(TABLE_SETTING_PHRASINGS)]
+        w._rec.command = goal
+        w._rec.render_hud()
+        r = w._engine.run(goal)
         po = _per_object_pick_place_outcomes(r)
         return "placed " + "".join("P" if v["placed"] else "-" for v in po.values())
     return world, run
@@ -298,7 +301,7 @@ Recorded {date} from commit {commit}. 1280x720 H.264, 25 fps real time.
 On-screen: the command, what each arm is doing, and the plan's progress. "[both arms at once]" = the two arms
 execute different steps simultaneously under one physics simulation.
 
-01_full_run_seed903_*      one complete "set the table" run, seed 903: third_person (fixed cam), director (close free cam),
+01_full_run_seed903_*      one complete run, seed 903 (each seed also gets its own prompt phrasing): third_person (fixed cam), director (close free cam),
                            grid (third_person / overhead / left & right flank), six_cameras (+ both wrist cams)
 02_full_run_seed911_*      a second seed: director, overhead, wrists grid
 03_perception_e2e_seed903  the loop closed through the cameras: YOLOv8n (OpenVINO, CPU) on 4 scene cameras, fused;
@@ -310,7 +313,9 @@ execute different steps simultaneously under one physics simulation.
 07_authority_change        mid-run operator voice command "don't use the left arm anymore": plan recompiled, right arm finishes
 08_arm_failure_seed903     the left arm's servo bus goes silent mid-run (commands frozen, arm stays put); the fault handler
                            withdraws it from authority and the right arm re-routes what it can reach; run resolves
-09_seeds_900_909_montage   the brief's 10 randomized seeds (positions, yaw, colours, lighting) at 4x, one after another, with
+09_seeds_900_909_montage   the brief's 10 randomized seeds at 4x, one after another. Per seed: placement (+/-12 mm) and yaw
+                           (+/-11 deg) of every piece, each piece's mass (+/-25%) and sliding friction (+/-15%), tableware colour,
+                           key-light angle and intensity, floor tone, and the prompt phrasing; the title card prints the factors. With
                            the end-of-run physical check per seed (in zone & upright) and the running tally
 
 10-seed harness on this build (evidence/benchmark_results/parallel_arms_2026-09-14/harness_seed900_x10_final_layout):
