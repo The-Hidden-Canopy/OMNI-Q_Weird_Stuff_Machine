@@ -412,6 +412,25 @@ class OmniPlanner:
             if s.contract == "manipulate" and s.args.get("object") and s.args.get("object") not in covered:
                 s.rationale = "core-completed: object not addressed by the model this turn"
                 steps.append(s)
+        # Physical precedence the fallback planner encodes (e.g. the two-arm
+        # plate before anything occupies its pinch corridors): the governed
+        # core moves those objects' steps to the front and records why.
+        precede = [o for o in getattr(self.fallback, "_MUST_PRECEDE", ()) if o in world.objects and world.objects[o].misplaced]
+        # An object already in a gripper is carried before that arm is asked
+        # to pick anything else (a replan that led with a fresh PICK on the
+        # busy arm was refused every turn, 2026-09-15: "already holding cup_1").
+        held = [o for o, owner in world.ownership.items() if owner and o in world.objects]
+        if precede or held:
+            first = [s for s in steps if s.args.get("object") in held]
+            for s in first:
+                s.rationale = "core-reordered first: object already in the gripper is carried first"
+            second = [s for s in steps if s.args.get("object") in precede and s.args.get("object") not in held]
+            for s in second:
+                s.rationale = "core-reordered first: two-arm object must be set before its corridors are occupied"
+            rest_ = [s for s in steps if s.args.get("object") not in held and s.args.get("object") not in precede]
+            steps = first + second + rest_
+            for s in steps:
+                s.deps = ()
         graph = PlanGraph(goal=goal)
         graph.steps = [s for s in steps if s.op != "VERIFY"] + [s for s in steps if s.op == "VERIFY"]
         if self.complete_with_fallback and not any(s.op == "VERIFY" for s in graph.steps):

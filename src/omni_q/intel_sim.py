@@ -3638,6 +3638,12 @@ class IntelTablePlanner(RulePlanner):
     # budget, instead of the budget being spent entirely on whichever
     # object happens to be stuck first.
     _MAX_ATTEMPTS_BEFORE_DEPRIORITIZE = 3
+    #: Objects that must be set before any other object is placed: the plate
+    #: is the two-arm rim pinch and its approach corridors run through the
+    #: cup/spoon zones (a cup set first blocks the right arm's pinch, measured
+    #: 2026-09-15 with reasoner-ordered plans). A reasoner-advised plan is
+    #: reordered by the governed core to respect this, and says so.
+    _MUST_PRECEDE = ("plate_1",)
 
     def __init__(self) -> None:
         super().__init__()

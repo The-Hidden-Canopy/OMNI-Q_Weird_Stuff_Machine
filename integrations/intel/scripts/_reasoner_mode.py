@@ -40,7 +40,7 @@ def compose(engine, rec=None) -> None:
     recorder is given, feed its HUD with each plan decision."""
     from omni_q.omni_planner import OmniPlanner
 
-    engine.planner = OmniPlanner(reasoner(), fallback=engine.planner, complete_with_fallback=True)
+    engine.planner = OmniPlanner(reasoner(), fallback=engine.planner, complete_with_fallback=True, max_new_tokens=40)
     state = {"decisions": 0, "model_steps": 0, "rejected": 0, "fallback": 0}
     if rec is None:
         return
