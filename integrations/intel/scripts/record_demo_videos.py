@@ -310,6 +310,7 @@ RUNS = {
 
 README = """OMNI-Q demo clips (MuJoCo, dual SO-101, real contact physics; nothing teleported)
 Recorded {date} from commit {commit}. 1280x720 H.264, 25 fps real time.
+{vla_note}
 On-screen: the command, what each arm is doing, and the plan's progress. "[both arms at once]" = the two arms
 execute different steps simultaneously under one physics simulation.
 
@@ -352,7 +353,26 @@ def _write_readme(out: Path) -> None:
                    f"placements {sum(r['per_object_summary']['placed_in_trials'].values())}/{5 * r['trials']}   "
                    f"final state all in zone & upright {r.get('final_state_all_in_zone_upright', '?')}/{r['trials']}   "
                    f"per object placed: {r['per_object_summary']['placed_in_trials']}")
-    (out / "README.txt").write_text(README.format(date=datetime.date.today().isoformat(), commit=commit, harness=harness))
+    vla_note = ""
+    ck = os.environ.get("OMNIQ_VLA_CHECKPOINT")
+    if ck:
+        parts = [
+            "CONTROL: VLA-first. A SmolVLA policy (lerobot/smolvla_base fine-tuned on this stack's own demonstrations,",
+            "integrations/intel/vla/) drives every single-arm PICK and MOVE from the three cameras + arm state + the step's",
+            "language; its Cartesian deltas are realised by a small IK solve each tick. When the policy stalls, or the",
+            "grasp-integrity guard fires, the governed contact primitive continues from where the policy left the arm -- the",
+            "HUD tags each step [VLA: SmolVLA] or [VLA gave up -> governed primitive], and the receipts carry the same. The",
+            "two-arm plate carry is the governed bimanual primitive. In VLA mode arms execute one step at a time (the",
+            "policy's cameras render on the main thread).",
+            "checkpoint: " + ck,
+        ]
+        vrep = sorted(Path("evidence/benchmark_results").glob("vla_smolvla_*/harness_seed900_x10/summary.json"))
+        if vrep:
+            v = json.loads(vrep[-1].read_text())
+            parts.append(f"VLA-mode 10-seed harness: resolved {v['resolved']}/{v['trials']}   placements {v['placements']}/{5 * v['trials']}   "
+                         f"final state all in zone & upright {v['final_ok']}/{v['trials']}   steps: {v['vla_steps']}")
+        vla_note = "\n".join(parts) + "\n"
+    (out / "README.txt").write_text(README.format(date=datetime.date.today().isoformat(), commit=commit, harness=harness, vla_note=vla_note))
 
 
 def main() -> int:
