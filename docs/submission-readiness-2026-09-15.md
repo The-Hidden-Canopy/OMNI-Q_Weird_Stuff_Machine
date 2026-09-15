@@ -113,6 +113,14 @@ overhead + front + wrist cameras, arm state, per-step instruction
   these measurements are not an `ACTIVE` skill promotion. Production use
   still requires the artifact manifest, adjacent promotion evidence, and the
   normal `SkillRuntime` supervisor/actuator path.
+* Grasp-integrity guard v2 (object sliding > 10 mm *or* turning > 8° in the
+  pinch hands the carry to the governed primitive) and a 4 s carry lead:
+  stochastic 10-seed harness **8/10, 48/50, 8/10 fully set**
+  (`harness_seed900_x10_guard2`); with the policy's sampling noise seeded per
+  scene seed + step, a 16-seed harness passes **12/16**
+  (`harness_seed900_x16_seeded`: 900, 908, 909, 915 fail — 908 is the same
+  plate-carry outlier as in the governed set). The VLA montage in
+  `Desktop/OMNI-Q_demo_videos_VLA/` is recorded on ten of the passing seeds.
 * Paired (both-arms-at-once) execution under the VLA loops does not work yet
   (1/5 in a test); VLA-mode clips execute one arm-step at a time.
 * Next steps that would move the needle (in order): more demonstrations
