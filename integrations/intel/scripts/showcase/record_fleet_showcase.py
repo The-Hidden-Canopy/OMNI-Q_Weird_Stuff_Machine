@@ -204,7 +204,7 @@ def main() -> int:
     rec = FleetRecorder(world, args.out / f"fleet_escalation_seed{args.seed}{'_quick' if args.quick else ''}.mp4",
                         label="OMNI-Q  showcase: fleet escalation", size=(640, 360) if args.quick else (1280, 720))
     rec.attach(world, goal)
-    rec.footer = "unit 1 (centre): OMNI-planned, the submission stack  |  units 2-4: physically simulated arms on scripted choreography  |  drone & rover: kinematic showcase actors"
+    rec.footer = "unit 1 (centre): the submission stack (governed planner + contact controllers)  |  units 2-4: physically simulated arms on scripted choreography  |  drone & rover: kinematic showcase actors"
     n_arms = 2 * args.units
     rec.fleet = [f"FLEET: {n_arms} MANIPULATORS", "ACTIVE UNITS: 1", "OBJECTIVES: 1", "CONFLICTS: 0"]
 

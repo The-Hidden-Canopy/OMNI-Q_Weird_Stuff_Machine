@@ -216,7 +216,7 @@ def camera_e2e(seed: int):
         return w
 
     def run(w):
-        w._rec.hud_extra = ["perception: YOLOv8n / OpenVINO CPU, 4 cameras fused -> OMNI plans & verifies from detections"]
+        w._rec.hud_extra = ["perception: YOLOv8n / OpenVINO CPU, 4 cameras fused -> the planner plans & verifies from detections"]
         w._rec.hud.extend(w._rec.hud_extra)
         r = w._engine.run(TABLE_SETTING_PHRASINGS[0])
         po = _per_object_pick_place_outcomes(r)
@@ -306,7 +306,7 @@ execute different steps simultaneously under one physics simulation.
                            grid (third_person / overhead / left & right flank), six_cameras (+ both wrist cams)
 02_full_run_seed911_*      a second seed: director, overhead, wrists grid
 03_perception_e2e_seed903  the loop closed through the cameras: YOLOv8n (OpenVINO, CPU) on 4 scene cameras, fused;
-                           OMNI plans from the detections and verifies each placement from the cameras.
+                           the governed planner plans from the detections and verifies each placement from the cameras.
                            *_vision_* clips draw the detector's boxes/confidences live: vision_grid (director + 3 scene
                            cameras), vision_overhead, vision_third_person (single full-frame view), vision_six_cameras (all
                            six incl. the wrist cameras -- showcase; the detector was trained on the scene cameras).

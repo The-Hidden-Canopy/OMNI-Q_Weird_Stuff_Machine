@@ -70,3 +70,6 @@ models/hf_ida_omni_q/
 # External vendor checkout for the optional Unitree G1 provider.  Keep the
 # checkout and pretrained motion.pt local; provenance is recorded in the repo.
 external/unitree_rl_gym/
+
+# LeRobot demonstration datasets (local, large)
+datasets/

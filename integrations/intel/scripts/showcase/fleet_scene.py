@@ -12,7 +12,7 @@ it, additively, with:
 
 What is real and what is scripted, so nobody is misled by the footage:
 
-* Unit 1 (the two centre arms) is the actual submission stack -- OMNI plans,
+* Unit 1 (the two centre arms) is the actual submission stack -- the governed planner sequences,
   the engine sequences, both arms execute under the same physics and
   verifiers as every other clip in the folder.
 * The extra units' arms are physically simulated (same servos, same contact

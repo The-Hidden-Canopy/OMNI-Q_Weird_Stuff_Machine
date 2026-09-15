@@ -1,6 +1,6 @@
 """SHOWCASE -- a real fleet: four OMNI-Q engines, four dual-arm units, eight
-arms, all planned by OMNI and driven by the submission's own controllers
-(2026-09-15). Nothing here is choreographed.
+arms, all sequenced by the submission's governed planner and driven by its
+own contact controllers (2026-09-15). Nothing here is choreographed.
 
 Each unit is the actual submission stack on its own seed and its own prompt
 phrasing, run in its own process at the same time. Unit 2 takes a mid-run
@@ -43,7 +43,7 @@ def run_unit(unit: int, seed: int, variant: str, out: Path) -> dict:
     eng = build_intel_sim_engine(IntelSceneConfig(seed=seed, randomized=True))
     w = eng.world
     path = out / f"_unit{unit}_seed{seed}_{variant}.mp4"
-    rec = Recorder(w, DIRECTOR, path, size=(640, 360), label=f"UNIT {unit}  seed {seed}  OMNI-planned, both arms")
+    rec = Recorder(w, DIRECTOR, path, size=(640, 360), label=f"UNIT {unit}  seed {seed}  governed planner + contact controllers, both arms")
     rec.attach(w, goal)
     w._mujoco = rec.spy()
     log: list[tuple[int, list[str], str | None]] = []   # (frame, hud lines, notice)
