@@ -38,6 +38,21 @@ HOME5 = np.array([0.0, -1.57, 1.57, 1.57, -1.57])
 JAW_OPEN, JAW_PART, JAW_CLOSED = 1.5, 0.30, -0.17
 
 
+def dance_pose(tau: float, ph: float) -> np.ndarray:
+    """Raise, sway and wave: base yaw +/-0.6, arm lifted from the folded
+    ready pose and swung, wrist roll waving, jaw clapping. tau = seconds
+    into the dance, ph = per-arm phase."""
+    lift = min(1.0, tau / 0.6)                          # come up out of the ready pose first
+    w = 2 * math.pi * 1.1 * tau + ph
+    q = np.array([0.6 * math.sin(w),
+                  -1.57 + lift * (0.75 + 0.25 * math.sin(w)),
+                  1.57 - lift * (0.9 + 0.3 * math.sin(w + 1.0)),
+                  1.57 - lift * (1.2 + 0.3 * math.sin(w)),
+                  -1.57 + lift * 1.2 * math.sin(2 * math.pi * 2.0 * tau + ph)])
+    jaw = 0.75 + 0.75 * math.sin(2 * math.pi * 2.0 * tau + ph)
+    return np.append(q, jaw)
+
+
 # ---------------------------------------------------------------- extra arms
 class ExtraArm:
     """One scripted SO-101 on a showcase unit: joint addresses, a vertical-
@@ -161,7 +176,7 @@ class FleetRecorder(Recorder):
             w = max(self._cv2.getTextSize(t, self._cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)[0][0] for t in self.fleet)
             draw_text_block(bgr, self.fleet, self.size[0] - w - 30, 12, scales=[0.62] + [0.55] * (len(self.fleet) - 1), alpha=0.6)
         if self.footer:
-            draw_text_block(bgr, [self.footer], None, self.size[1] - 72, scales=[0.42], alpha=0.5, pad=6)
+            draw_text_block(bgr, [self.footer], None, self.size[1] - 46, scales=[0.42], alpha=0.5, pad=6)
 
 
 def main() -> int:
@@ -255,10 +270,7 @@ def main() -> int:
                     tau = t - state["dance_t0"]
                     for k, (L, R) in enumerate(arms.values()):
                         for j, arm in enumerate((L, R)):
-                            ph = 0.9 * (2 * k + j)
-                            q = HOME5 + np.array([0.45 * math.sin(2 * math.pi * 1.2 * tau + ph), 0.35 * math.sin(2 * math.pi * 1.2 * tau + ph),
-                                                  -0.35 * math.sin(2 * math.pi * 1.2 * tau + ph), 0.0, 0.9 * math.sin(2 * math.pi * 2.0 * tau)])
-                            arm.write(dd, np.append(q, 0.75 + 0.75 * math.sin(2 * math.pi * 2.0 * tau + ph)))
+                            arm.write(dd, dance_pose(tau, 0.9 * (2 * k + j)))
                 else:
                     for unit, (L, R) in arms.items():
                         if unit in active_units:
@@ -285,10 +297,7 @@ def main() -> int:
         while sim_t() < t_end:
             tau = sim_t() - state["dance_t0"]
             for j, off in enumerate((0, 6)):
-                ph = 0.9 * j + 0.3
-                q = HOME5 + np.array([0.45 * math.sin(2 * math.pi * 1.2 * tau + ph), 0.35 * math.sin(2 * math.pi * 1.2 * tau + ph),
-                                      -0.35 * math.sin(2 * math.pi * 1.2 * tau + ph), 0.0, 0.9 * math.sin(2 * math.pi * 2.0 * tau)])
-                d.ctrl[off:off + 5] = q; d.ctrl[off + 5] = 0.75 + 0.75 * math.sin(2 * math.pi * 2.0 * tau + ph)
+                d.ctrl[off:off + 6] = dance_pose(tau, 0.9 * j + 0.3)
             world._mujoco.mj_step(m, d)
         for off in (0, 6):
             world._go_home(off)
@@ -300,9 +309,9 @@ def main() -> int:
         reg.observe(ev)
         parsed = nlu.parse(ev.text)
         style = dict(parsed.constraints).get("style")
-        rec.notify(f"VOICE  operator (conf {ev.confidence:.2f}): \"{ev.text}\"   ->  NLU: style={style}   ->  fleet choreography, 3 s", 6)
+        rec.notify(f"VOICE  operator (conf {ev.confidence:.2f}): \"{ev.text}\"   ->  NLU: style={style}   ->  fleet choreography, 4 s", 7)
         if style == "show_off":
-            dance_all(3.0)
+            dance_all(4.0)
         rec.notify("back to work", 2)
 
     # shot plan keyed to the submission run's own progress
