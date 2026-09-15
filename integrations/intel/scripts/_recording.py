@@ -15,6 +15,31 @@ from __future__ import annotations
 from pathlib import Path
 
 
+def draw_text_block(bgr, lines, x, y, *, scales=None, color=(255, 255, 255), alpha=0.55, pad=10):
+    """Lines of text over a translucent dark panel, single-pass glyphs.
+    (OpenCV 5 advances thick and thin strokes differently, so the usual
+    thick-black-then-thin-white outline leaves a ghost of the last glyphs.)
+    ``x=None`` centres the block horizontally."""
+    import cv2  # noqa: PLC0415
+
+    scales = scales or [0.6] * len(lines)
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    sizes = [cv2.getTextSize(t, font, sc, 1)[0] for t, sc in zip(lines, scales)]
+    width = max(w for w, _ in sizes)
+    height = sum(h for _, h in sizes) + 10 * len(lines)
+    if x is None:
+        x = max(pad, (bgr.shape[1] - width) // 2)
+    x0, y0 = max(0, x - pad), max(0, y - pad)
+    x1, y1 = min(bgr.shape[1], x + width + pad), min(bgr.shape[0], y + height + pad)
+    panel = bgr[y0:y1, x0:x1]
+    panel[:] = (panel * (1.0 - alpha)).astype(panel.dtype)
+    cy = y
+    for text, sc, (_, h) in zip(lines, scales, sizes):
+        cy += h
+        cv2.putText(bgr, text, (x, cy), font, sc, color, 1, cv2.LINE_AA)
+        cy += 10
+
+
 class _FfmpegWriter:
     """H.264 through the ffmpeg binary that imageio-ffmpeg ships (OpenCV's
     own mp4v left ghosts of earlier HUD text at its default bitrate and this
@@ -162,21 +187,13 @@ class Recorder:
         self.frames += 1
 
     def _draw_hud(self, bgr) -> None:
-        cv2 = self._cv2
-        y = 30 if len(self.cameras) == 1 else 52   # under the tile name in a grid
-        for i, line in enumerate(self.hud):
-            scale = 0.7 if i == 0 else 0.55
-            cv2.putText(bgr, line, (16, y), cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0), 4, cv2.LINE_AA)
-            cv2.putText(bgr, line, (16, y), cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), 1, cv2.LINE_AA)
-            y += int(34 * scale) + 6
+        y = 12 if len(self.cameras) == 1 else 34   # under the tile name in a grid
+        if self.hud:
+            draw_text_block(bgr, self.hud, 16, y, scales=[0.7] + [0.55] * (len(self.hud) - 1))
         if self._notice is not None:
             text, until = self._notice
             if self.frames <= until:
-                (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)
-                x = max(16, (self.size[0] - tw) // 2)
-                yb = self.size[1] - 60
-                cv2.rectangle(bgr, (x - 12, yb - th - 12), (x + tw + 12, yb + 10), (0, 0, 0), -1)
-                cv2.putText(bgr, text, (x, yb), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (80, 220, 255), 2, cv2.LINE_AA)
+                draw_text_block(bgr, [text], None, self.size[1] - 90, scales=[0.75], color=(80, 220, 255), alpha=0.75)
             else:
                 self._notice = None
 

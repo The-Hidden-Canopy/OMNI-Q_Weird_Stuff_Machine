@@ -19,7 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _recording import Recorder, _open_writer  # noqa: E402
+from _recording import Recorder, _open_writer, draw_text_block  # noqa: E402
 
 DEFAULT_OUT = Path.home() / "OneDrive" / "Desktop" / "OMNI-Q_demo_videos"
 DIRECTOR = "free:150,-30,0.95,0,-0.12,0.05"
@@ -46,13 +46,9 @@ def main() -> int:
     goal = TABLE_SETTING_PHRASINGS[0]
 
     def card(frame, lines, hold_frames):
+        f = frame.copy()
+        draw_text_block(f, [t for t, _ in lines], 40, 40, scales=[sc for _, sc in lines], alpha=0.6, pad=16)
         for _ in range(hold_frames):
-            f = frame.copy()
-            y = 60
-            for txt, scale in lines:
-                cv2.putText(f, txt, (40, y), cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0), 4, cv2.LINE_AA)
-                cv2.putText(f, txt, (40, y), cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), 2, cv2.LINE_AA)
-                y += int(44 * scale) + 12
             writer.write(f)
 
     for i in range(args.n):
