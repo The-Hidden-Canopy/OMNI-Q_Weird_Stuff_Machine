@@ -68,9 +68,14 @@ def main() -> int:
     part = args.out / "_montage_part.mp4"
     writer = None
     tally = {"trials": 0, "resolved": 0, "placed": 0}
+    import _reasoner_mode
+    # in OMNI mode the live HUD (7 lines: arms, tally, reasoner decision, plan) fills the top
+    # of the frame; the cards go under it instead of over it
+    card_y = 235 if _reasoner_mode.enabled() else 40
+
     def card(frame, lines, hold_frames):
         f = frame.copy()
-        draw_text_block(f, [t for t, _ in lines], 40, 40, scales=[sc for _, sc in lines], alpha=0.6, pad=16)
+        draw_text_block(f, [t for t, _ in lines], 40, card_y, scales=[sc for _, sc in lines], alpha=0.6, pad=16)
         for _ in range(hold_frames):
             writer.write(f)
 
