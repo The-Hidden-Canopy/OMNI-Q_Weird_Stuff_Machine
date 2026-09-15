@@ -65,6 +65,9 @@ class VLAWorld(IntelTableWorld):
     place_budget_s: float = float(os.environ.get("OMNIQ_VLA_PLACE_S", "14"))
     hz: int = 10
     fallback: bool = os.environ.get("OMNIQ_VLA_FALLBACK", "1") not in {"", "0", "false", "no"}
+    # the absjaw dataset stores the 7th action as the absolute jaw command (a
+    # per-tick jaw delta is a sparse spike that regression averages away)
+    jaw_absolute: bool = os.environ.get("OMNIQ_VLA_JAW_ABS", "1") not in {"", "0", "false", "no"}
 
     def __init__(self, *a, **k) -> None:
         super().__init__(*a, **k)
@@ -174,10 +177,16 @@ class VLAWorld(IntelTableWorld):
             pos = self.data.geom_xpos[pad].copy()
             R = self.data.geom_xmat[pad].reshape(3, 3).copy()
             target = pos + np.array([a["dx_mm"], a["dy_mm"], a["dz_mm"]]) / 1000.0
-            R_t = _rot_xyz(math.radians(a["droll_deg"]), math.radians(a["dpitch_deg"]), math.radians(a["dyaw_deg"])) @ R
-            jaw = float(np.clip(self.data.ctrl[arm_offset + 5] + a["gripper_delta"], lo, hi))
+            jaw = float(np.clip(a["gripper_delta"] if self.jaw_absolute else self.data.ctrl[arm_offset + 5] + a["gripper_delta"], lo, hi))
             self.data.ctrl[arm_offset + 5] = jaw
-            self._ik_reach_pad_pose(arm_offset, target, R_t, roll_hint=float(self.data.ctrl[arm_offset + 4]), iters=iters, orientation_tol=0.5)
+            # Realise the delta the way the expert's own transit does: the
+            # position-only, roll-pinned pad solve (the 6-D pose solve does
+            # not move from the folded ready posture -- wrist-pitch limit).
+            # The world yaw delta becomes the wrist-roll command.
+            rlo, rhi = self.model.jnt_range[arm_offset + 4]
+            roll = float(np.clip(self.data.ctrl[arm_offset + 4] + math.radians(a["dyaw_deg"]), rlo + 0.03, rhi - 0.03))
+            self._ik_reach_pad(arm_offset, target, iters=iters, roll=roll, track_tcp=False,
+                               geom_id=self._pad_geom[arm_offset], tol=0.002, max_dq=0.04)
             if self.vla_tick_hook:
                 self.vla_tick_hook(arm_offset, tick, a)
             if tick % 10 == 9:
