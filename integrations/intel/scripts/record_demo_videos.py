@@ -130,7 +130,10 @@ def authority(seed: int):
         done = {"x": False}
 
         def after(req, res):
-            if not done["x"] and req.op == "MOVE" and req.args.get("object") == "plate_1" and res.ok:
+            # the operator withdraws the left arm after the fork -- the one piece only the left
+            # arm can reach -- is set; the right arm then finishes cup, spoon and the napkin
+            # (shared band), so the table still completes under the new authority
+            if not done["x"] and req.op == "MOVE" and req.args.get("object") == "fork_1" and res.ok:
                 done["x"] = True
                 for k, v in nlu.parse("don't use the left arm anymore").constraints:
                     eng.add_constraint(k, v, source="operator", justification="voice: don't use the left arm anymore")
@@ -146,7 +149,13 @@ def authority(seed: int):
             return out
         w.apply_transition = apply
         w.apply_transitions_parallel = apply_pair
-        r = eng.run(TABLE_SETTING_PHRASINGS[0])
+        from omni_q.intel_sim import IntelTablePlanner
+        saved = IntelTablePlanner._MUST_PRECEDE
+        IntelTablePlanner._MUST_PRECEDE = ("plate_1", "fork_1")   # plate, then the fork, under any planner
+        try:
+            r = eng.run(TABLE_SETTING_PHRASINGS[0])
+        finally:
+            IntelTablePlanner._MUST_PRECEDE = saved
         arms = [a.get("arm") for a in r.as_dict()["actions"] if a["op"] in ("PICK", "MOVE")]
         from omni_q.intel_sim import _per_object_pick_place_outcomes
         po = _per_object_pick_place_outcomes(r)
