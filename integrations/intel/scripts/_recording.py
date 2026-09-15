@@ -271,6 +271,7 @@ class Recorder:
         """
         import collections
         import threading
+        import time
 
         real = self.world._mujoco
         rec = self
@@ -294,9 +295,12 @@ class Recorder:
                             rec._mujoco.mj_copyData(snap, m, d)
                             with lock:
                                 queue.append(snap)
-                            if len(queue) > 200:   # never let the queue outgrow memory
-                                with lock:
-                                    queue.popleft()
+                            # backpressure, not dropping: a 4-tile render is
+                            # slower than paired physics and dropped frames
+                            # made grid clips play the paired segments fast
+                            # (56 s vs 115 s for the same run, 2026-09-14)
+                            while len(queue) > 40:
+                                time.sleep(0.002)
 
             def main_thread_pump(self):
                 while True:
