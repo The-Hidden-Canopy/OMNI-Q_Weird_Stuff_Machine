@@ -226,7 +226,7 @@ class Recorder:
                      f"right arm: {state['right']}",
                      f"placed: {done}   remaining: {todo}"]
             if "vla_done" in state:
-                lines.append(f"VLA steps completed by SmolVLA: {state['vla_done']}   handed to governed primitive: {state['vla_fallback']}")
+                lines.append(f"VLA-led steps: {state['vla_done'] + state['vla_fallback']}   finished by the policy: {state['vla_done']}   finished by the governed primitive: {state['vla_fallback']}")
             rec.hud = lines + list(rec.hud_extra)
 
         def begin(reqs, paired):
@@ -244,7 +244,7 @@ class Recorder:
                 if detail.get("grasp") == "vla_smolvla":
                     tag = "  [VLA: SmolVLA]"
                 elif detail.get("fallback"):
-                    tag = "  [VLA gave up -> governed primitive]"
+                    tag = "  [VLA-led -> governed completion]"
                 elif detail.get("grasp") == "bimanual_edge":
                     tag = "  [two-arm primitive]"
                 state[arm_of(req)] = ("done: " if ok else "FAILED: ") + text(req) + tag
