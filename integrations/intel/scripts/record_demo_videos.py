@@ -213,7 +213,7 @@ def camera_e2e(seed: int):
         return w
 
     def run(w):
-        w._rec.hud_extra = ["perception: YOLOv8n (OpenVINO, CPU) on 4 scene cameras, fused -> OMNI plans from detections, verifies each placement"]
+        w._rec.hud_extra = ["perception: YOLOv8n / OpenVINO CPU, 4 cameras fused -> OMNI plans & verifies from detections"]
         w._rec.hud.extend(w._rec.hud_extra)
         r = w._engine.run(TABLE_SETTING_PHRASINGS[0])
         po = _per_object_pick_place_outcomes(r)
@@ -277,18 +277,62 @@ def handshake(seed: int):
     return world, run
 
 
+# Numbered in the brief's recommended demonstration order: command +
+# randomized scene -> perception -> coordinated dual-arm incl. hand-off /
+# complementary actions -> final state -> 10 seeds -> (benchmark is a script).
 RUNS = {
-    "table_903": (table_trial, 903, [("third_person", "third_person"), ("grid", GRID), ("director", DIRECTOR), ("six_cameras", SIX)]),
-    "table_911": (table_trial, 911, [("overhead", "table_overhead"), ("wrists", WRIST_GRID), ("director", DIRECTOR)]),
-    "plate_901": (plate_only, 901, [("third_person", "third_person"), ("grid", GRID), ("director", DIRECTOR)]),
-    "authority_901": (authority, 901, [("third_person", "third_person"), ("grid", GRID), ("director", DIRECTOR)]),
-    "handoff_19": (handoff, 19, [("third_person", "handoff_third_person"), ("director", "free:160,-25,0.8,0,-0.10,0.08")]),
-    "handshake_903": (handshake, 903, [("director", "free:180,-15,0.7,0,0.02,0.12"), ("grid", GRID)]),
-    "arm_failure_903": (arm_failure, 903, [("director", DIRECTOR), ("grid", GRID)]),
-    "camera_e2e_903": (camera_e2e, 903, [("third_person", "third_person"), ("grid", GRID), ("director_grid", DIRECTOR_GRID), ("six_cameras", SIX),
-                                         ("vision_grid", [DIRECTOR, "table_overhead", "left_flank", "right_flank"]),
-                                         ("vision_overhead", "table_overhead")]),
+    "01_full_run_seed903": (table_trial, 903, [("third_person", "third_person"), ("director", DIRECTOR), ("grid", GRID), ("six_cameras", SIX)]),
+    "02_full_run_seed911": (table_trial, 911, [("director", DIRECTOR), ("overhead", "table_overhead"), ("wrists", WRIST_GRID)]),
+    "03_perception_e2e_seed903": (camera_e2e, 903, [("vision_grid", [DIRECTOR, "table_overhead", "left_flank", "right_flank"]),
+                                                    ("vision_overhead", "table_overhead"), ("director_grid", DIRECTOR_GRID),
+                                                    ("six_cameras", SIX), ("third_person", "third_person")]),
+    "04_two_arm_plate_seed901": (plate_only, 901, [("director", DIRECTOR), ("third_person", "third_person"), ("grid", GRID)]),
+    "05_handoff_seed19": (handoff, 19, [("third_person", "handoff_third_person"), ("director", "free:160,-25,0.8,0,-0.10,0.08")]),
+    "06_handshake_seed903": (handshake, 903, [("director", "free:180,-15,0.7,0,0.02,0.12"), ("grid", GRID)]),
+    "07_authority_change_seed901": (authority, 901, [("director", DIRECTOR), ("third_person", "third_person"), ("grid", GRID)]),
+    "08_arm_failure_seed903": (arm_failure, 903, [("director", DIRECTOR), ("grid", GRID)]),
 }
+
+README = """OMNI-Q demo clips (MuJoCo, dual SO-101, real contact physics; nothing teleported)
+Recorded {date} from commit {commit}. 1280x720 H.264, 25 fps real time.
+On-screen: the command, what each arm is doing, and the plan's progress. "[both arms at once]" = the two arms
+execute different steps simultaneously under one physics simulation.
+
+01_full_run_seed903_*      one complete "set the table" run, seed 903: third_person (fixed cam), director (close free cam),
+                           grid (third_person / overhead / left & right flank), six_cameras (+ both wrist cams)
+02_full_run_seed911_*      a second seed: director, overhead, wrists grid
+03_perception_e2e_seed903  the loop closed through the cameras: YOLOv8n (OpenVINO, CPU) on 4 scene cameras, fused;
+                           OMNI plans from the detections and verifies each placement from the cameras.
+                           *_vision_* clips draw the detector's boxes/confidences live.
+04_two_arm_plate_seed901   the plate carried by BOTH arms: sideways rim pinch on opposite rims, lockstep carry
+05_handoff_seed19          cup hand-off between the arms (real contact hand-off; receiver ends holding it upright)
+06_handshake_seed903       the arms shake hands (fingertip contact, real servos)
+07_authority_change        mid-run operator voice command "don't use the left arm anymore": plan recompiled, right arm finishes
+08_arm_failure_seed903     the left arm's servo bus goes silent mid-run (commands frozen, arm stays put); the fault handler
+                           withdraws it from authority and the right arm re-routes what it can reach; run resolves
+09_seeds_900_909_montage   the brief's 10 randomized seeds (positions, yaw, colours, lighting) at 4x, one after another, with
+                           the end-of-run physical check per seed (in zone & upright) and the running tally
+
+10-seed harness on this build (evidence/benchmark_results/parallel_arms_2026-09-14/harness_seed900_x10_final_layout):
+{harness}
+"""
+def _write_readme(out: Path) -> None:
+    import json
+    import subprocess
+    import datetime
+    try:
+        commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
+    except Exception:  # noqa: BLE001
+        commit = "?"
+    harness = "(harness report not found)"
+    rep = Path("evidence/benchmark_results/parallel_arms_2026-09-14/harness_seed900_x10_final_layout/report.json")
+    if rep.exists():
+        r = json.loads(rep.read_text())
+        harness = (f"resolved {r['outcomes'].get('success', 0)}/{r['trials']}   "
+                   f"placements {sum(r['per_object_summary']['placed_in_trials'].values())}/{5 * r['trials']}   "
+                   f"final state all in zone & upright {r.get('final_state_all_in_zone_upright', '?')}/{r['trials']}   "
+                   f"per object placed: {r['per_object_summary']['placed_in_trials']}")
+    (out / "README.txt").write_text(README.format(date=datetime.date.today().isoformat(), commit=commit, harness=harness))
 
 
 def main() -> int:
@@ -298,6 +342,7 @@ def main() -> int:
     ap.add_argument("--views", nargs="*", default=None, help="record only these view tags (e.g. director)")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
+    _write_readme(args.out)
     for name, (factory, seed, views) in RUNS.items():
         if args.only and name not in args.only:
             continue

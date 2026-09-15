@@ -39,7 +39,7 @@ def main() -> int:
     )
 
     args.out.mkdir(parents=True, exist_ok=True)
-    path = args.out / f"seeds_{args.seed0}_{args.seed0 + args.n - 1}_montage.mp4"
+    path = args.out / f"09_seeds_{args.seed0}_{args.seed0 + args.n - 1}_montage.mp4"
     part = args.out / "_montage_part.mp4"
     writer = None
     tally = {"trials": 0, "resolved": 0, "placed": 0}
