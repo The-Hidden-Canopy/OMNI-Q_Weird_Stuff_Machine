@@ -520,6 +520,10 @@ STALL_HOLD_OBJECTS: frozenset[str] = frozenset({"cup_1"}) if LEGACY_MODELS_FLAG 
 # jaw angle for the descent, and how far below the rim the fingertips go.
 WALL_PINCH_OBJECTS: dict[str, tuple[float, float]] = ({} if LEGACY_MODELS_FLAG else
                                                       {"cup_1": (0.30, 0.030), "napkin_1": (0.30, 0.020)})
+# Where cutlery lands relative to the commanded release, perpendicular to
+# its handle (positive = to the handle's left, looking along +y local);
+# subtracted from the release target. See _do_place.
+CUTLERY_PLACE_BIAS_ACROSS_M: dict[str, float] = {} if LEGACY_MODELS_FLAG else {"fork_1": 0.039, "spoon_1": -0.027}
 OBJECT_GRASP_VERTICAL_OFFSET: dict[str, float] = {
     "spoon_1": 0.0,
     # cup: fingertips 30 mm below the rim (rim = centre + 45 mm);
@@ -2684,6 +2688,12 @@ class IntelTableWorld(MockWorld):
         base_xy = self.data.xpos[self.model.body(f"{prefix}_Base").id][:2].copy()
         u = base_xy - centre
         u = u / (np.linalg.norm(u) + 1e-9)
+        # retry variation: a failed pinch is retried on rim points rotated
+        # away from the base line (see _do_pick_bimanual), not the same ones
+        rot = float(getattr(self, "_edge_angle_offset", {}).get(obj, 0.0))
+        if rot:
+            c, sn = math.cos(rot), math.sin(rot)
+            u = np.array([c * u[0] - sn * u[1], sn * u[0] + c * u[1]])
         grip = np.array([centre[0] + u[0] * lip_r, centre[1] + u[1] * lip_r, start_z + lip_dz])
         pad_y = np.array([u[0], u[1], 0.0])
         tip_grip = grip - np.array([0.0, 0.0, lip_half + 0.005])   # fixed tip pad under the lip
@@ -2883,6 +2893,55 @@ class IntelTableWorld(MockWorld):
             self._restore_physics(attempt_snapshot, arm_offset=arm_offset, obj=obj)
         return result
 
+    def _clearest_rim_rotation(self, obj: str, attempt_no: int) -> float:
+        """Plan the rim pinch around the other tableware (2026-09-14).
+
+        Candidate contact-point pairs are the base-facing rim points rotated
+        by 0, +/-12, +/-24, +/-36 deg. Each is scored by the smallest xy
+        distance from any OTHER object to either arm's approach corridor
+        (rim point out to 15 cm beyond it, toward that arm's base -- where
+        the finger, then the forearm, pass). The clearest wins; ties go to
+        the smallest rotation; a retry skips what already failed. The map is
+        the world's object poses -- the same poses the camera fusion feeds
+        the planner in the perception run -- not a contact exemption.
+        """
+        import numpy as np
+
+        lip_r = EDGE_PINCH[obj][0]
+        qpos_adr, _ = self._object_joints[obj]
+        centre = self.data.qpos[qpos_adr:qpos_adr + 2].copy()
+        others = [self.data.qpos[a:a + 2].copy() for o, (a, _) in self._object_joints.items() if o != obj]
+        tried = getattr(self, "_rim_rotations_tried", {}).setdefault(obj, set())
+        self._rim_rotations_tried = getattr(self, "_rim_rotations_tried", {obj: tried})
+        if attempt_no == 0:
+            # the base-facing points are what the lockstep carry is tuned
+            # for (9/10 first-try); ranking them away cost seeds 900/901
+            tried.add(0.0)
+            self._rim_plan = {"rotation_deg": 0.0, "clearance_m": None}
+            return 0.0
+        best, best_score = 0.0, -1.0
+        for deg in (0.0, 12.0, -12.0, 24.0, -24.0, 36.0, -36.0):
+            if deg in tried:
+                continue
+            rot = math.radians(deg)
+            score = float("inf")
+            for arm_offset in (0, 6):
+                base = self.data.xpos[self.model.body(f"{'right' if arm_offset else 'left'}_Base").id][:2]
+                u = base - centre
+                u = u / (np.linalg.norm(u) + 1e-9)
+                c, sn = math.cos(rot), math.sin(rot)
+                u = np.array([c * u[0] - sn * u[1], sn * u[0] + c * u[1]])
+                a = centre + u * lip_r
+                b = centre + u * (lip_r + 0.15)
+                for o in others:
+                    t = float(np.clip(np.dot(o - a, b - a) / (np.dot(b - a, b - a) + 1e-9), 0.0, 1.0))
+                    score = min(score, float(np.linalg.norm(o - (a + t * (b - a)))))
+            if score > best_score + 1e-6:
+                best, best_score = rot, score
+        tried.add(round(math.degrees(best), 1))
+        self._rim_plan = {"rotation_deg": round(math.degrees(best), 1), "clearance_m": round(best_score, 3)}
+        return best
+
     def _do_pick_bimanual(self, obj: str) -> dict[str, Any]:
         """Two-arm rim pinch and cooperative lift (2026-09-14). Left and right
         each take the rim point facing their own base with the sideways
@@ -2898,6 +2957,15 @@ class IntelTableWorld(MockWorld):
             float(self.data.time), self._controller_steps,
         )
         per_arm: dict[str, Any] = {}
+        # Each retry rotates both rim contact points +/-12, 24 deg around the
+        # plate (seed 902, 2026-09-14: seven identical failed pinches at the
+        # same two rim points -- one pad missing the lip -- before giving up).
+        attempts = getattr(self, "_bimanual_attempts", {})
+        self._bimanual_attempts = attempts
+        attempt_no = attempts.get(obj, 0)
+        offsets = getattr(self, "_edge_angle_offset", {})
+        self._edge_angle_offset = offsets
+        offsets[obj] = self._clearest_rim_rotation(obj, attempt_no)
         for arm_offset in (0, 6):
             g = self._edge_geometry(arm_offset, obj)
             safety = self._workspace_safety(arm_offset, target_xy=g["grip"][:2])
@@ -2936,7 +3004,8 @@ class IntelTableWorld(MockWorld):
         for n in ("left", "right"):
             per_arm[n].pop("_geom", None)
         result = {
-            "grasp": "bimanual_edge", "arms": per_arm,
+            "grasp": "bimanual_edge", "arms": per_arm, "attempt": attempt_no,
+            "rim_rotation_deg": round(math.degrees(offsets[obj]), 1), "rim_plan": getattr(self, "_rim_plan", None),
             "reach_error_m": max(per_arm[n]["reach_error_m"] for n in ("left", "right")),
             "lift_height_m": round(lift, 4), "tilt_rad": round(tilt, 4), "held": held,
             "grasp_sensor": {"contact_pad_count": pads,
@@ -2947,6 +3016,7 @@ class IntelTableWorld(MockWorld):
             "reason": None if held else ("plate tilted in the pinch" if lift >= LIFT_VERIFY_MIN else "bimanual pinch did not lift"),
         }
         if not held:
+            attempts[obj] = attempt_no + 1
             self._set_gripper(0, GRIPPER_OPEN, settle_steps=40)
             self._set_gripper(6, GRIPPER_OPEN, settle_steps=40)
             self._restore_physics(attempt_snapshot)
@@ -3379,6 +3449,15 @@ class IntelTableWorld(MockWorld):
         release_target = target_arr.copy()
         if obj == "plate_1":
             release_target[2] += half_h + GRASP_CLEARANCE
+        if obj in CUTLERY_PLACE_BIAS_ACROSS_M:
+            # Measured 2026-09-14 (seeds 900/903/905, isolated pick+place):
+            # the piece lands a constant distance perpendicular to its
+            # handle -- fork +3.9 cm, spoon -2.7 cm to the handle's left --
+            # a property of where the wedge jaw holds the handle. Aim the
+            # release that far the other way. Along-handle error is ~0.
+            yaw = self._object_yaw(obj)
+            left_perp = np.array([-math.cos(yaw), -math.sin(yaw), 0.0])
+            release_target = release_target - left_perp * CUTLERY_PLACE_BIAS_ACROSS_M[obj]
         # Carry contact is not a weld: the object can settle a few centimetres
         # away from the pad while the arm moves.  Command the pad to the
         # measured object-relative offset, so the object—not the pad—arrives
@@ -3606,9 +3685,15 @@ class IntelTablePlanner(RulePlanner):
         ]
         def sort_key(object_id: str) -> tuple[bool, int, int]:
             attempts = self._attempt_counts.get(object_id, 0)
+            # One immediate retry in place before an object is deferred
+            # behind the others (2026-09-14): deferring the plate after a
+            # single failed pinch put its retries at the end of the run,
+            # with the cup already set down where the right arm's forearm
+            # passes for the rim pinch -- seven failures on seed 902 that
+            # an immediate retry (rotated rim points) clears.
             return (
                 attempts > self._MAX_ATTEMPTS_BEFORE_DEPRIORITIZE,
-                attempts,
+                max(0, attempts - 1),
                 self._OBJECT_ORDER.index(object_id),
             )
 
