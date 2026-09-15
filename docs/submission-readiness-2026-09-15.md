@@ -24,9 +24,10 @@ grasp primitives sequenced by a governed rule planner; the IDA Omni reasoner
 path exists but produced no valid step advice in a test run (100% fallback),
 and the teammate's SmolVLA seam has no trained checkpoint behind it yet. A
 VLA-first path (SmolVLA fine-tuned on this stack's own demonstrations,
-driving every single-arm PICK/MOVE, IK only realising its Cartesian deltas,
-governed primitive as a *counted* fallback) was built overnight — see the
-"VLA" section for its status and numbers.
+leading every single-arm PICK/MOVE, IK only realising its Cartesian deltas,
+governed primitive completing each step) was built and measured overnight —
+8/10 seeds in VLA mode; see the "VLA" section for exactly what the policy
+does and does not do yet.
 
 ## Deliverables (brief §"Required deliverables")
 
@@ -84,7 +85,39 @@ overhead + front + wrist cameras, arm state, per-step instruction
 * Evaluation: `run_vla_eval.py` — per op, VLA-completed vs fallback, task
   outcome, end-of-run physical check; `--no-fallback` for the pure-VLA number.
 
-**Status / numbers:** _filled in below once training and evaluation finish._
+**Status / numbers (measured 2026-09-15, morning):**
+
+* Dataset: 40 episodes / 65,850 frames from 20 randomized seeds (`datasets/so101_table_vla_absjaw`:
+  7th action = absolute jaw command; physics-rollback teleports zeroed).
+* Fine-tune: `lerobot/smolvla_base` action expert, 8000 steps, batch 8, RTX 4050,
+  ~78 min (`outputs/train/smolvla_so101_table_20260915_0419/checkpoints/008000`).
+* What the policy does on its own: reaches the cup and closes the jaw above it,
+  carries and released the napkin once in the zone (1 step completed solo in
+  a diagnostic run); it cannot localise the thin cutlery (dx≈0 for fork/spoon).
+* VLA-first 10-seed harness (`evidence/benchmark_results/vla_smolvla_2026-09-15/harness_seed900_x10/summary.json`):
+  **8/10 resolved, 48/50 placements, 8/10 fully set at the end.** Every
+  single-arm PICK/MOVE (124 steps) was VLA-led — the policy drove the reach
+  and the start of the carry from the cameras for its budget (8 s / 6 s) —
+  and **all 124 were completed by the governed primitive continuing from
+  where the policy left the arm** (0 completed by the policy alone). The
+  grasp-integrity guard (object shifting in the pinch) is what hands carries
+  over early; without it the spoon was dropped.
+* So the honest claim is: *VLA leads the motion of every single-arm step; the
+  governed contact primitive completes it; the plate is a governed two-arm
+  primitive.* By time, roughly half of each single-arm step's motion is
+  policy-driven. That is "VLA + IK combined" but **not yet VLA-dominant in
+  the sense of the policy finishing grasps** — say exactly this in the README
+  and video; do not claim more.
+* Paired (both-arms-at-once) execution under the VLA loops does not work yet
+  (1/5 in a test); VLA-mode clips execute one arm-step at a time.
+* Next steps that would move the needle (in order): more demonstrations
+  (100+ seeds) and longer training; a higher-resolution wrist view for the
+  cutlery; ACT as a comparison policy; OpenVINO export of the policy.
+
+**Video set in VLA mode:** `Desktop/OMNI-Q_demo_videos_VLA/` (recorded from
+this checkpoint; HUD tags each step VLA / handed to governed primitive; the
+governed-planner set stays in `Desktop/OMNI-Q_demo_videos/` for the
+simultaneous-arms and vision showcase clips).
 
 ## Speechmatics bonus
 

@@ -234,6 +234,28 @@ demonstrations can now be captured with optional MuJoCo telemetry through
 but the current trained artifact is not an end-to-end motor policy and there is
 no hardware or OpenVINO policy-deployment claim here.
 
+### VLA-first table setting (2026-09-15, measured)
+
+`integrations/intel/vla/` turns the seam above into a running policy:
+
+```text
+overhead + front + wrist cameras, arm state, the step's language
+    → SmolVLA (lerobot/smolvla_base, action expert fine-tuned on 40 demonstration episodes recorded from this stack)
+    → 7 Cartesian deltas / 10 Hz tick  (SmolVLAController, the governed seam)
+    → unweighted 4-joint IK realises each delta; wrist roll from the yaw delta; jaw command direct
+    → the world's own grasp / placement verifiers; grasp-integrity guard on carries
+    → if the policy stalls: the governed contact primitive continues from where the policy left the arm
+```
+
+Measured on the 10-seed randomized harness in VLA mode
+([`evidence/benchmark_results/vla_smolvla_2026-09-15/harness_seed900_x10/summary.json`](evidence/benchmark_results/vla_smolvla_2026-09-15/harness_seed900_x10/summary.json)):
+8/10 resolved, 48/50 placements, 8/10 fully set at the end. Every single-arm
+PICK/MOVE (124) was VLA-led for its budget and completed by the governed
+primitive; 0 were completed by the policy alone (it reaches and closes on the
+cup, carried the napkin once, and cannot yet localise thin cutlery). The plate
+is the governed two-arm primitive. Recordings made in this mode tag every step
+on the HUD. Reproduce: `integrations/intel/vla/README.md`.
+
 ### Governed learned motor seam: SmolVLA → supervisor → IK
 
 The repository now contains the executable boundary for a future motor-level
