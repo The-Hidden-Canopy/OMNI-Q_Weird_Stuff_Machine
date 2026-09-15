@@ -26,7 +26,9 @@ representative supplied full-run clip is checked in under
 [`evidence/demo/`](evidence/demo/). The receipts below are the machine-readable
 evidence behind the claims.
 The concise judges' entry is [`SUBMISSION.md`](SUBMISSION.md); this README
-keeps the longer architecture and evidence trail.
+keeps the longer architecture and evidence trail. The two trained artifacts the
+VLA / OMNI modes need (our SmolVLA fine-tune, the OMNI planner checkpoint) are
+gitignored and fetched from a gated HF repo by `bash scripts/fetch_checkpoints.sh`.
 The supplied full-run recording is included locally as
 [`01_full_run_seed903_director.mp4`](evidence/demo/01_full_run_seed903_director.mp4)
 and mirrored at [Google Drive](https://drive.google.com/file/d/1NMlxlWw5OBF0dZCn98CXpPsI7FeGEBAf/view?usp=drivesdk);
@@ -65,14 +67,13 @@ headline.
 | **20/100 — VLA / Multimodal Reasoning** | VLA-first harness: **8/10 resolved, 48/50 placements, 8/10 final-state complete**. An independent seeded policy-sampling harness reached **12/16** final-state complete. All 124 single-arm PICK/MOVE steps were VLA-led for their budget; **0/124 were completed by the policy alone**—the governed primitive completed the steps. | [`VLA 10-seed summary`](evidence/benchmark_results/vla_smolvla_2026-09-15/harness_seed900_x10/summary.json), [`VLA 16-seed summary`](evidence/benchmark_results/vla_smolvla_2026-09-15/harness_seed900_x16_seeded/summary.json), [`VLA readiness report`](docs/submission-readiness-2026-09-15.md) |
 | **15/100 — Robustness & Generalization** | Ten seeded variations cover placement, yaw, mass, friction, colour, lighting, background, and prompt changes; the seeded VLA sampling harness covers 16 trials. Shape variation is not yet randomized, and handoff recovery remains an **8/20** envelope. | [`Intel challenge brief`](docs/challenge-briefs/intel-online-physical-ai-challenge.md), [`latest handoff report`](evidence/benchmark_results/handoff_variation_2026-09-14_recovery/report.json), [`readiness report`](docs/submission-readiness-2026-09-15.md) |
 | **20/100 — OpenVINO & Intel** | Scene-trained YOLOv8n table detector, INT8: **0.981 mAP50 / 0.915 mAP50-95**, **18.0 ms CPU latency / 98 FPS throughput**, and **11.4 ms iGPU latency / 106 FPS throughput** on an Intel Core 5 210H. This is not a Core Ultra Series 2/3 or NPU result, and the VLA/reasoner remain PyTorch. | [`OpenVINO table-detector receipt`](evidence/benchmark_results/openvino_table_detector_2026-09-15/README.md), [`benchmark script`](integrations/intel/scripts/benchmark_openvino_table.py) |
-| **10/100 — Technical Quality & Reproducibility** | **643 tests collected** in this checkout; deterministic seeds, retained receipts, MuJoCo scene, VLA record/train/eval scripts, and an Intel benchmark script. | [`DEMO.md`](DEMO.md), [`Intel VLA runbook`](integrations/intel/vla/README.md), [`test suite`](tests/) |
+| **10/100 — Technical Quality & Reproducibility** | Full suite **719 passed, 9 skipped** (`pytest tests`, 2026-09-15, on the recording machine with the `intel`+`smolvla` extras; a checkout without those extras collects fewer); deterministic seeds, retained receipts, MuJoCo scene, VLA record/train/eval scripts, an Intel benchmark script, and `scripts/fetch_checkpoints.sh` for the two gitignored checkpoints. | [`DEMO.md`](DEMO.md), [`Intel VLA runbook`](integrations/intel/vla/README.md), [`test suite`](tests/) |
 | **5/100 — Innovation & Technical Demonstration** | The differentiator is governed capability routing: VLA proposals, deterministic/contact skills, voice authority, verification, fault recovery, and device routing share one objective/state boundary. | [`architecture below`](#architecture-in-one-view), [`measured evidence`](#measured-evidence) |
 
 The scorecard separates measured evidence from open gaps. The current checkout
 contains the 12/16 seeded VLA report, the scene-trained OpenVINO table-detector
-receipt, and 643 collected tests. A 1,000-simulation receipt is not present,
-so this README does not claim one; it also does not repeat the stale 728-test
-figure from an earlier submission draft.
+receipt, and the 719-passed / 9-skipped full test run. A 1,000-simulation
+receipt is not present, so this README does not claim one.
 
 ### Architecture in one view
 
