@@ -21,13 +21,17 @@ Multi-Modal Reasoning**
 The judge-facing demo runbook is [`DEMO.md`](DEMO.md). It contains the
 reproducible MuJoCo commands, the 10-seed montage workflow, the camera-in-the-
 loop run, the bimanual plate path, handoff, authority-change, and arm-failure
-clips. The recorded videos remain outside Git by design; the checked-in
-receipts below are the machine-readable evidence behind the claims.
+clips. The complete generated video set remains outside Git by design; the
+representative supplied full-run clip is checked in under
+[`evidence/demo/`](evidence/demo/). The receipts below are the machine-readable
+evidence behind the claims.
 The concise judges' entry is [`SUBMISSION.md`](SUBMISSION.md); this README
 keeps the longer architecture and evidence trail.
-The supplied full-run recording is [`01_full_run_seed903_director.mp4`]
-(https://drive.google.com/file/d/1NMlxlWw5OBF0dZCn98CXpPsI7FeGEBAf/view?usp=drivesdk);
-Drive access remains controlled by the file's sharing settings.
+The supplied full-run recording is included locally as
+[`01_full_run_seed903_director.mp4`](evidence/demo/01_full_run_seed903_director.mp4)
+and mirrored at [Google Drive](https://drive.google.com/file/d/1NMlxlWw5OBF0dZCn98CXpPsI7FeGEBAf/view?usp=drivesdk);
+Drive access remains controlled by the file's sharing settings. Its checksum
+and provenance are recorded in [`evidence/demo/README.md`](evidence/demo/README.md).
 
 ### What we built
 

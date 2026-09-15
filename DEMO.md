@@ -137,8 +137,10 @@ wrist cameras) are produced by
 .venv/Scripts/python integrations/intel/scripts/record_demo_videos.py
 ```
 
-into `Desktop/OMNI-Q_demo_videos/` — deliberately outside the repo; do not
-commit videos. 720p, 25 fps, real-time pace, labelled per clip. The brief's
+into `Desktop/OMNI-Q_demo_videos/` — the generated collection remains outside
+the repo. One representative supplied full-run clip is checked in at
+[`evidence/demo/01_full_run_seed903_director.mp4`](evidence/demo/01_full_run_seed903_director.mp4).
+The clips are 720p, 25 fps, real-time pace, labelled per clip. The brief's
 10-seed clip is `record_seed_montage.py --seeds 900 901 ... 909` (title card
 prints each seed's randomization factors, result card the end-of-run physical
 check). Clips are numbered in the brief's demonstration order; README.txt in

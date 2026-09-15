@@ -132,7 +132,10 @@ the cameras in the e2e clip.
 
 ## 7. Demonstration video
 
-Recorded from this build (local files, not in git) in the brief's order:
+The complete generated video set is recorded locally and remains outside Git in
+the brief's order. The supplied representative full-run clip is checked in at
+[`evidence/demo/01_full_run_seed903_director.mp4`](evidence/demo/01_full_run_seed903_director.mp4).
+The remaining local clips are:
 01 full run (single camera / director / 2×2 grid / six cameras), 02 second
 seed, 03 perception e2e with YOLO/OpenVINO overlays, 04 two-arm plate,
 05 hand-off, 06 handshake, 07 voice authority change, 08 arm failure,
@@ -147,8 +150,9 @@ Extras (labelled on screen): a 4-unit / 8-arm fleet where each unit is a real
 engine run; a 6-arm relay and a drone/rover escalation that are scripted
 choreography and say so.
 
-The supplied full-run recording is [`01_full_run_seed903_director.mp4`](https://drive.google.com/file/d/1NMlxlWw5OBF0dZCn98CXpPsI7FeGEBAf/view?usp=drivesdk);
-Drive access remains controlled by the file's sharing settings.
+The same recording is mirrored at [Google Drive](https://drive.google.com/file/d/1NMlxlWw5OBF0dZCn98CXpPsI7FeGEBAf/view?usp=drivesdk);
+Drive access remains controlled by the file's sharing settings. Its checksum
+and provenance are recorded in [`evidence/demo/README.md`](evidence/demo/README.md).
 
 ## 8. Reproduce
 
