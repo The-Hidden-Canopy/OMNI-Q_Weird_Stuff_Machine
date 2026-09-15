@@ -165,6 +165,14 @@ class VLAWorld(IntelTableWorld):
         ctrl = self._controller(arm_offset)
         self._vla_instruction[arm_offset] = instruction
         ctrl.reset()
+        # Reproducible policy: the flow-matching head samples noise per action
+        # chunk; seed it from the scene seed + this step so a seed's run is
+        # repeatable between the harness and a recording (OMNIQ_VLA_STOCHASTIC=1 to disable).
+        if os.environ.get("OMNIQ_VLA_STOCHASTIC", "0") in {"", "0", "false", "no"}:
+            import torch
+            import zlib
+            base = int(getattr(getattr(self, "scene_config", None), "seed", 0) or 0)
+            torch.manual_seed((base * 1000003 + zlib.crc32(instruction.encode()) + arm_offset) % (2 ** 31))
         # The engine authorized this step before it reached the world (apply_transition
         # runs only after the mission-envelope check); bind the VLA request to that step.
         step = getattr(self, "_current_request", None)
