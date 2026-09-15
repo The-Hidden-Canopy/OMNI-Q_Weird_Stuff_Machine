@@ -45,6 +45,10 @@ def main() -> int:
     ap.add_argument("--seeds", type=int, nargs="*", default=None, help="explicit seed list (overrides --seed0/--n)")
     ap.add_argument("--speed", type=int, default=4, help="sim-time speedup of the run segments")
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    ap.add_argument("--cache", type=Path, default=None,
+                    help="per-seed segment cache dir (default: <out>/_montage_cache[_<mode>]); a seed whose cached run "
+                         "passed is reused instead of re-recorded, so a failed seed costs one seed's re-run, not ten")
+    ap.add_argument("--no-reuse", action="store_true", help="ignore cached seed segments")
     args = ap.parse_args()
 
     import cv2  # noqa: PLC0415
@@ -57,6 +61,10 @@ def main() -> int:
     args.n = len(seeds)
     path = args.out / (f"09_seeds_{seeds[0]}_{seeds[-1]}_montage.mp4" if seeds == list(range(seeds[0], seeds[-1] + 1))
                        else "09_seeds_" + "_".join(str(x) for x in seeds) + "_montage.mp4")
+    mode = ("_omni" if os.environ.get("OMNIQ_OMNI_REASONER", "").lower() == "omni" else "") + \
+           ("_vla" if os.environ.get("OMNIQ_VLA_CHECKPOINT") else "")
+    cache = args.cache or (args.out / f"_montage_cache{mode}")
+    cache.mkdir(parents=True, exist_ok=True)
     part = args.out / "_montage_part.mp4"
     writer = None
     tally = {"trials": 0, "resolved": 0, "placed": 0}
@@ -77,8 +85,36 @@ def main() -> int:
         v = json.loads(bytes(model.text_data[adr:adr + size]).decode().rstrip("\x00"))
         return "  ".join(f"{k.split('_')[0]}: mass x{d['mass_factor']:.2f} friction x{d['friction_factor']:.2f}" for k, d in v.items())
 
+    def append_part(src: Path) -> None:
+        cap = cv2.VideoCapture(str(src))
+        while True:
+            ok, f = cap.read()
+            if not ok:
+                break
+            writer.write(f)
+        cap.release()
+
+    def result_card(end, seed, final_n, placed, resolved, status, vla_line):
+        card(end, [(f"Seed {seed}: final state {final_n}/5 in zone & upright   (engine: {placed}/5 placed, resolved={resolved})", 0.8),
+                   (status, 0.5)] + [(t, 0.5) for t in vla_line] + [
+                   (f"running: {tally['final_ok']}/{tally['trials']} trials fully set, {tally['resolved']}/{tally['trials']} resolved", 0.6)], 75)
+
     for i, seed in enumerate(seeds):
         goal = TABLE_SETTING_PHRASINGS[(seed - 900) % len(TABLE_SETTING_PHRASINGS)]   # the harness's phrasing for this seed
+        meta_p, seg_p = cache / f"seed{seed}.json", cache / f"seed{seed}.mp4"
+        if not args.no_reuse and meta_p.exists() and seg_p.exists():
+            m = json.loads(meta_p.read_text())
+            if m.get("passed") and m.get("speed") == args.speed:
+                start = cv2.imread(str(cache / f"seed{seed}_start.png")); end = cv2.imread(str(cache / f"seed{seed}_end.png"))
+                if writer is None:
+                    writer = _open_writer(path, 25, (start.shape[1], start.shape[0]))
+                card(start, [(t, sc) for t, sc in m["title"]], 75)
+                append_part(seg_p)
+                tally["trials"] += 1; tally["resolved"] += int(m["resolved"]); tally["placed"] += m["placed"]
+                tally["final_ok"] = tally.get("final_ok", 0) + int(m["final_ok"])
+                result_card(end, seed, m["final_n"], m["placed"], m["resolved"], m["status"], m["vla_line"])
+                print(f"seed {seed}: reused cached segment (final {m['final_n']}/5, placed {m['placed']}/5)", flush=True)
+                continue
         engine = build_intel_sim_engine(IntelSceneConfig(seed=seed, randomized=True))
         world = engine.world
         import _reasoner_mode
@@ -93,12 +129,13 @@ def main() -> int:
             rec.attach(world, goal)
         rec.frame()
         start = rec.last_bgr.copy()
-        card(start, [(f"Seed {seed} ({i + 1} of {args.n})   command: \"{goal}\"", 0.9),
-                     ("randomized: placement (+/-12 mm) & yaw (+/-11 deg), object mass & friction, colour, light angle & intensity, background, prompt", 0.55),
-                     (variation_text(world.model, seed), 0.5),
-                     (("two SO-101 arms, MuJoCo, real contact physics -- SmolVLA (fine-tuned VLA) drives each arm's motion; governed primitive as counted fallback"
-                       if os.environ.get("OMNIQ_VLA_CHECKPOINT") else
-                       "two SO-101 arms, MuJoCo, real contact physics -- both arms work at once"), 0.55)], 75)
+        title = [(f"Seed {seed} ({i + 1} of {args.n})   command: \"{goal}\"", 0.9),
+                 ("randomized: placement (+/-12 mm) & yaw (+/-11 deg), object mass & friction, colour, light angle & intensity, background, prompt", 0.55),
+                 (variation_text(world.model, seed), 0.5),
+                 (("two SO-101 arms, MuJoCo, real contact physics -- SmolVLA (fine-tuned VLA) drives each arm's motion; governed primitive as counted fallback"
+                   if os.environ.get("OMNIQ_VLA_CHECKPOINT") else
+                   "two SO-101 arms, MuJoCo, real contact physics -- both arms work at once"), 0.55)]
+        card(start, title, 75)
         world._mujoco = rec.spy()
         t0 = time.time()
         receipt = engine.run(goal)
@@ -108,13 +145,7 @@ def main() -> int:
         vr = getattr(world, "_vla_renderer", None)   # free the policy's renderer now, not at GC time
         if vr is not None:
             vr.close()
-        cap = cv2.VideoCapture(str(part))
-        while True:
-            ok, f = cap.read()
-            if not ok:
-                break
-            writer.write(f)
-        cap.release()
+        append_part(part)
         po = _per_object_pick_place_outcomes(receipt)
         placed = sum(int(v["placed"]) for v in po.values())
         resolved = bool(receipt.metrics.get("resolved"))
@@ -130,11 +161,17 @@ def main() -> int:
         stats = getattr(world, "vla_stats", None)
         if stats:
             ok = sum(1 for a in stats if a.get("ok")); fb = sum(1 for a in stats if not a.get("ok"))
-            vla_line = [(f"VLA (SmolVLA) completed {ok} single-arm steps itself; {fb} handed to the governed primitive", 0.5)]
-        card(end, [(f"Seed {seed}: final state {final_n}/5 in zone & upright   (engine: {placed}/5 placed, resolved={resolved})", 0.8),
-                   (status, 0.5)] + vla_line + [
-                   (f"running: {tally['final_ok']}/{tally['trials']} trials fully set, {tally['resolved']}/{tally['trials']} resolved", 0.6)], 75)
+            vla_line = [f"VLA (SmolVLA) completed {ok} single-arm steps itself; {fb} handed to the governed primitive"]
+        result_card(end, seed, final_n, placed, resolved, status, vla_line)
         print(f"seed {seed}: final {final_n}/5, placed {placed}/5 resolved={resolved} ({time.time() - t0:.0f}s)", flush=True)
+        # cache this seed's segment so a later montage can reuse it if it passed
+        passed = bool(final["all_in_zone_upright"]) and placed == 5 and resolved
+        import shutil
+        shutil.copyfile(part, seg_p)
+        cv2.imwrite(str(cache / f"seed{seed}_start.png"), start); cv2.imwrite(str(cache / f"seed{seed}_end.png"), end)
+        meta_p.write_text(json.dumps({"seed": seed, "goal": goal, "passed": passed, "speed": args.speed, "title": title,
+                                      "final_n": final_n, "placed": placed, "resolved": resolved, "final_ok": bool(final["all_in_zone_upright"]),
+                                      "status": status, "vla_line": vla_line}, indent=1))
     writer.release()
     part.unlink(missing_ok=True)
     print(f"wrote {path}   {tally}")
