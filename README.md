@@ -1,12 +1,161 @@
 # OMNI-Q Weird Stuff Machine
 
-**Omni Q** takes a natural-language objective, observes the world through a vision
-stack, decomposes the objective into executable capabilities, routes those
-capabilities across available hardware and models, and verifies the result.
+**OMNI-Q** is a custom Physical AI architecture: language and camera
+observations become a capability graph, bounded robot actions, verification,
+recovery, and a receipt that explains what happened. YOLO is the open-weight
+perception component; SmolVLA is the learned motor-policy component; IK is the
+motion-realization layer; OpenVINO is the Intel inference runtime; and the
+SO-101 arms, humanoid, drone, and rover are replaceable physical capability
+endpoints. None of those components is OMNI-Q itself.
 
-Most robotic demos bind a model to a workflow. Omni Q binds an objective to
-available capabilities and constructs the workflow at runtime — and rebuilds it
-when a constraint changes, a capability disappears, or an attempt fails.
+The hackathon build centers on a newly designed OMNI/IDA model architecture
+and integrates that custom reasoner with open-weight perception, learned VLA
+control, deterministic motion, verification, recovery, and cross-device
+capability routing.
+
+**Intel Online Physical AI Challenge — Bimanual VLA Manipulation with
+Multi-Modal Reasoning**
+
+## Start with the competition evidence
+
+The judge-facing demo runbook is [`DEMO.md`](DEMO.md). It contains the
+reproducible MuJoCo commands, the 10-seed montage workflow, the camera-in-the-
+loop run, the bimanual plate path, handoff, authority-change, and arm-failure
+clips. The recorded videos remain outside Git by design; the checked-in
+receipts below are the machine-readable evidence behind the claims.
+The concise judges' entry is [`SUBMISSION.md`](SUBMISSION.md); this README
+keeps the longer architecture and evidence trail.
+The supplied full-run recording is [`01_full_run_seed903_director.mp4`]
+(https://drive.google.com/file/d/1NMlxlWw5OBF0dZCn98CXpPsI7FeGEBAf/view?usp=drivesdk);
+Drive access remains controlled by the file's sharing settings.
+
+### What we built
+
+- A custom OMNI/IDA multimodal reasoner with identity-gated loading and
+  receipt-matched checkpoints; the associated model artifact is referenced at
+  [`KissTheHabit/IDA_OMNI_Q`](https://huggingface.co/KissTheHabit/IDA_OMNI_Q).
+- A SmolVLA action expert fine-tuned on 40 episodes / 65,850 frames from this
+  stack, with language, rendered views, proprioception, Cartesian actions, and
+  counted governed fallback.
+- A dual SO-101 MuJoCo scene with contact-backed grasps, two-arm plate
+  manipulation, shared-workspace reasoning, verification, and re-planning.
+- Open-weight YOLOv8n perception trained on this scene's renders, with an
+  OpenVINO export path; the recorded evidence uses four scene cameras plus two
+  wrist views, while the VLA contract consumes overhead/front/wrist views per
+  arm.
+- Natural-language authority changes, arm-fault handling, capability routing,
+  provider fallback, and hash-linked execution receipts.
+- An extensible fleet boundary for additional arms, a Unitree G1 locomotion
+  provider, and drone/rover routing experiments, all labelled separately from
+  the Intel table-setting score.
+
+### Scorecard against Intel's rubric
+
+The table uses only values backed by files in this repository. A metric that
+has not been reproduced here is marked as a gap rather than promoted into the
+headline.
+
+| Intel criterion | Repo-backed result | Evidence / boundary |
+| --- | --- | --- |
+| **30/100 — End-to-End & Bimanual Manipulation** | Governed randomized table setting: **9/10 resolved, 49/50 placements, 9/10 final-state complete**. The wider handoff recovery variation is **8/20**; the deterministic contact-handoff gate remains a separate 10/10 acceptance path. | [`parallel_arms` report](evidence/benchmark_results/parallel_arms_2026-09-14/harness_seed900_x10_final_layout/report.json), [`latest handoff report`](evidence/benchmark_results/handoff_variation_2026-09-14_recovery/report.json) |
+| **20/100 — VLA / Multimodal Reasoning** | VLA-first harness: **8/10 resolved, 48/50 placements, 8/10 final-state complete**. An independent seeded policy-sampling harness reached **12/16** final-state complete. All 124 single-arm PICK/MOVE steps were VLA-led for their budget; **0/124 were completed by the policy alone**—the governed primitive completed the steps. | [`VLA 10-seed summary`](evidence/benchmark_results/vla_smolvla_2026-09-15/harness_seed900_x10/summary.json), [`VLA 16-seed summary`](evidence/benchmark_results/vla_smolvla_2026-09-15/harness_seed900_x16_seeded/summary.json), [`VLA readiness report`](docs/submission-readiness-2026-09-15.md) |
+| **15/100 — Robustness & Generalization** | Ten seeded variations cover placement, yaw, mass, friction, colour, lighting, background, and prompt changes; the seeded VLA sampling harness covers 16 trials. Shape variation is not yet randomized, and handoff recovery remains an **8/20** envelope. | [`Intel challenge brief`](docs/challenge-briefs/intel-online-physical-ai-challenge.md), [`latest handoff report`](evidence/benchmark_results/handoff_variation_2026-09-14_recovery/report.json), [`readiness report`](docs/submission-readiness-2026-09-15.md) |
+| **20/100 — OpenVINO & Intel** | Scene-trained YOLOv8n table detector, INT8: **0.981 mAP50 / 0.915 mAP50-95**, **18.0 ms CPU latency / 98 FPS throughput**, and **11.4 ms iGPU latency / 106 FPS throughput** on an Intel Core 5 210H. This is not a Core Ultra Series 2/3 or NPU result, and the VLA/reasoner remain PyTorch. | [`OpenVINO table-detector receipt`](evidence/benchmark_results/openvino_table_detector_2026-09-15/README.md), [`benchmark script`](integrations/intel/scripts/benchmark_openvino_table.py) |
+| **10/100 — Technical Quality & Reproducibility** | **643 tests collected** in this checkout; deterministic seeds, retained receipts, MuJoCo scene, VLA record/train/eval scripts, and an Intel benchmark script. | [`DEMO.md`](DEMO.md), [`Intel VLA runbook`](integrations/intel/vla/README.md), [`test suite`](tests/) |
+| **5/100 — Innovation & Technical Demonstration** | The differentiator is governed capability routing: VLA proposals, deterministic/contact skills, voice authority, verification, fault recovery, and device routing share one objective/state boundary. | [`architecture below`](#architecture-in-one-view), [`measured evidence`](#measured-evidence) |
+
+The scorecard separates measured evidence from open gaps. The current checkout
+contains the 12/16 seeded VLA report, the scene-trained OpenVINO table-detector
+receipt, and 643 collected tests. A 1,000-simulation receipt is not present,
+so this README does not claim one; it also does not repeat the stale 728-test
+figure from an earlier submission draft.
+
+### Architecture in one view
+
+```text
+LANGUAGE + 4 SCENE CAMERAS + 2 WRIST VIEWS
+        │
+        ▼
+open-weight YOLO / OpenVINO perception + scene state
+        │
+        ▼
+IDA / OMNI reasoner and governed planner
+        │
+        ▼
+CAPABILITY GRAPH
+      ╱   ╲
+     ▼     ▼
+ SmolVLA  governed deterministic/contact skills
+     │     │
+     └── IK / bounded control ──┘
+              │
+        SO-101 × 2 in MuJoCo
+              │
+        verify contact + scene
+          ╱           ╲
+      success       replan / recover
+                         │
+             reroute arm, provider, or device
+```
+
+VLA is one interchangeable capability inside OMNI-Q, not the authority layer
+and not the whole architecture. The VLA evaluation adapter is explicitly
+simulation/evidence work; production activation still requires the normal
+artifact, promotion, supervisor, and actuator boundaries.
+
+## 30/100 — End-to-End & Bimanual Manipulation
+
+Two simulated SO-101 arms operate in one MuJoCo world. The retained path
+includes simultaneous arm execution, a coordinated two-arm plate operation,
+contact verification, and a separate cup handoff path. The 9/10 table-setting
+result is the broad end-to-end score; the latest 8/20 handoff sweep is the
+honest robustness boundary, not hidden.
+
+## 20/100 — VLA / Multimodal Reasoning
+
+SmolVLA consumes rendered views, arm state, and the active language instruction
+to lead single-arm motion. OMNI retains objective, authority, verification, and
+fallback control. The current VLA-first receipts prove a VLA-led path, not a
+policy-only completion claim: governed contact primitives completed all 124
+single-arm steps after the VLA budget. A separate seeded policy-sampling run
+reached 12/16 final-state complete.
+
+## 15/100 — Robustness & Generalization
+
+The 10-seed harness varies initial placement, yaw, mass, friction, colour,
+lighting, background, and prompt phrasing; the seeded VLA sampling harness
+adds 16 independently seeded trials. Remaining gaps are explicit: shape
+variation is limited, paired VLA execution is not yet reliable, and the wider
+handoff sweep is 8/20.
+
+## 20/100 — OpenVINO & Intel
+
+The OpenVINO export and benchmark path is real and includes CPU/iGPU FP32,
+FP16, and NNCF INT8 measurements for the scene-trained table detector. INT8
+measures 0.981 mAP50, 18.0 ms CPU latency / 98 FPS throughput, and 11.4 ms
+iGPU latency / 106 FPS throughput on an Intel Core 5 210H. This is not yet a
+Core Ultra Series 2/3 or NPU result, and the VLA/reasoner are not OpenVINO
+deployments.
+
+## 10/100 — Technical Quality & Reproducibility
+
+The repository contains the MuJoCo scene, seeded evaluation, receipt bundles,
+VLA demonstration recording and training scripts, camera-e2e tooling, and the
+Intel benchmark command. Start with [`DEMO.md`](DEMO.md), then use the
+specialized runbooks linked in the scorecard.
+
+## 5/100 — Innovation & Technical Demonstration
+
+The innovation is the governed composition: an objective can be routed among
+learned, deterministic, contact, voice, and device capabilities while reality
+is re-observed and the graph is re-planned. That is why the table task is an
+application of OMNI-Q rather than the definition of the architecture.
+
+## Full project context
+
+Most robotic demos bind a model to a workflow. OMNI-Q binds an objective to
+available capabilities and constructs the workflow at runtime — then rebuilds
+it when a constraint changes, a capability disappears, or an attempt fails.
 
 ## Public Hub
 
@@ -336,13 +485,13 @@ The current retained evidence is the separate
 [`simulation-contact-handoff`](integrations/intel/README.md#contact-handoff-evidence-boundary)
 MuJoCo path: a contact-grounded `cup_1` transfer with a deterministic 10/10
 acceptance gate and retained randomized receipts. The wider variation sweep is
-now a robustness result: **6/20** successful handoffs under position,
+now a robustness result: **8/20** successful handoffs under position,
 orientation, handoff-point, and receiving-posture variation. That is an
 engineering envelope for recovery and receiver targeting, not an absence of
 bimanual capability. The remaining ugly physical corner is flat/deformable
 napkin handling; it is an object-manipulation problem, not a missing
 architecture. See the [contact-honesty note](docs/contact-honesty-2026-09-13.md)
-and [handoff variation evidence](evidence/benchmark_results/handoff_variation_2026-09-13/README.md).
+and [handoff variation evidence](evidence/benchmark_results/handoff_variation_2026-09-14_recovery/report.json).
 
 ### Unitree G1 locomotion provider
 
@@ -459,9 +608,10 @@ event surface and real provider work.
 - [`integrations/intel/flourish_envelope.md`](integrations/intel/flourish_envelope.md) —
   measured joint-velocity, grip-force, and bimanual shared-workspace bounds, with the OQ-014 spin trial protocol (OQ-026 pre-work)
 - [`docs/contact-honesty-2026-09-13.md`](docs/contact-honesty-2026-09-13.md) —
-  current contact defaults, the 6/20 handoff robustness envelope, the HF OMNI
-  checkpoint provenance, and the remaining camera/re-authorization boundary
-- [`evidence/benchmark_results/handoff_variation_2026-09-13/README.md`](evidence/benchmark_results/handoff_variation_2026-09-13/README.md) —
+  historical contact defaults and the earlier 6/20 handoff envelope, the HF
+  OMNI checkpoint provenance, and the remaining camera/re-authorization
+  boundary; use the latest report below for the current 8/20 result
+- [`evidence/benchmark_results/handoff_variation_2026-09-14_recovery/report.json`](evidence/benchmark_results/handoff_variation_2026-09-14_recovery/report.json) —
   20 retained handoff receipts showing the wider-variation success/failure
   envelope rather than only the tuned 10/10 case
 - [`evidence/benchmark_results/flat_object_grasp_2026-09-13/README.md`](evidence/benchmark_results/flat_object_grasp_2026-09-13/README.md) —

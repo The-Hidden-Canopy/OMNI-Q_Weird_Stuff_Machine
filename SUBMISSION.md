@@ -9,6 +9,11 @@ what was measured, where every number comes from, and how to reproduce each
 deliverable. Everything stated here is backed by a receipt under `evidence/`
 or by code in this repository; where something is not done, it says so.
 
+OMNI-Q is the custom architecture. YOLO is the open-weight perception
+component; SmolVLA is the learned motor-policy component; IK realizes motion;
+OpenVINO is the Intel inference runtime; and the robot endpoints are
+replaceable capabilities inside the architecture.
+
 ## 1. Architecture (Observe → Understand → Plan → Act → Optimize)
 
 ```text
@@ -142,12 +147,15 @@ Extras (labelled on screen): a 4-unit / 8-arm fleet where each unit is a real
 engine run; a 6-arm relay and a drone/rover escalation that are scripted
 choreography and say so.
 
+The supplied full-run recording is [`01_full_run_seed903_director.mp4`](https://drive.google.com/file/d/1NMlxlWw5OBF0dZCn98CXpPsI7FeGEBAf/view?usp=drivesdk);
+Drive access remains controlled by the file's sharing settings.
+
 ## 8. Reproduce
 
 ```bash
 py -3 -m venv .venv
 .venv/Scripts/python -m pip install -e ".[intel,smolvla,speechmatics]"
-PYTHONPATH=src .venv/Scripts/python -m pytest tests -q                             # 728 tests (governed core, sim, API)
+PYTHONPATH=src .venv/Scripts/python -m pytest tests -q                             # 643 tests collected in this checkout; full pass not claimed here
 
 # 10-seed randomized evaluation (governed core; add OMNIQ_VLA_CHECKPOINT / OMNIQ_OMNI_REASONER for the other modes)
 PYTHONPATH=src .venv/Scripts/python -c "from omni_q.intel_sim import run_intel_table_evaluation_report as r; print(r('tmp/harness_seed900_x10', trials=10, seed=900))"
