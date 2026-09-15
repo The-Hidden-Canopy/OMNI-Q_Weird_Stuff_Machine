@@ -11,12 +11,21 @@ into one 2x2 fleet screen with a HUD that reads each unit's live state.
 
     python integrations/intel/scripts/showcase/record_fleet_real.py            # runs the 4 units, then composes
     python integrations/intel/scripts/showcase/record_fleet_real.py --unit 2 --seed 905 --variant authority
+
+OMNI mode (2026-09-15, "showcase examples must be real"): with
+OMNIQ_OMNI_REASONER=omni (+ checkpoint/receipt) and OMNIQ_VLA_CHECKPOINT set,
+every unit is planned by the IDA Omni reasoner (fenced grammar, governed
+validation/completion -- _reasoner_mode) and controlled by the SmolVLA policy
+(vla_world), exactly like the OMNI-advised submission clips.  One such engine
+needs ~3 GB of the 6 GB GPU, so the units run one after another and are
+composed afterwards; the fleet screen says so.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import subprocess
+import os
 import sys
 import time
 from pathlib import Path
@@ -32,9 +41,29 @@ UNITS = [  # unit, seed, variant
 DIRECTOR = "free:150,-30,0.95,0,-0.12,0.05"
 
 
+def omni_mode() -> bool:
+    return os.environ.get("OMNIQ_OMNI_REASONER", "").strip().lower() == "omni"
+
+
+def vla_mode() -> bool:
+    return bool(os.environ.get("OMNIQ_VLA_CHECKPOINT"))
+
+
+def _install_modes() -> None:
+    """Same hooks as record_demo_videos: VLAWorld for every engine, fixed director camera."""
+    if vla_mode():
+        os.environ.setdefault("OMNIQ_PARALLEL_ARMS", "0")
+        sys.path.insert(0, str(HERE.parents[1] / "vla"))
+        import vla_world
+        vla_world.install()
+    from _recording import install_fixed_director_cameras
+    install_fixed_director_cameras([DIRECTOR])
+
+
 def run_unit(unit: int, seed: int, variant: str, out: Path) -> dict:
     """One real engine run, recorded from the director camera at 640x360,
     with a per-frame state log so the fleet HUD can be composed later."""
+    _install_modes()
     from _recording import Recorder
     from omni_q import nlu
     from omni_q.intel_sim import IntelSceneConfig, TABLE_SETTING_PHRASINGS, build_intel_sim_engine, _per_object_pick_place_outcomes
@@ -42,9 +71,16 @@ def run_unit(unit: int, seed: int, variant: str, out: Path) -> dict:
     goal = TABLE_SETTING_PHRASINGS[(seed - 900) % len(TABLE_SETTING_PHRASINGS)]
     eng = build_intel_sim_engine(IntelSceneConfig(seed=seed, randomized=True))
     w = eng.world
-    path = out / f"_unit{unit}_seed{seed}_{variant}.mp4"
-    rec = Recorder(w, DIRECTOR, path, size=(640, 360), label=f"UNIT {unit}  seed {seed}  governed planner + contact controllers, both arms")
+    suffix = "_omni" if omni_mode() else ""
+    path = out / f"_unit{unit}_seed{seed}_{variant}{suffix}.mp4"
+    stack = ("OMNI reasoner plan + SmolVLA control" if omni_mode() and vla_mode() else
+             "OMNI reasoner plan + contact controllers" if omni_mode() else
+             "SmolVLA control, governed plan" if vla_mode() else "governed planner + contact controllers, both arms")
+    rec = Recorder(w, DIRECTOR, path, size=(640, 360), label=f"UNIT {unit}  seed {seed}  {stack}")
     rec.attach(w, goal)
+    if omni_mode():
+        import _reasoner_mode
+        _reasoner_mode.compose(eng, rec)   # the IDA Omni body proposes each step; the governed core validates/completes
     w._mujoco = rec.spy()
     log: list[tuple[int, list[str], str | None]] = []   # (frame, hud lines, notice)
     orig_frame = rec.frame
@@ -89,8 +125,13 @@ def run_unit(unit: int, seed: int, variant: str, out: Path) -> dict:
     result = {"unit": unit, "seed": seed, "variant": variant, "goal": goal, "video": str(path),
               "placed": sum(int(v["placed"]) for v in po.values()), "resolved": bool(r.metrics.get("resolved")),
               "final_all_in_zone_upright": fs["all_in_zone_upright"], "frames": rec.frames, "wall_s": round(time.time() - t0)}
+    if omni_mode():
+        result["omni_decisions"] = dict(getattr(eng, "_reasoner_hud_state", {}) or {})
     rec.close()
-    (out / f"_unit{unit}_log.json").write_text(json.dumps({"result": result, "log": log}))
+    vr = getattr(w, "_vla_renderer", None)
+    if vr is not None:
+        vr.close()
+    (out / f"_unit{unit}_log{suffix}.json").write_text(json.dumps({"result": result, "log": log}))
     print(json.dumps(result), flush=True)
     return result
 
@@ -102,10 +143,11 @@ def compose(out: Path, results: list[dict]) -> Path:
     import numpy as np
     from _recording import _open_writer, draw_text_block
 
+    suffix = "_omni" if omni_mode() else ""
     caps = [cv2.VideoCapture(r["video"]) for r in results]
-    logs = [json.loads((out / f"_unit{r['unit']}_log.json").read_text())["log"] for r in results]
+    logs = [json.loads((out / f"_unit{r['unit']}_log{suffix}.json").read_text())["log"] for r in results]
     n = max(int(c.get(cv2.CAP_PROP_FRAME_COUNT)) for c in caps)
-    path = out / "fleet_real_4_units_8_arms.mp4"
+    path = out / f"fleet_real_4_units_8_arms{suffix}.mp4"
     writer = _open_writer(path, 25, (1280, 720))
     last = [None] * 4
     ended = [False] * 4
@@ -126,9 +168,17 @@ def compose(out: Path, results: list[dict]) -> Path:
         grid = np.concatenate([np.concatenate(tiles[:2], axis=1), np.concatenate(tiles[2:], axis=1)], axis=0)
         band = np.full((44, 1280, 3), 18, np.uint8)
         placed = sum(r["placed"] for r, e in zip(results, ended) if e)
-        text = (f"FLEET: 8 MANIPULATORS   4 OMNI-Q ENGINES, independent & simultaneous   ACTIVE UNITS: {active}   "
-                f"OBJECTIVES: 4 x set the table   RE-PLANS: 2 (voice authority, servo fault)   COMPLETE: {sum(ended)}/4   PLACEMENTS: {placed}/{5 * sum(ended)}")
-        cv2.putText(band, text, (14, 29), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (255, 255, 255), 1, cv2.LINE_AA)
+        if omni_mode():
+            dec = sum(int((r.get("omni_decisions") or {}).get("decisions", 0)) for r, e in zip(results, ended) if e)
+            text = (f"FLEET: 8 MANIPULATORS   4 OMNI-Q ENGINES, each planned by the IDA Omni reasoner + SmolVLA control, "
+                    f"run one after another on one GPU and composed   ACTIVE: {active}   OMNI DECISIONS: {dec}   "
+                    f"RE-PLANS: 2 (voice authority, servo fault)   COMPLETE: {sum(ended)}/4   PLACEMENTS: {placed}/{5 * sum(ended)}")
+            scale = 0.42
+        else:
+            text = (f"FLEET: 8 MANIPULATORS   4 OMNI-Q ENGINES, independent & simultaneous   ACTIVE UNITS: {active}   "
+                    f"OBJECTIVES: 4 x set the table   RE-PLANS: 2 (voice authority, servo fault)   COMPLETE: {sum(ended)}/4   PLACEMENTS: {placed}/{5 * sum(ended)}")
+            scale = 0.52
+        cv2.putText(band, text, (14, 29), cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), 1, cv2.LINE_AA)
         writer.write(np.concatenate([band, grid], axis=0))
     writer.release()
     for c in caps:
@@ -148,12 +198,16 @@ def main() -> int:
         run_unit(args.unit, args.seed, args.variant, args.out)
         return 0
     procs = []
+    sequential = omni_mode() or vla_mode()   # one policy+reasoner engine is ~3 GB of the 6 GB GPU
     for unit, seed, variant in UNITS:
         procs.append(subprocess.Popen([sys.executable, __file__, "--unit", str(unit), "--seed", str(seed), "--variant", variant,
                                        "--out", str(args.out)]))
+        if sequential:
+            procs[-1].wait()
     for p in procs:
         p.wait()
-    results = [json.loads((args.out / f"_unit{u}_log.json").read_text())["result"] for u, _, _ in UNITS]
+    suffix = "_omni" if omni_mode() else ""
+    results = [json.loads((args.out / f"_unit{u}_log{suffix}.json").read_text())["result"] for u, _, _ in UNITS]
     print(compose(args.out, results))
     for r in results:
         print(r)

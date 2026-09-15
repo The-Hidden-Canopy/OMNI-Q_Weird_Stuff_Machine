@@ -401,7 +401,15 @@ def main() -> int:
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     _write_readme(args.out)
-    for name, (factory, seed, views) in RUNS.items():
+    runs = dict(RUNS)
+    # --only 02_full_run_seed905: the 02 full-run views on another seed (retake with a seed that passes in this mode)
+    import re
+    for req in args.only or ():
+        m = re.match(r"^(\d\d)_full_run_seed(\d+)$", req)
+        if m and req not in runs:
+            base = next((v for k, v in RUNS.items() if k.startswith(m.group(1) + "_full_run_")), RUNS["01_full_run_seed903"])
+            runs[req] = (base[0], int(m.group(2)), base[2])
+    for name, (factory, seed, views) in runs.items():
         if args.only and name not in args.only:
             continue
         world, run = factory(seed)
