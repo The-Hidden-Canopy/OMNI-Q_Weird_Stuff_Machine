@@ -260,6 +260,33 @@ napkin handling; it is an object-manipulation problem, not a missing
 architecture. See the [contact-honesty note](docs/contact-honesty-2026-09-13.md)
 and [handoff variation evidence](evidence/benchmark_results/handoff_variation_2026-09-13/README.md).
 
+### Unitree G1 locomotion provider
+
+The repository also contains a separate OMNI-facing provider for Unitree's
+actual pretrained G1 12-DOF MuJoCo locomotion policy:
+[`src/omni_q/humanoid_g1.py`](src/omni_q/humanoid_g1.py). OMNI supplies only
+bounded forward/lateral/yaw velocity intent; the Unitree TorchScript policy
+produces leg targets inside its validated 50 Hz controller loop. It is not
+merged into the arm fleet backend and it does not receive authority over
+objectives, world state, or replanning.
+
+The vendor checkout and weights stay local and are not committed to GitHub:
+
+```powershell
+git clone --depth 1 https://github.com/unitreerobotics/unitree_rl_gym.git external/unitree_rl_gym
+$env:UNITREE_RL_GYM = (Resolve-Path .\external\unitree_rl_gym).Path
+.venv\Scripts\python -m pip install -e ".[g1]"
+$env:PYTHONPATH = "src"
+.venv\Scripts\python -m omni_q.demo_g1
+```
+
+The adapter validates the official `g1.yaml`, `scene.xml`, policy dimensions,
+joint names, actuator bindings, and finite policy output before stepping. The
+headless test proves that the real local `motion.pt` loads, binds to the
+12-DOF model, and advances physics; it is not a claim of walking quality or
+hardware deployment. Interactive rollout evidence still requires the viewer
+run and a retained receipt.
+
 ### Closed-loop demo acceptance
 
 The handoff is only the beginning of the physical-intelligence demo. The

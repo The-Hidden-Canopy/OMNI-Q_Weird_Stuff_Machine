@@ -143,6 +143,14 @@ def test_speaker_is_the_majority_label_in_the_transcript():
     assert mapped.speaker_labelled is True
 
 
+def test_provider_language_is_carried_into_the_neutral_payload():
+    mapper = _mapper(language="es")
+    mapped = mapper.map_message(_message("AddTranscript", "pon la mesa", 0.0, 0.5))
+
+    assert mapped.payload["language"] == "es"
+
+
+
 def test_pause_ms_is_measured_from_the_previous_final_only():
     mapper = _mapper()
     first = mapper.map_message(_message("AddTranscript", "one", 0.0, 1.0))
@@ -689,7 +697,8 @@ def test_disabling_aggregation_reproduces_the_fragmented_behaviour():
 # -- configuration and credentials ------------------------------------------
 
 def test_start_recognition_matches_the_documented_shape():
-    config = SpeechmaticsConfig(sample_rate=44100, max_speakers=3)
+    config = SpeechmaticsConfig(sample_rate=44100, max_speakers=3,
+                                language="es", domain="bilingual-en")
     start = config.start_recognition()
     assert start["message"] == "StartRecognition"
     assert start["audio_format"] == {"type": "raw", "encoding": "pcm_s16le",
@@ -698,6 +707,8 @@ def test_start_recognition_matches_the_documented_shape():
     assert transcription["enable_partials"] is True
     assert transcription["diarization"] == "speaker"
     assert transcription["speaker_diarization_config"] == {"max_speakers": 3}
+    assert transcription["language"] == "es"
+    assert transcription["domain"] == "bilingual-en"
 
 
 def test_diarization_can_be_disabled_entirely():

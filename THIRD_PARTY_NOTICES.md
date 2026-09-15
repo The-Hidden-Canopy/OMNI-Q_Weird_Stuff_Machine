@@ -6,9 +6,24 @@ from sources that were consulted only as reference. That distinction is
 intentional: a repository's public visibility is not treated as permission to
 copy its code or assets.
 
-Review date: 2026-09-13
+Review date: 2026-09-14
 
 ## Material incorporated in this repository
+
+### Unitree Robotics `unitree_rl_gym` G1 deployment seam
+
+- Source: [unitreerobotics/unitree_rl_gym](https://github.com/unitreerobotics/unitree_rl_gym)
+- Pinned source commit: `276801e46c5d433564f24658bac64f254b7d2d4b`
+- License: BSD 3-Clause License; copyright (c) 2016-2023 HangZhou YuShu
+  TECHNOLOGY CO., LTD. (Unitree Robotics)
+- Local source/weights checkout: `external/unitree_rl_gym/` (gitignored and
+  not redistributed by this repository)
+- Adapted implementation: [`src/omni_q/humanoid_g1.py`](src/omni_q/humanoid_g1.py)
+- License text: [`third_party/licenses/unitree_rl_gym-BSD-3-Clause.txt`](third_party/licenses/unitree_rl_gym-BSD-3-Clause.txt)
+
+The G1 provider adapts the official MuJoCo observation, policy-update, and PD
+control loop.  It does not copy the vendor checkout into the tracked tree or
+grant the policy authority over OMNI-Q objectives, world state, or replanning.
 
 ### MuJoCo Menagerie `trs_so_arm100`
 

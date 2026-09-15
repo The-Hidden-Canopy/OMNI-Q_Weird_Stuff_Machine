@@ -212,6 +212,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "utterances -- fragments one sentence into several "
                              "claims, so the NLU sees 'use your' alone")
     parser.add_argument("--language", default="en")
+    parser.add_argument("--domain", default=None,
+                        help="optional Speechmatics domain hint (provider-side only)")
     parser.add_argument("--max-delay", type=float, default=1.5,
                         help="provider finalization delay in seconds (0.7-4.0)")
     parser.add_argument("--no-partials", action="store_true")
@@ -350,7 +352,8 @@ def main(argv: list[str] | None = None) -> int:
         print("[voice] no --operator given: every speaker stays unauthorized, "
               "so finals will be observed/denied, never committed")
 
-    mapper = TranscriptMapper(session_id=args.session_id, org_id=args.org_id)
+    mapper = TranscriptMapper(session_id=args.session_id, org_id=args.org_id,
+                              language=args.language)
     accumulator = None
     if not args.no_accumulate:
         accumulator = IntentAccumulator(runtime, window_ms=args.intent_window_ms,
@@ -385,6 +388,7 @@ def main(argv: list[str] | None = None) -> int:
 
     config = SpeechmaticsConfig(
         language=args.language,
+        domain=args.domain,
         enable_partials=not args.no_partials,
         max_delay=args.max_delay,
         diarization=None if args.no_diarization else "speaker",

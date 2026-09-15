@@ -143,6 +143,9 @@ class SpeechmaticsConfig:
     additional_vocab: tuple[str, ...] = (
         "Omni", "OMNI-Q", "gripper", "bimanual", "handoff", "regrasp",
     )
+    #: Optional provider domain hint, kept at the transport boundary.  It does
+    #: not change OMNI-Q's provider-neutral language/canonicalization path.
+    domain: str | None = None
 
     def start_recognition(self) -> dict[str, Any]:
         transcription: dict[str, Any] = {
@@ -153,6 +156,8 @@ class SpeechmaticsConfig:
         }
         if self.operating_point:
             transcription["operating_point"] = self.operating_point
+        if self.domain:
+            transcription["domain"] = self.domain
         if self.additional_vocab:
             transcription["additional_vocab"] = [
                 {"content": word} for word in self.additional_vocab

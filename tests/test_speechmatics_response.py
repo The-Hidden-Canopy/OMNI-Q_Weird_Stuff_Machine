@@ -17,13 +17,15 @@ from integrations.speechmatics.response import (
 from integrations.speechmatics.transport import VoiceSink
 
 
-def mapped(seq: int, text: str, *, final: bool = True) -> MappedTranscript:
+def mapped(seq: int, text: str, *, final: bool = True,
+           language: str = "en") -> MappedTranscript:
     return MappedTranscript(
         payload={
             "session_id": "session_01",
             "org_id": "org_a",
             "speaker_id": "S1",
             "text": text,
+            "language": language,
             "t_start_ns": seq * 1_000_000_000,
             "t_end_ns": seq * 1_000_000_000 + 500_000_000,
             "sequence": seq,
@@ -153,6 +155,30 @@ def test_addressed_dialogue_is_spoken_without_a_mutation_result() -> None:
                 "voice.response.sent",
                 "voice.response.stopped",
             ]
+
+
+def test_committed_multilingual_constraint_gets_bounded_localized_response() -> None:
+    from omni_q import SpeechmaticsRealtimeAdapter
+
+    runtime = operator_runtime()
+    player = Player()
+    sink = VoiceSink(
+        SpeechmaticsRealtimeAdapter(runtime),
+        speech_output=tts(
+            player,
+            "Brazo izquierdo no disponible. Replanificando con el derecho.",
+        ),
+    )
+
+    result = sink.deliver(
+        mapped(1, "No uses más el brazo izquierdo", language="es")
+    )
+
+    assert result.status == "committed"
+    assert result.claim.original_text == "No uses más el brazo izquierdo"
+    assert result.claim.canonical_text == "don't use the left arm anymore"
+    assert result.claim.language == "es"
+    assert sink.outputs[0].language == "es"
 
 
 def test_partial_and_observation_do_not_speak_or_invent_execution() -> None:

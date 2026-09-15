@@ -179,6 +179,9 @@ class SpeechmaticsVoiceBridge:
         )
         text = str(segment.get("text", "")).strip()
         alternative: dict[str, Any] = {"content": text}
+        language = segment.get("language", envelope.get("language", "en"))
+        if isinstance(language, str) and language.strip():
+            alternative["language"] = language
         speaker = segment.get("speaker_id", segment.get("speaker"))
         if speaker is not None:
             alternative["speaker"] = speaker
@@ -190,6 +193,7 @@ class SpeechmaticsVoiceBridge:
                 "start_time": start,
                 "end_time": end,
                 "transcript": text,
+                "language": language,
             },
             "results": [{
                 "type": "word",

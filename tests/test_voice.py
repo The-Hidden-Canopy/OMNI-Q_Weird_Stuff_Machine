@@ -325,6 +325,87 @@ def test_the_same_words_act_normally_above_the_floor():
     assert runtime.ingest_final(event).candidate.action == "GRAPH_MUTATION"
 
 
+def test_multilingual_constraint_uses_one_existing_authority_path():
+    from omni_q import build_mock_engine
+
+    engine = build_mock_engine()
+    runtime = VoiceRuntime(
+        "session_01", "local-demo",
+        authority=AuthorityResolver({
+            "operator": [VoiceCapability.GRAPH_MUTATION.value],
+        }),
+        mutator=RuntimeMutator(engine),
+    )
+    event = SpeechFinal(
+        session_id="session_01", org_id="local-demo", speaker_id="speaker_01",
+        text="No uses más el brazo izquierdo", t_start_ns=1_000_000_000,
+        t_end_ns=1_700_000_000, sequence=1, confidence=0.94, language="es",
+    )
+    runtime.registry.observe(event)
+    runtime.registry.set_authority(
+        event.speaker_id, "operator", [VoiceCapability.GRAPH_MUTATION.value]
+    )
+
+    result = runtime.ingest_final(event, world=engine.world.state())
+
+    assert result.status == "committed"
+    assert result.claim.text == "No uses más el brazo izquierdo"
+    assert result.claim.original_text == result.claim.text
+    assert result.claim.canonical_text == "don't use the left arm anymore"
+    assert result.candidate and result.candidate.args["constraints"] == [
+        ["prefer_arm", "right"]
+    ]
+    assert engine._pending_constraints[0].value == "right"
+
+
+def test_multilingual_fragments_complete_through_intent_accumulator():
+    from omni_q import build_mock_engine
+    from omni_q.voice import IntentAccumulator
+
+    engine = build_mock_engine()
+    runtime = VoiceRuntime(
+        "session_01", "local-demo",
+        authority=AuthorityResolver({
+            "operator": [VoiceCapability.GRAPH_MUTATION.value],
+        }),
+        mutator=RuntimeMutator(engine),
+    )
+    first = SpeechFinal(
+        session_id="session_01", org_id="local-demo", speaker_id="speaker_01",
+        text="No uses", t_start_ns=1_000_000_000,
+        t_end_ns=1_300_000_000, sequence=1, confidence=0.94, language="es",
+    )
+    second = SpeechFinal(
+        session_id="session_01", org_id="local-demo", speaker_id="speaker_01",
+        text="más el brazo izquierdo", t_start_ns=1_400_000_000,
+        t_end_ns=2_000_000_000, sequence=2, confidence=0.94, language="es",
+    )
+    runtime.registry.observe(first)
+    runtime.registry.set_authority(
+        first.speaker_id, "operator", [VoiceCapability.GRAPH_MUTATION.value]
+    )
+    accumulator = IntentAccumulator(runtime)
+
+    assert accumulator.ingest_final(first) is None
+    result = accumulator.ingest_final(second)
+
+    assert result is not None and result.status == "committed"
+    assert result.claim.original_text == "No uses más el brazo izquierdo"
+    assert result.claim.canonical_text == "don't use the left arm anymore"
+
+
+def test_speaker_language_is_observed_without_granting_authority():
+    runtime = VoiceRuntime("session_01", "org_a")
+    event = _final(1, "Hola", org="org_a")
+    event = SpeechFinal(**{**event.__dict__, "language": "es"})
+
+    runtime.ingest_final(event)
+
+    speaker = runtime.registry.get(event.speaker_id)
+    assert speaker.preferred_language == "es"
+    assert speaker.authority_role == "unknown"
+
+
 def test_a_mumbled_safety_word_is_still_an_interruption():
     """Confidence gating must never suppress a safety reflex."""
     calls: list[str] = []

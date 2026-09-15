@@ -50,6 +50,14 @@ speechmatics-mic = [
     "websockets>=12",
     "sounddevice>=0.4",
 ]
+# Actual Unitree G1 12-DOF TorchScript locomotion policy in MuJoCo.  The
+# policy/MJCF checkout is external and is not committed to this repository.
+g1 = [
+    "mujoco>=3.2",
+    "numpy>=1.24",
+    "pyyaml>=6.0",
+    "torch>=2.0",
+]
 
 [project.scripts]
 omni-q-demo = "omni_q.demo:main"

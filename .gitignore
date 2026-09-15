@@ -66,3 +66,7 @@ runs/
 
 # HF-hosted Omni checkpoints (re-download via hf: KissTheHabit/IDA_OMNI_Q); 977 MB, over the GitHub limit
 models/hf_ida_omni_q/
+
+# External vendor checkout for the optional Unitree G1 provider.  Keep the
+# checkout and pretrained motion.pt local; provenance is recorded in the repo.
+external/unitree_rl_gym/

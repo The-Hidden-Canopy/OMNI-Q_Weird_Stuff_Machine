@@ -93,6 +93,7 @@ class TranscriptMapper:
     clock_source: str = "monotonic"
     #: Minimum span forced onto a transcript whose provider start == end.
     min_span_ns: int = 1_000_000  # 1 ms
+    language: str = "en"
 
     _sequence: int = field(default=0, init=False)
     _epoch_ns: int | None = field(default=None, init=False)
@@ -103,6 +104,11 @@ class TranscriptMapper:
     #: the speaker stopped -- the aggregator needs it to close an utterance on
     #: the provider's own clock instead of waiting for the socket to close.
     last_empty_end_ns: int | None = field(default=None, init=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.language, str) or not self.language.strip():
+            raise ValueError("language must be a non-empty string")
+        self.language = self.language.strip().lower().replace("_", "-")
 
     # -- lifecycle -------------------------------------------------------
 
@@ -199,6 +205,7 @@ class TranscriptMapper:
 
         confidence, measured = self._confidence(results)
         speaker, labelled = self._speaker(results)
+        language = self._language(message, results)
 
         now_ns = int(self.clock())
         latency_ms = max(0.0, (now_ns - end_ns) / 1_000_000.0)
@@ -213,6 +220,7 @@ class TranscriptMapper:
             "org_id": self.org_id,
             "speaker_id": speaker,
             "text": text,
+            "language": language,
             "t_start_ns": start_ns,
             "t_end_ns": end_ns,
             "sequence": self._sequence,
@@ -286,6 +294,22 @@ class TranscriptMapper:
         if not labels:
             return self.default_speaker_id, False
         return labels.most_common(1)[0][0], True
+
+    def _language(self, message: Mapping[str, Any],
+                  results: list[Mapping[str, Any]]) -> str:
+        metadata = message.get("metadata") or {}
+        values: list[Any] = [
+            message.get("language"),
+            metadata.get("language"),
+        ]
+        for result in results:
+            alternatives = result.get("alternatives") or []
+            if alternatives and isinstance(alternatives[0], Mapping):
+                values.append(alternatives[0].get("language"))
+        for value in values:
+            if isinstance(value, str) and value.strip():
+                return value.strip().lower().replace("_", "-")
+        return self.language
 
 
 def _first_float(*values: Any, default: float) -> float:

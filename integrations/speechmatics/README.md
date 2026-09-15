@@ -37,6 +37,45 @@ changes. A successful mutation is reported as committed; deferred or rejected
 mutations are explicitly not committed. STOP/HOLD/BACKOFF is a separate local
 reflex request and still requires an explicitly registered interrupt role.
 
+### Bounded multilingual voice
+
+The transport carries the provider language tag into the provider-neutral
+claim. `src/omni_q/language.py` then recognizes a deliberately bounded
+operational lexicon for English, Spanish, and French. It does not perform
+general translation and it does not grant authority:
+
+```
+"No uses más el brazo izquierdo"  (es)
+                 │
+                 ▼
+SpeechClaim: original_text preserved, language=es
+                 │
+                 ▼
+canonical_text = "don't use the left arm anymore"
+                 │
+                 ▼
+existing nlu.py → existing AuthorityResolver → RuntimeMutator
+```
+
+The claim receipt records both `original_text` and `canonical_text`, as well as
+the bounded-lexicon method and confidence. Unsupported languages and phrases
+remain unchanged and are not invented into an intent. The same speaker state
+records `preferred_language`; each claim also carries its provider language,
+which the response renderer uses for bounded operational replies such as stop,
+denial, arm reassignment, speed changes, and on-device execution.
+
+For a live session, configure the provider and mapper together:
+
+```
+python integrations/speechmatics/scripts/run_voice_transport.py \
+    --mic --language es --domain bilingual-en --operator S1
+```
+
+`--domain` is provider-side recognition metadata. It does not replace the
+canonicalization or authority boundary. General dialogue responses still come
+from the injected read-only OMNI dialogue handler; the bounded response
+catalog only localizes operational status messages.
+
 ## Transport (built)
 
 | File | Role |

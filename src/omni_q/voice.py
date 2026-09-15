@@ -32,6 +32,7 @@ from typing import Any, Callable, Mapping, Sequence
 from .contracts import WorldState
 from .events import EventBus
 from . import nlu
+from .language import canonicalize
 
 __all__ = [
     "AuthorityDecision",
@@ -142,6 +143,7 @@ class SpeechPartial:
     latency_ms: float = 0.0
     confidence: float = 1.0
     pause_ms: float | None = None
+    language: str = "en"
 
     def __post_init__(self) -> None:
         _text(self.session_id, "session_id")
@@ -155,6 +157,7 @@ class SpeechPartial:
             raise VoiceError("sequence must be a positive integer")
         _text(self.source, "source")
         _text(self.clock_source, "clock_source")
+        _text(self.language, "language")
         if self.latency_ms < 0 or self.pause_ms is not None and self.pause_ms < 0:
             raise VoiceError("latency_ms and pause_ms must be non-negative")
         _finite_probability(self.confidence, "confidence")
@@ -177,6 +180,7 @@ class SpeechPartial:
             "latency_ms": self.latency_ms,
             "confidence": self.confidence,
             "pause_ms": self.pause_ms,
+            "language": self.language,
             "duration_ms": self.duration_ms,
         }
 
@@ -212,6 +216,13 @@ class SpeechClaim:
     #: docs/evidence-lag-audit-2026-09-13.md.
     world_revision: int | None = None
     observed_revision: int | None = None
+    # Provider evidence is retained verbatim.  Canonical text is a separate
+    # execution input and never replaces what the speaker actually said.
+    language: str = "en"
+    original_text: str = ""
+    canonical_text: str | None = None
+    canonicalization_confidence: float = 0.0
+    canonicalization_method: str = "identity"
 
     @property
     def revision_lag(self) -> int | None:
@@ -226,7 +237,7 @@ class SpeechClaim:
                    observed_revision: int | None = None) -> "SpeechClaim":
         digest = hashlib.sha256(
             f"{event.session_id}|{event.org_id}|{event.sequence}|{event.speaker_id}|"
-            f"{event.t_start_ns}|{event.t_end_ns}|{event.text}".encode()
+            f"{event.t_start_ns}|{event.t_end_ns}|{event.language}|{event.text}".encode()
         ).hexdigest()[:20]
         return cls(
             claim_id=f"speech_{digest}",
@@ -242,6 +253,8 @@ class SpeechClaim:
             world_entity_id=speaker.world_entity_id,
             world_revision=world_revision,
             observed_revision=observed_revision,
+            language=event.language,
+            original_text=event.text,
         )
 
     def as_dict(self) -> dict[str, Any]:
@@ -261,6 +274,11 @@ class SpeechClaim:
             "world_revision": self.world_revision,
             "observed_revision": self.observed_revision,
             "revision_lag": self.revision_lag,
+            "language": self.language,
+            "original_text": self.original_text or self.text,
+            "canonical_text": self.canonical_text,
+            "canonicalization_confidence": self.canonicalization_confidence,
+            "canonicalization_method": self.canonicalization_method,
         }
 
 
@@ -281,6 +299,7 @@ class SpeakerState:
     allowed_capabilities: set[str] = field(default_factory=set)
     world_entity_id: str | None = None
     visible_from: list[str] = field(default_factory=list)
+    preferred_language: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -299,6 +318,7 @@ class SpeakerState:
             "allowed_capabilities": sorted(self.allowed_capabilities),
             "world_entity_id": self.world_entity_id,
             "visible_from": list(self.visible_from),
+            "preferred_language": self.preferred_language,
         }
 
 
@@ -316,6 +336,7 @@ class SpeakerRegistry:
         if speaker is None:
             speaker = SpeakerState(event.speaker_id, self.session_id, self.org_id)
             self._speakers[event.speaker_id] = speaker
+        speaker.preferred_language = event.language
         speaker.active_turn = True
         speaker.last_spoke_ns = event.t_end_ns
         return speaker
@@ -341,6 +362,12 @@ class SpeakerRegistry:
         speaker = self.get(speaker_id)
         speaker.authority_role = _text(role, "role")
         speaker.allowed_capabilities = {_text(c, "capability") for c in capabilities}
+        return speaker
+
+    def set_preferred_language(self, speaker_id: str, language: str) -> SpeakerState:
+        """Set a speaker's response language without changing authority."""
+        speaker = self.get(speaker_id)
+        speaker.preferred_language = _text(language, "language").lower().replace("_", "-")
         return speaker
 
     def end_turn(self, speaker_id: str) -> None:
@@ -851,6 +878,15 @@ class VoiceRuntime:
         world_revision = getattr(world, "revision", None) if world is not None else None
         claim = SpeechClaim.from_final(event, speaker, world_revision=world_revision,
                                        observed_revision=observed_revision)
+        canonical = canonicalize(claim.text, claim.language)
+        claim = replace(
+            claim,
+            language=canonical.language,
+            original_text=canonical.original_text,
+            canonical_text=canonical.canonical_text,
+            canonicalization_confidence=canonical.confidence,
+            canonicalization_method=canonical.method,
+        )
         self.arbiter.final(claim)
         self._emit_speaker_lifecycle(event.speaker_id, known, previous, was_overlapping)
         if was_overlapping:
@@ -862,7 +898,20 @@ class VoiceRuntime:
                          conversation_mode=self.arbiter.mode.value)
         self._emit_hook("on_final_speech", event=event, claim=claim, turn=turn)
 
-        interruption = self.interruption_gate.inspect(claim.text)
+        self.bus.publish(
+            "voice.claim.canonicalized",
+            source="voice",
+            claim_id=claim.claim_id,
+            language=canonical.language,
+            original_text=canonical.original_text,
+            canonical_text=canonical.canonical_text,
+            confidence=canonical.confidence,
+            method=canonical.method,
+            phrase_id=canonical.phrase_id,
+        )
+
+        execution_text = claim.canonical_text or claim.text
+        interruption = self.interruption_gate.inspect(execution_text)
         if interruption.detected:
             self.arbiter.interrupt()
             self.bus.publish("voice.interrupt.detected", source="voice",
@@ -882,9 +931,9 @@ class VoiceRuntime:
             return VoiceDispatchResult(claim, authority=decision,
                                        interruption=interruption, status="interrupt_denied")
 
-        parsed = nlu.parse(claim.text)
+        parsed = nlu.parse(execution_text)
         references = self.reference_resolver.resolve(
-            claim.text, claim_id=claim.claim_id, world=world,
+            execution_text, claim_id=claim.claim_id, world=world,
             pointed_at=pointed_at, recipient=recipient,
             object_candidates=object_candidates,
         )
@@ -915,8 +964,8 @@ class VoiceRuntime:
                 self.bus.publish("voice.reference.resolved", source="voice",
                                  claim_id=claim.claim_id, reference=reference.as_dict())
                 self._emit_hook("on_reference_resolved", claim=claim, reference=reference)
-        addressed_question = _is_addressed_question(claim.text)
-        capability = intent_capability(parsed, claim.text)
+        addressed_question = _is_addressed_question(execution_text)
+        capability = intent_capability(parsed, execution_text)
         # Preserve the existing conservative authority behavior for ordinary
         # capitalized sentences, but let an explicit question addressed to
         # OMNI use the read-only lane when NLU only produced a bare COMMAND.
@@ -977,7 +1026,7 @@ class VoiceRuntime:
         mutation: dict[str, Any] | None = None
         committed = False
         if capability == VoiceCapability.GRAPH_MUTATION.value and self.mutator is not None:
-            result = self.mutator.apply(claim.text)
+            result = self.mutator.apply(execution_text)
             mutation = result.as_dict() if hasattr(result, "as_dict") else dict(result)
             committed = bool(getattr(result, "ok", mutation.get("ok", False)))
         if self.intent_handler is not None:
@@ -1203,7 +1252,7 @@ class IntentAccumulator:
         if self._held and self._expired(event):
             self._release(**kwargs)
         candidate = self._joined_text(event)
-        if self._complete(candidate):
+        if self._complete(candidate, event.language):
             joined = self._merge(event, candidate)
             dispatch_kwargs = dict(self._held_kwargs or kwargs)
             self._held = []
@@ -1318,7 +1367,7 @@ class IntentAccumulator:
         return False
 
     # Internals ---------------------------------------------------------
-    def _complete(self, text: str) -> bool:
+    def _complete(self, text: str, language: str = "en") -> bool:
         """Is this text something the runtime could actually act on?
 
         Safety first: anything the interruption gate recognizes (STOP / HOLD /
@@ -1326,17 +1375,18 @@ class IntentAccumulator:
         safety word to wait for more speech would be the worst bug in this
         file.
         """
-        if self.runtime.interruption_gate.inspect(text).detected:
+        canonical = canonicalize(text, language).canonical_text
+        if self.runtime.interruption_gate.inspect(canonical).detected:
             return True
         if _is_addressed_dialogue(text):
             # Questions are a complete read-only lane of their own. Without
             # this branch, ``Omni, why are you...`` has no action capability
             # and waits for the accumulation timeout before OMNI can answer.
-            return not _ends_mid_phrase(text)
-        capability = intent_capability(nlu.parse(text), text)
+            return not _ends_mid_phrase(canonical)
+        capability = intent_capability(nlu.parse(canonical), canonical)
         if not capability:
             return False
-        if _ends_mid_phrase(text):
+        if _ends_mid_phrase(canonical):
             # The provider punctuates aggressively; a period after "your" is
             # not a sentence end, and dispatching there loses the object of
             # the instruction entirely.
@@ -1352,9 +1402,9 @@ class IntentAccumulator:
         # goal waits for the sentence to actually end; the provider sends
         # terminal punctuation as its own fragment moments later. If it never
         # comes, the window backstop releases the text anyway.
-        if len(text.split()) < self.min_command_words:
+        if len(canonical.split()) < self.min_command_words:
             return False
-        return text.rstrip().endswith((".", "!", "?"))
+        return canonical.rstrip().endswith((".", "!", "?"))
 
     def _expired(self, event: SpeechFinal) -> bool:
         last = self._held[-1]
@@ -1460,6 +1510,7 @@ class SpeechmaticsRealtimeAdapter:
             latency_ms=payload.get("latency_ms", 0.0),
             confidence=payload.get("confidence", 1.0),
             pause_ms=payload.get("pause_ms"),
+            language=payload.get("language", "en"),
         )
 
     def on_partial(self, payload: Mapping[str, Any]) -> TurnDecision:

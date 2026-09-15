@@ -11,6 +11,7 @@ from typing import Any, Callable, Mapping, Protocol
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from omni_q.language import normalize_language
 from omni_q.voice import VoiceDispatchResult
 
 
@@ -50,6 +51,7 @@ class SpeechResponse:
     claim_id: str
     source_status: str
     text: str
+    language: str = "en"
 
     def as_dict(self) -> dict[str, Any]:
         return self.__dict__.copy()
@@ -65,6 +67,7 @@ class SpeechOutputReceipt:
     text_sha256: str
     audio_bytes: int
     status: str = "sent"
+    language: str = "en"
 
     def as_dict(self) -> dict[str, Any]:
         return self.__dict__.copy()
@@ -75,47 +78,117 @@ class SpeechResponseRenderer:
 
     _SPACE = re.compile(r"\s+")
 
+    _MESSAGES = {
+        "en": {
+            "stop": "Stopping.",
+            "hold": "Holding.",
+            "backoff": "Backing off.",
+            "interrupt_denied": "The stop request was not authorized.",
+            "denied": "That request was not authorized.",
+            "failed": "The request failed.",
+            "authorized": "The request was authorized but was not committed.",
+            "committed": "The request was committed.",
+            "dialogue_unavailable": "I can't answer that from my current state.",
+            "scope_unavailable": "I can't answer that from the current workspace.",
+            "left_arm_removed": "Left arm unavailable. Replanning with the right arm.",
+            "right_arm_removed": "Right arm unavailable. Replanning with the left arm.",
+            "set_table": "The table-setting request was committed.",
+            "keep_local": "Inference will stay on-device.",
+            "slow_down": "Slowing down.",
+            "speed_up": "Speeding up.",
+        },
+        "es": {
+            "stop": "Deteniendo.",
+            "hold": "Manteniendo la posición.",
+            "backoff": "Retrocediendo.",
+            "interrupt_denied": "La solicitud de parada no fue autorizada.",
+            "denied": "La solicitud no fue autorizada.",
+            "failed": "La solicitud falló.",
+            "authorized": "La solicitud fue autorizada pero no se aplicó.",
+            "committed": "La solicitud fue aplicada.",
+            "dialogue_unavailable": "No puedo responder con mi estado actual.",
+            "scope_unavailable": "No puedo responder desde este espacio de trabajo.",
+            "left_arm_removed": "Brazo izquierdo no disponible. Replanificando con el derecho.",
+            "right_arm_removed": "Brazo derecho no disponible. Replanificando con el izquierdo.",
+            "set_table": "La solicitud de preparar la mesa fue aplicada.",
+            "keep_local": "La inferencia permanecerá en el dispositivo.",
+            "slow_down": "Reduciendo la velocidad.",
+            "speed_up": "Aumentando la velocidad.",
+        },
+        "fr": {
+            "stop": "Arrêt.",
+            "hold": "Maintien de la position.",
+            "backoff": "Recul.",
+            "interrupt_denied": "La demande d'arrêt n'a pas été autorisée.",
+            "denied": "La demande n'a pas été autorisée.",
+            "failed": "La demande a échoué.",
+            "authorized": "La demande a été autorisée mais n'a pas été appliquée.",
+            "committed": "La demande a été appliquée.",
+            "dialogue_unavailable": "Je ne peux pas répondre avec mon état actuel.",
+            "scope_unavailable": "Je ne peux pas répondre depuis cet espace de travail.",
+            "left_arm_removed": "Bras gauche indisponible. Replanification avec le bras droit.",
+            "right_arm_removed": "Bras droit indisponible. Replanification avec le bras gauche.",
+            "set_table": "La demande de dresser la table a été appliquée.",
+            "keep_local": "L'inférence restera sur l'appareil.",
+            "slow_down": "Je ralentis.",
+            "speed_up": "J'accélère.",
+        },
+    }
+
     def __init__(self, *, max_chars: int = 320) -> None:
         if isinstance(max_chars, bool) or not isinstance(max_chars, int) or max_chars <= 0:
             raise ValueError("max_chars must be a positive integer")
         self.max_chars = max_chars
 
-    def render(self, result: Any) -> SpeechResponse | None:
+    def render(self, result: Any, *, language: str | None = None) -> SpeechResponse | None:
         if isinstance(result, VoiceDispatchResult):
-            text = self._voice_text(result)
+            response_language = self._language(language or result.claim.language)
+            text = self._voice_text(result, response_language)
             if text is None:
                 return None
             claim = result.claim
             return self._response(claim.session_id, claim.org_id, claim.claim_id,
-                                  result.status, text)
+                                  result.status, text, response_language)
         payload = self._mapping(result)
         if payload is None:
             raise VoiceTransportError("OMNI result must expose as_dict() or be a mapping")
-        text = self._mapping_text(payload)
+        response_language = self._language(
+            language or payload.get("language", "en")
+        )
+        text = self._mapping_text(payload, response_language)
         if text is None:
             return None
         session = self._text(payload.get("session_id"), "session_id")
         org = self._text(payload.get("org_id"), "org_id")
         claim = self._text(payload.get("claim_id", payload.get("receipt_id", "result")), "claim_id")
-        return self._response(session, org, claim, str(payload.get("status", "result")), text)
+        return self._response(session, org, claim, str(payload.get("status", "result")),
+                              text, response_language)
 
-    def _voice_text(self, result: VoiceDispatchResult) -> str | None:
+    def _voice_text(self, result: VoiceDispatchResult, language: str) -> str | None:
         if result.status == "answered":
             return self._fragment(result.response_text)
         if result.status == "dialogue_failed":
-            return self._fragment(
-                result.response_text or "I can't answer that from my current state."
+            scope_failure = (
+                result.response_backend == "unavailable"
+                and result.response_text
+                and "workspace" in result.response_text.lower()
             )
+            key = "scope_unavailable" if scope_failure else "dialogue_unavailable"
+            return self._message(key, language)
         if result.status == "interrupted":
-            return f"{(result.interruption.action if result.interruption else 'STOP').title()} requested."
+            action = (result.interruption.action if result.interruption else "STOP").lower()
+            return self._message(action.lower(), language)
         if result.status == "interrupt_denied":
-            return "The stop request was not authorized."
+            return self._message("interrupt_denied", language)
         if result.status == "denied":
-            return "That request was not authorized."
+            return self._message("denied", language)
         if result.status == "authorized":
-            return "The request was authorized but was not committed."
+            return self._message("authorized", language)
         if result.status != "committed":
             return None
+        key = self._commit_message_key(result)
+        if key is not None:
+            return self._message(key, language)
         mutation = self._mapping(result.mutation)
         if mutation:
             explicit = mutation.get("message") or mutation.get("summary")
@@ -126,26 +199,69 @@ class SpeechResponseRenderer:
             if isinstance(mutation.get("applied"), list):
                 count = len(mutation["applied"])
                 return f"Committed {count} change{'s' if count != 1 else ''}."
-        return "The request was committed."
+        return self._message("committed", language)
 
-    def _mapping_text(self, payload: Mapping[str, Any]) -> str | None:
+    def _mapping_text(self, payload: Mapping[str, Any], language: str) -> str | None:
         status = str(payload.get("status", "result"))
         if status in {"denied", "rejected", "failed", "error"} or payload.get("ok") is False:
             reason = payload.get("reason") or payload.get("error")
-            return f"The request failed{': ' + self._fragment(reason) if reason else '.'}"
+            return f"{self._message('failed', language)}{': ' + self._fragment(reason) if reason else ''}"
         if status in {"committed", "completed", "success"} or payload.get("ok") is True:
             detail = self._mapping(payload.get("detail"))
             message = payload.get("message") or payload.get("summary")
             message = message or (detail.get("message") if detail else None)
-            return self._fragment(message) if message else "The request completed."
+            return self._fragment(message) if message else self._message("committed", language)
         if status in {"authorized", "pending"}:
-            return "The request was authorized but has not completed."
+            return self._message("authorized", language)
         return None
 
-    def _response(self, session: str, org: str, claim: str, status: str, text: str) -> SpeechResponse:
+    def _response(self, session: str, org: str, claim: str, status: str,
+                  text: str, language: str) -> SpeechResponse:
         text = self._bounded(text)
-        digest = hashlib.sha256(f"{claim}|{status}|{text}".encode()).hexdigest()[:20]
-        return SpeechResponse(f"voice_response_{digest}", session, org, claim, status, text)
+        digest = hashlib.sha256(
+            f"{claim}|{status}|{language}|{text}".encode()
+        ).hexdigest()[:20]
+        return SpeechResponse(
+            f"voice_response_{digest}", session, org, claim, status, text, language
+        )
+
+    @classmethod
+    def _language(cls, value: Any) -> str:
+        try:
+            return normalize_language(value)
+        except ValueError:
+            return "en"
+
+    @classmethod
+    def _message(cls, key: str, language: str) -> str:
+        base = language.split("-", 1)[0]
+        return cls._MESSAGES.get(base, cls._MESSAGES["en"]).get(
+            key, cls._MESSAGES["en"].get(key, "The request completed.")
+        )
+
+    @classmethod
+    def _commit_message_key(cls, result: VoiceDispatchResult) -> str | None:
+        candidate = result.candidate
+        args = candidate.args if candidate is not None else {}
+        constraints = args.get("constraints", []) if isinstance(args, Mapping) else []
+        for constraint in constraints:
+            if not isinstance(constraint, (list, tuple)) or len(constraint) != 2:
+                continue
+            kind, value = constraint
+            if kind == "prefer_arm" and value == "right":
+                return "left_arm_removed"
+            if kind == "prefer_arm" and value == "left":
+                return "right_arm_removed"
+            if kind == "keep_local":
+                return "keep_local"
+            if kind == "style" and value == "slow":
+                return "slow_down"
+            if kind == "style" and value == "fast":
+                return "speed_up"
+        if isinstance(args, Mapping):
+            if args.get("goal") == "set the table":
+                return "set_table"
+        return None
 
     def _bounded(self, text: Any) -> str:
         if not isinstance(text, str) or not text.strip():
@@ -214,6 +330,7 @@ class SpeechmaticsTTS:
         receipt = SpeechOutputReceipt(
             response.response_id, response.session_id, response.org_id, self.voice,
             self.output_format, hashlib.sha256(response.text.encode()).hexdigest(), len(audio),
+            language=response.language,
         )
         try:
             self.player.play(audio, receipt)

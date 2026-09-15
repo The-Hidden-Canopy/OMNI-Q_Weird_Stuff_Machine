@@ -138,6 +138,8 @@ from .dialogue import (
     DialogueUnavailable,
     OmniDialogue,
 )
+from .language import CanonicalUtterance, canonicalize, normalize_language
+from .humanoid_g1 import G1Error, G1Provider, HumanoidState
 from .omni_planner import OmniPlanner
 from .omni_reasoner import (
     MockReasoner,
@@ -232,6 +234,12 @@ __all__ = [
     "DialogueScopeError",
     "DialogueUnavailable",
     "OmniDialogue",
+    "CanonicalUtterance",
+    "canonicalize",
+    "normalize_language",
+    "G1Error",
+    "G1Provider",
+    "HumanoidState",
     "EvidenceLedger",
     "BiArmUnit",
     "CapabilityLease",
