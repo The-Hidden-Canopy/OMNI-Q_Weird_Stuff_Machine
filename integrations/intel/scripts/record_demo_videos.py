@@ -377,6 +377,16 @@ def _write_readme(out: Path) -> None:
             parts.append(f"VLA-mode 10-seed harness: resolved {v['resolved']}/{v['trials']}   placements {v['placements']}/{5 * v['trials']}   "
                          f"final state all in zone & upright {v['final_ok']}/{v['trials']}   steps: {v['vla_steps']}")
         vla_note = "\n".join(parts) + "\n"
+    if os.environ.get("OMNIQ_OMNI_REASONER"):
+        omni_parts = [
+            "PLANNING: OMNI-advised. The IDA Omni reasoner (models/omni_planner_r1_final.pt, fenced decoding over the",
+            "scene vocabulary) proposes each plan step from the live object/zone state; the governed core validates every",
+            "proposal for coherence (real object, reachable arm, correct zone, no duplicates) and completes the plan when the",
+            "model stops early. The HUD prints each OMNI decision and whether it was accepted, rejected or completed by the",
+            "governed planner; receipts carry the same tally. Control underneath is the VLA-first stack described above.",
+            "checkpoint: " + os.environ.get("OMNIQ_OMNI_CHECKPOINT", "models/omni_planner_r1_final.pt"),
+        ]
+        vla_note += "\n".join(omni_parts) + "\n"
     (out / "README.txt").write_text(README.format(date=datetime.date.today().isoformat(), commit=commit, harness=harness, vla_note=vla_note))
 
 
