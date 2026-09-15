@@ -16,8 +16,8 @@ mkdir -p outputs/train
   --policy.freeze_vision_encoder=true \
   --policy.train_expert_only=true \
   --policy.push_to_hub=false \
-  --dataset.repo_id=omni-q/so101_table_vla \
-  --dataset.root=datasets/so101_table_vla \
+  --dataset.repo_id="$DS_ID" \
+  --dataset.root="$DS_ROOT" \
   --dataset.video_backend=pyav \
   --rename_map="$RENAME" \
   --output_dir="$OUT" \
