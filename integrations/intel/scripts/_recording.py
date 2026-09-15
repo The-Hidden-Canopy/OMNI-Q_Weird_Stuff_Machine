@@ -40,6 +40,60 @@ def draw_text_block(bgr, lines, x, y, *, scales=None, color=(255, 255, 255), alp
         cy += 10
 
 
+_FIXED_FREE: dict[str, str] = {}   # free-camera spec -> fixed camera name compiled into the model
+
+
+def free_camera_frame(spec: str):
+    """pos and xyaxes of a MuJoCo free camera 'free:az,el,dist,lx,ly,lz'
+    (MuJoCo's convention: forward = (cos el cos az, cos el sin az, sin el))."""
+    import math
+    az, el, dist, lx, ly, lz = (float(v) for v in spec.split(":", 1)[1].split(","))
+    a, e = math.radians(az), math.radians(el)
+    fwd = (math.cos(e) * math.cos(a), math.cos(e) * math.sin(a), math.sin(e))
+    up = (-math.sin(e) * math.cos(a), -math.sin(e) * math.sin(a), math.cos(e))
+    pos = (lx - dist * fwd[0], ly - dist * fwd[1], lz - dist * fwd[2])
+    z = (-fwd[0], -fwd[1], -fwd[2])
+    x = (up[1] * z[2] - up[2] * z[1], up[2] * z[0] - up[0] * z[2], up[0] * z[1] - up[1] * z[0])
+    n = math.sqrt(sum(v * v for v in x)); x = tuple(v / n for v in x)
+    y = (z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0])
+    return pos, (*x, *y)
+
+
+def install_fixed_director_cameras(specs) -> None:
+    """Compile the recording scripts' free 'director' views into the table
+    model as fixed cameras (process-local wrap of the model loader). Reason,
+    2026-09-15: with a VLA policy rendering its own cameras in the same
+    process, the free-camera (MjvCamera) renders went black from the first
+    policy step while every fixed camera stayed fine; a fixed camera at the
+    same pose sidesteps it. Recorder._render uses the fixed camera when the
+    spec is registered and falls back to the free camera otherwise."""
+    import hashlib
+    import xml.etree.ElementTree as ET
+    from omni_q import intel_sim
+
+    names = {}
+    for spec in specs:
+        if spec.startswith("free:") and spec not in _FIXED_FREE:
+            names[spec] = "director_" + hashlib.sha1(spec.encode()).hexdigest()[:6]
+    if not names:
+        return
+    inner = intel_sim.load_dual_so101_model
+
+    def load(config=None):
+        import mujoco
+        xml = intel_sim.dual_so101_xml(config)
+        root = ET.fromstring(xml)
+        wb = root.find("worldbody")
+        for spec, name in names.items():
+            pos, xy = free_camera_frame(spec)
+            ET.SubElement(wb, "camera", {"name": name, "pos": "%.5f %.5f %.5f" % pos,
+                                         "xyaxes": " ".join("%.5f" % v for v in xy), "fovy": "45"})
+        assets = {f"assets/{path.name}": path.read_bytes() for path in intel_sim.ARM_ASSETS.glob("*.stl")}
+        return mujoco.MjModel.from_xml_string(ET.tostring(root, encoding="unicode"), assets=assets)
+    intel_sim.load_dual_so101_model = load
+    _FIXED_FREE.update(names)
+
+
 class _FfmpegWriter:
     """H.264 through the ffmpeg binary that imageio-ffmpeg ships (OpenCV's
     own mp4v left ghosts of earlier HUD text at its default bitrate and this
@@ -149,7 +203,12 @@ class Recorder:
     def _render(self, camera: str, data=None):
         data = self.world.data if data is None else data
         if camera.startswith("free:"):
-            self._renderer.update_scene(data, camera=self._free_camera(camera))
+            fixed = _FIXED_FREE.get(camera)
+            import mujoco  # noqa: PLC0415
+            if fixed and mujoco.mj_name2id(self.world.model, mujoco.mjtObj.mjOBJ_CAMERA, fixed) >= 0:
+                self._renderer.update_scene(data, camera=fixed)
+            else:
+                self._renderer.update_scene(data, camera=self._free_camera(camera))
         else:
             self._renderer.update_scene(data, camera=camera)
         bgr = self._cv2.cvtColor(self._renderer.render(), self._cv2.COLOR_RGB2BGR)

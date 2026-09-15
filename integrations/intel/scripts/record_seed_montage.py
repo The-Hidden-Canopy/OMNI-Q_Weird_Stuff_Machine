@@ -34,6 +34,8 @@ if os.environ.get("OMNIQ_VLA_CHECKPOINT"):
 
 DEFAULT_OUT = Path.home() / "OneDrive" / "Desktop" / "OMNI-Q_demo_videos"
 DIRECTOR = "free:150,-30,0.95,0,-0.12,0.05"
+from _recording import install_fixed_director_cameras  # noqa: E402
+install_fixed_director_cameras([DIRECTOR])
 
 
 def main() -> int:

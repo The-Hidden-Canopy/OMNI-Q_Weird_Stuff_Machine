@@ -37,6 +37,8 @@ WRIST_GRID = ["third_person", "table_overhead", "left_wrist", "right_wrist"]
 DIRECTOR = "free:150,-30,0.95,0,-0.12,0.05"
 DIRECTOR_GRID = [DIRECTOR, "table_overhead", "left_flank", "right_flank"]
 SIX = ["third_person", "table_overhead", "left_flank", "right_flank", "left_wrist", "right_wrist"]
+from _recording import install_fixed_director_cameras  # noqa: E402
+install_fixed_director_cameras([DIRECTOR, "free:180,-15,0.7,0,0.02,0.12"])   # director views as fixed cameras (see _recording)
 
 
 def _detector():
