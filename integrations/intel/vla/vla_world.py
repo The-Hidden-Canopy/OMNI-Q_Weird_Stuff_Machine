@@ -66,7 +66,7 @@ class VLAWorld(IntelTableWorld):
     checkpoint: str = os.environ.get("OMNIQ_VLA_CHECKPOINT", "")
     device: str = os.environ.get("OMNIQ_VLA_DEVICE", "cuda")
     pick_budget_s: float = float(os.environ.get("OMNIQ_VLA_PICK_S", "8"))
-    place_budget_s: float = float(os.environ.get("OMNIQ_VLA_PLACE_S", "6"))
+    place_budget_s: float = float(os.environ.get("OMNIQ_VLA_PLACE_S", "4"))
     # "continue": the governed primitive picks up from where the VLA left the arm
     # (its approach stays in the run); "rewind": the arm is put back first
     fallback_mode: str = os.environ.get("OMNIQ_VLA_FALLBACK_MODE", "continue")
@@ -313,13 +313,25 @@ class VLAWorld(IntelTableWorld):
         # pinches mid-carry and the continuation inherited a dropped object)
         pad0 = self.data.geom_xpos[self._pad_geom[arm_offset]].copy()
         rel0 = self.data.qpos[qpos_adr:qpos_adr + 3] - pad0
+        R_pad0 = self.data.geom_xmat[self._pad_geom[arm_offset]].reshape(3, 3).copy()
+        R_obj0 = np.zeros(9); self._mujoco.mju_quat2Mat(R_obj0, self.data.qpos[qpos_adr + 3:qpos_adr + 7]); R_obj0 = R_obj0.reshape(3, 3)
+        R_rel0 = R_pad0.T @ R_obj0
 
         def grasp_guard():
-            # grasp integrity: the object must ride with the pad; if it shifts in
-            # the pinch the governed carry takes over before it is dropped
-            rel = self.data.qpos[qpos_adr:qpos_adr + 3] - self.data.geom_xpos[self._pad_geom[arm_offset]]
+            # grasp integrity: the object must ride with the pad -- neither
+            # sliding nor turning in the pinch (a fork turns without sliding);
+            # otherwise the governed carry takes over before it is lost
+            pad = self._pad_geom[arm_offset]
+            rel = self.data.qpos[qpos_adr:qpos_adr + 3] - self.data.geom_xpos[pad]
             drift = float(np.linalg.norm(rel - rel0))
-            return f"grasp slipping ({drift * 1000:.0f} mm)" if drift > 0.012 else None
+            R_obj = np.zeros(9); self._mujoco.mju_quat2Mat(R_obj, self.data.qpos[qpos_adr + 3:qpos_adr + 7])
+            R_rel = self.data.geom_xmat[pad].reshape(3, 3).T @ R_obj.reshape(3, 3)
+            turn = float(np.arccos(np.clip((np.trace(R_rel0.T @ R_rel) - 1) / 2, -1, 1)))
+            if drift > 0.010:
+                return f"grasp slipping ({drift * 1000:.0f} mm)"
+            if turn > math.radians(8):
+                return f"grasp turning ({math.degrees(turn):.0f} deg)"
+            return None
         attempt = self._vla_run(arm_offset, f"move the {NAMES.get(obj, obj)} to {ZONE_TEXT.get(to_zone, to_zone)} with the {arm} arm", down,
                                 self.place_budget_s, hold_jaw=True, success_release=over_zone, guard=grasp_guard)
         if attempt["ok"]:
