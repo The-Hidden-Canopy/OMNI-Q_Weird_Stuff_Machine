@@ -36,15 +36,29 @@ PT = ROOT / "runs/detect/tmp/yolo_runs/table_yolo_v4_hfbase_2026-09-14/weights/b
 DATA = ROOT / "data/table_yolo_v4/data.yaml"
 
 
+# IRs committed to the repo (the .pt weights are not): a fresh clone can still
+# benchmark FP32 and INT8 without re-exporting; FP16 needs the weights.
+TRACKED_IRS = {"fp32": ROOT / "models/table_yolo_v4_hfbase_2026-09-14_openvino_model",
+               "int8": ROOT / "models/table_yolo_v4_int8_openvino_model"}
+
+
 def export_precisions(out: Path) -> dict[str, Path]:
     """FP32, FP16 and NNCF-INT8 OpenVINO IRs of the same weights."""
-    from ultralytics import YOLO
     irs = {}
     for name, kw in (("fp32", {"half": False}), ("fp16", {"half": True}), ("int8", {"int8": True, "data": str(DATA)})):
         target = out / f"table_yolo_v4_{name}_openvino_model"
         if not (target / "best.xml").exists():
-            exported = Path(YOLO(str(PT)).export(format="openvino", imgsz=640, **kw))
-            exported.rename(target)
+            if PT.exists() and (name != "int8" or DATA.exists()):
+                from ultralytics import YOLO
+                exported = Path(YOLO(str(PT)).export(format="openvino", imgsz=640, **kw))
+                exported.rename(target)
+            elif name in TRACKED_IRS and (TRACKED_IRS[name] / "best.xml").exists():
+                import shutil
+                shutil.copytree(TRACKED_IRS[name], target)
+                print(f"  {name}: using the committed IR {TRACKED_IRS[name].relative_to(ROOT)} (weights not present)", flush=True)
+            else:
+                print(f"  {name}: skipped (needs {PT.relative_to(ROOT)})", flush=True)
+                continue
         irs[name] = target
     return irs
 
@@ -65,9 +79,24 @@ def sample_inputs(n: int = 16):
     import numpy as np
     imgs = sorted((ROOT / "data/table_yolo_v4/images/val").glob("*.png"))[:n] or \
         sorted((ROOT / "data/table_yolo_v4/images/val").glob("*.jpg"))[:n]
+    frames = [cv2.imread(str(p)) for p in imgs]
+    if not frames:
+        # fresh clone without the rendered dataset: render the real scene now
+        # (same cameras the perception loop uses) -- still real inputs, not noise
+        import sys as _sys
+        _sys.path.insert(0, str(ROOT / "src"))
+        import mujoco
+        from omni_q.intel_sim import IntelSceneConfig, load_dual_so101_model
+        for seed in range(900, 900 + max(1, n // 2)):
+            model = load_dual_so101_model(IntelSceneConfig(seed=seed, randomized=True))
+            data = mujoco.MjData(model); mujoco.mj_forward(model, data)
+            r = mujoco.Renderer(model, height=480, width=640)
+            for cam in ("table_overhead", "third_person"):
+                r.update_scene(data, camera=cam); frames.append(cv2.cvtColor(r.render().copy(), cv2.COLOR_RGB2BGR))
+            r.close()
+        print(f"  inputs: {len(frames)} scene renders (data/table_yolo_v4 not present)", flush=True)
     batch = []
-    for p in imgs:
-        im = cv2.imread(str(p))
+    for im in frames:
         h, w = im.shape[:2]
         s = 640 / max(h, w)
         im = cv2.resize(im, (int(w * s), int(h * s)))
@@ -124,7 +153,9 @@ def main() -> int:
     print("devices:", {d: names[d] for d in devices}, flush=True)
     print("exporting precisions ...", flush=True)
     irs = export_precisions(args.out)
-    quality = {} if args.skip_val else val_quality(irs)
+    quality = {} if (args.skip_val or not DATA.exists()) else val_quality(irs)
+    if not DATA.exists() and not args.skip_val:
+        print(f"  mAP validation skipped: {DATA.relative_to(ROOT)} not present (make_table_yolo_dataset.py regenerates it)", flush=True)
     inputs = sample_inputs()
     rows = []
     for prec, d in irs.items():

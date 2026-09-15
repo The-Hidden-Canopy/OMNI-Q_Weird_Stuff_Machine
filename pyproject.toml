@@ -29,6 +29,8 @@ intel = [
     "opencv-python>=4.9",  # src/omni_q/vision.py -- letterbox/NMS + real-camera capture
     "pyyaml>=6.0",  # src/omni_q/vision.py -- OpenVINODetector reads exported metadata.yaml
     "imageio-ffmpeg>=0.5",  # integrations/intel/scripts/_recording.py -- H.264 demo videos (falls back to mp4v without it)
+    "ultralytics>=8.3",  # scene-trained YOLOv8n: train_table_yolo.py, benchmark_openvino_table.py (export + mAP validation)
+    "matplotlib>=3.8",  # integrations/intel/scripts/plot_openvino_benchmark.py
 ]
 
 # Speechmatics realtime transport (integrations/speechmatics/). The core voice

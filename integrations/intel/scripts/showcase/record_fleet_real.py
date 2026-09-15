@@ -96,12 +96,15 @@ def run_unit(unit: int, seed: int, variant: str, out: Path) -> dict:
     def after(req, res):
         if done["x"] or not (req.op == "MOVE" and res.ok):
             return
-        if variant == "authority" and req.args.get("object") == "plate_1":
+        # same ordering as the submission clips (2026-09-15): the left arm sets plate, fork and
+        # napkin, THEN the withdrawal / fault; the right arm finishes cup + spoon on its own side
+        # (a right-arm reach for the napkin is at its limit and sweeps the placed cup)
+        if variant == "authority" and req.args.get("object") == "napkin_1":
             done["x"] = True
             for k, v in nlu.parse("don't use the left arm anymore").constraints:
                 eng.add_constraint(k, v, source="operator", justification="voice: don't use the left arm anymore")
             rec.notify("OPERATOR (voice): 'don't use the left arm anymore' -> re-planned, right arm takes over", 6)
-        elif variant == "arm_failure" and req.args.get("object") == "fork_1":
+        elif variant == "arm_failure" and req.args.get("object") == "napkin_1":
             done["x"] = True
             w.fail_arm(0, reason="left arm servo bus: no response")
             eng.add_constraint("prefer_arm", "right", source="operator",
@@ -119,7 +122,15 @@ def run_unit(unit: int, seed: int, variant: str, out: Path) -> dict:
     w.apply_transition, w.apply_transitions_parallel = apply, apply_pair
 
     t0 = time.time()
-    r = eng.run(goal)
+    from omni_q.intel_sim import IntelTablePlanner
+    saved = IntelTablePlanner._MUST_PRECEDE
+    if variant in ("authority", "arm_failure"):
+        IntelTablePlanner._MUST_PRECEDE = ("plate_1", "fork_1", "napkin_1")
+        eng.parallel_arms = False
+    try:
+        r = eng.run(goal)
+    finally:
+        IntelTablePlanner._MUST_PRECEDE = saved
     po = _per_object_pick_place_outcomes(r)
     fs = w.final_state_check()
     result = {"unit": unit, "seed": seed, "variant": variant, "goal": goal, "video": str(path),
