@@ -287,8 +287,9 @@ RUNS = {
     "01_full_run_seed903": (table_trial, 903, [("third_person", "third_person"), ("director", DIRECTOR), ("grid", GRID), ("six_cameras", SIX)]),
     "02_full_run_seed911": (table_trial, 911, [("director", DIRECTOR), ("overhead", "table_overhead"), ("wrists", WRIST_GRID)]),
     "03_perception_e2e_seed903": (camera_e2e, 903, [("vision_grid", [DIRECTOR, "table_overhead", "left_flank", "right_flank"]),
-                                                    ("vision_overhead", "table_overhead"), ("director_grid", DIRECTOR_GRID),
-                                                    ("six_cameras", SIX), ("third_person", "third_person")]),
+                                                    ("vision_overhead", "table_overhead"), ("vision_third_person", "third_person"),
+                                                    ("vision_six_cameras", SIX), ("director_grid", DIRECTOR_GRID),
+                                                    ("third_person", "third_person")]),
     "04_two_arm_plate_seed901": (plate_only, 901, [("director", DIRECTOR), ("third_person", "third_person"), ("grid", GRID)]),
     "05_handoff_seed19": (handoff, 19, [("third_person", "handoff_third_person"), ("director", "free:160,-25,0.8,0,-0.10,0.08")]),
     "06_handshake_seed903": (handshake, 903, [("director", "free:180,-15,0.7,0,0.02,0.12"), ("grid", GRID)]),
@@ -306,7 +307,9 @@ execute different steps simultaneously under one physics simulation.
 02_full_run_seed911_*      a second seed: director, overhead, wrists grid
 03_perception_e2e_seed903  the loop closed through the cameras: YOLOv8n (OpenVINO, CPU) on 4 scene cameras, fused;
                            OMNI plans from the detections and verifies each placement from the cameras.
-                           *_vision_* clips draw the detector's boxes/confidences live.
+                           *_vision_* clips draw the detector's boxes/confidences live: vision_grid (director + 3 scene
+                           cameras), vision_overhead, vision_third_person (single full-frame view), vision_six_cameras (all
+                           six incl. the wrist cameras -- showcase; the detector was trained on the scene cameras).
 04_two_arm_plate_seed901   the plate carried by BOTH arms: sideways rim pinch on opposite rims, lockstep carry
 05_handoff_seed19          cup hand-off between the arms (real contact hand-off; receiver ends holding it upright)
 06_handshake_seed903       the arms shake hands (fingertip contact, real servos)
