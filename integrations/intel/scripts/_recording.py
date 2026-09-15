@@ -279,12 +279,26 @@ class Recorder:
         def arm_of(req):
             return "right" if (req.actor and "right" in req.actor) else "left"
 
+        def arm_status(arm: str) -> str:
+            """A physically failed arm, or one withdrawn by the operator, says so
+            on every frame -- not only in the few-second notice."""
+            failed = getattr(world, "_failed_arms", None) or {}
+            off = 0 if arm == "left" else 6
+            if off in failed:
+                return f"FAILED - {failed[off].get('reason', 'no response')} -> withdrawn from authority; last: {state[arm]}"
+            eng = getattr(world, "_engine", None)
+            pending = list(getattr(eng, "_pending_constraints", []) or []) + list(getattr(world, "_constraints", ()) or ())
+            for c in pending:
+                if getattr(c, "kind", "") == "prefer_arm" and getattr(c, "value", None) not in (None, arm) and getattr(c, "source", "") == "operator"                         and "voice" in str(getattr(c, "justification", "") or ""):
+                    return f"WITHDRAWN by operator (voice: \"don't use the {arm} arm anymore\"); last: {state[arm]}"
+            return state[arm]
+
         def render():
             done = " ".join(short[o] for o in objects if o in state["placed"]) or "-"
             todo = " ".join(short[o] for o in objects if o not in state["placed"]) or "-"
             lines = [f'command: "{rec.command}"',
-                     f"left arm:  {state['left']}",
-                     f"right arm: {state['right']}",
+                     f"left arm:  {arm_status('left')}",
+                     f"right arm: {arm_status('right')}",
                      f"placed: {done}   remaining: {todo}"]
             if "vla_done" in state:
                 lines.append(f"VLA-led steps: {state['vla_done'] + state['vla_fallback']}   finished by the policy: {state['vla_done']}   finished by the governed primitive: {state['vla_fallback']}")
