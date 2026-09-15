@@ -69,6 +69,17 @@ def _with_recorders(world, out: Path, stem: str, run, views):
                 _reasoner_mode.compose(w._engine, rec)   # OMNI advises; governed core validates/completes
         t0 = time.time()
         info = run(w)
+        try:
+            for _ in range(50):   # hold the finished table for 2 s with the final HUD state
+                rec.frame()
+        except Exception:  # noqa: BLE001 - never lose a clip over the tail
+            pass
+        if getattr(w, "_engine", None) is not None and callable(getattr(w, "final_state_check", None)):
+            # end-of-run physics, independent of the receipts: a cup knocked over by a later reach
+            # still counted as "placed" -- this line is what says whether the table is actually set
+            fs = w.final_state_check()
+            n_ok = sum(int(v["in_zone_upright"]) for k, v in fs.items() if k != "all_in_zone_upright")
+            info = f"{info}  final {n_ok}/5 in zone & upright"
         results.append(f"{rec.close()}  {info}  ({time.time() - t0:.0f}s wall)")
         vr = getattr(w, "_vla_renderer", None)   # free the policy's renderer now, not at GC time
         if vr is not None:
@@ -121,6 +132,7 @@ def authority(seed: int):
     def world():
         eng = build_intel_sim_engine(IntelSceneConfig(seed=seed, randomized=True))
         eng.world._engine = eng
+        eng.parallel_arms = False   # one step at a time, so the withdrawal lands with the right arm's work still ahead
         return eng.world
 
     def run(w):
@@ -130,10 +142,11 @@ def authority(seed: int):
         done = {"x": False}
 
         def after(req, res):
-            # the operator withdraws the left arm after the fork -- the one piece only the left
-            # arm can reach -- is set; the right arm then finishes cup, spoon and the napkin
-            # (shared band), so the table still completes under the new authority
-            if not done["x"] and req.op == "MOVE" and req.args.get("object") == "fork_1" and res.ok:
+            # The operator withdraws the left arm once its side is set (plate, fork, napkin);
+            # the right arm then finishes the cup and spoon. A right-arm cross-reach for the
+            # napkin is at that arm's reach limit and its wrist sweeps the placed cup
+            # (every 07/08 take before 2026-09-15 16:50 ended with the cup knocked over).
+            if not done["x"] and req.op == "MOVE" and req.args.get("object") == "napkin_1" and res.ok:
                 done["x"] = True
                 for k, v in nlu.parse("don't use the left arm anymore").constraints:
                     eng.add_constraint(k, v, source="operator", justification="voice: don't use the left arm anymore")
@@ -151,7 +164,7 @@ def authority(seed: int):
         w.apply_transitions_parallel = apply_pair
         from omni_q.intel_sim import IntelTablePlanner
         saved = IntelTablePlanner._MUST_PRECEDE
-        IntelTablePlanner._MUST_PRECEDE = ("plate_1", "fork_1")   # plate, then the fork, under any planner
+        IntelTablePlanner._MUST_PRECEDE = ("plate_1", "fork_1", "napkin_1")   # left arm's work first, under any planner
         try:
             r = eng.run(TABLE_SETTING_PHRASINGS[0])
         finally:
@@ -170,6 +183,7 @@ def arm_failure(seed: int):
     def world():
         eng = build_intel_sim_engine(IntelSceneConfig(seed=seed, randomized=True))
         eng.world._engine = eng
+        eng.parallel_arms = False   # one step at a time, so the withdrawal lands with the right arm's work still ahead
         return eng.world
 
     def run(w):
@@ -179,10 +193,10 @@ def arm_failure(seed: int):
         done = {"x": False}
 
         def after(req, res):
-            # The fault fires after the fork is set: the fork is the one piece only the left arm
-            # can reach (spawn and zone), everything left afterwards -- cup, spoon, napkin in the
-            # shared band -- is within the right arm's reach, so one arm can finish the table.
-            if not done["x"] and req.op == "MOVE" and req.args.get("object") == "fork_1" and res.ok:
+            # The fault fires once the left arm's side is set (plate, fork, napkin); the right arm
+            # then finishes the cup and spoon on its own side. (A right-arm reach for the napkin is
+            # at that arm's limit and its wrist sweeps the placed cup -- seen on every earlier take.)
+            if not done["x"] and req.op == "MOVE" and req.args.get("object") == "napkin_1" and res.ok:
                 done["x"] = True
                 w.fail_arm(0, reason="left arm servo bus: no response")
                 eng.add_constraint("prefer_arm", "right", source="operator",
@@ -203,7 +217,7 @@ def arm_failure(seed: int):
         # has the cup, spoon and napkin to finish -- an OMNI-advised plan otherwise moves the fork last
         from omni_q.intel_sim import IntelTablePlanner
         saved = IntelTablePlanner._MUST_PRECEDE
-        IntelTablePlanner._MUST_PRECEDE = ("plate_1", "fork_1")
+        IntelTablePlanner._MUST_PRECEDE = ("plate_1", "fork_1", "napkin_1")
         try:
             r = eng.run(TABLE_SETTING_PHRASINGS[0])
         finally:

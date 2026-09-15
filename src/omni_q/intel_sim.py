@@ -3750,7 +3750,7 @@ class IntelTablePlanner(RulePlanner):
             step for step in graph.steps
             if step.args.get("object") not in tracked
         ]
-        def sort_key(object_id: str) -> tuple[bool, int, int]:
+        def sort_key(object_id: str) -> tuple[bool, int, int, int]:
             attempts = self._attempt_counts.get(object_id, 0)
             # One immediate retry in place before an object is deferred
             # behind the others (2026-09-14): deferring the plate after a
@@ -3758,9 +3758,15 @@ class IntelTablePlanner(RulePlanner):
             # with the cup already set down where the right arm's forearm
             # passes for the rim pinch -- seven failures on seed 902 that
             # an immediate retry (rotated rim points) clears.
+            # _MUST_PRECEDE objects go first, in that order (default: just the
+            # plate, which already leads _OBJECT_ORDER -- no behaviour change);
+            # the fault / authority-change clips extend it so the left arm's
+            # work is done before it is withdrawn (2026-09-15).
+            precede = self._MUST_PRECEDE
             return (
                 attempts > self._MAX_ATTEMPTS_BEFORE_DEPRIORITIZE,
                 max(0, attempts - 1),
+                precede.index(object_id) if object_id in precede else len(precede),
                 self._OBJECT_ORDER.index(object_id),
             )
 
