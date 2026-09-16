@@ -289,7 +289,8 @@ class Recorder:
             eng = getattr(world, "_engine", None)
             pending = list(getattr(eng, "_pending_constraints", []) or []) + list(getattr(world, "_constraints", ()) or ())
             for c in pending:
-                if getattr(c, "kind", "") == "prefer_arm" and getattr(c, "value", None) not in (None, arm) and getattr(c, "source", "") == "operator"                         and "voice" in str(getattr(c, "justification", "") or ""):
+                why = str(getattr(c, "justification", "") or "")
+                if getattr(c, "kind", "") == "prefer_arm" and getattr(c, "value", None) not in (None, arm) and getattr(c, "source", "") == "operator"                         and ("voice" in why or "instruction" in why):
                     return f"WITHDRAWN by operator (voice: \"don't use the {arm} arm anymore\"); last: {state[arm]}"
             return state[arm]
 
