@@ -1,1 +1,2 @@
 streamlit>=1.36
+mujoco>=3.13
