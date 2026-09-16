@@ -146,6 +146,8 @@ controlled the arms:
 * VLA-first set (SmolVLA leads every single-arm step; HUD tags; 10/10 montage on seeds 901, 903, 905–907, 910–914);
 * OMNI-advised set (reasoner decisions printed on the HUD + SmolVLA motion; 10/10 montage on seeds 902–906, 910, 911, 913, 917, 918 — OMNI-mode takes vary between runs, so failed takes were swapped for other seeds and every failed take is kept in `replaced/` with its tally).
 
+* Speechmatics bonus (`10_speechmatics_authority_*` in the VLA set): a real Speechmatics realtime session (spoken and transcribed live on 2026-09-13; every provider message recorded in `integrations/speechmatics/samples/live_session_2026-09-13.jsonl`) is replayed through the voice boundary — mapper → utterance aggregator → intent accumulator → authority → `RuntimeMutator` — and withdraws the left arm mid-run; `integrations/speechmatics/scripts/record_voice_authority_clip.py`. Set `SPEECHMATICS_API_KEY` and use `run_voice_transport.py --file/--mic --record` for a fresh live session.
+
 Every clip's end state is checked from physics after the run (all five objects
 in zone and upright), not only "placed at some point"; the recording log prints
 `final N/5 in zone & upright` per clip.
