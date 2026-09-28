@@ -1,0 +1,30 @@
+description: Ultralytics table_YOLO_v2_ft_2026-09-11 model trained on data/table_yolo_v2/data.yaml
+author: Ultralytics
+date: '2026-09-11T00:09:18.273144-07:00'
+version: 8.4.146
+license: AGPL-3.0 License (https://ultralytics.com/license)
+docs: https://docs.ultralytics.com
+stride: 32
+task: detect
+head: Detect
+batch: 1
+imgsz:
+- 640
+- 640
+names:
+  0: plate
+  1: cup
+  2: fork
+  3: spoon
+  4: knife
+  5: napkin
+  6: drawer
+args:
+  data: null
+  batch: 1
+  fraction: 1.0
+  quantize: 16
+  nms: null
+  dynamic: false
+channels: 3
+end2end: false

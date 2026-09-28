@@ -1,0 +1,79 @@
+# ---- OS / editor cruft ----
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*~
+.idea/
+.vscode/
+*.code-workspace
+
+# ---- Secrets / local config ----
+.env
+.env.*
+!.env.example
+*.local
+secrets.*
+*.pem
+*.key
+
+# ---- Logs / temp ----
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+.venv-*/
+venv/
+env/
+.pytest_cache/
+.pytest_local_*/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# ---- Node ----
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.next/
+out/
+coverage/
+
+# ---- Data / model artifacts ----
+*.ckpt
+*.pt
+*.pth
+*.onnx
+*.safetensors
+data/
+data/raw/
+data/interim/
+*.sqlite
+*.db
+
+# ultralytics / YOLO training scratch output
+runs/
+
+# HF-hosted Omni checkpoints (re-download via hf: KissTheHabit/IDA_OMNI_Q); 977 MB, over the GitHub limit
+models/hf_ida_omni_q/
+
+# External vendor checkout for the optional Unitree G1 provider.  Keep the
+# checkout and pretrained motion.pt local; provenance is recorded in the repo.
+external/unitree_rl_gym/
+
+# LeRobot demonstration datasets (local, large)
+datasets/
+outputs/
+
+# OMNI-Q table checkpoints fetched by scripts/fetch_checkpoints.sh (gated HF repo)
+models/hf_omni_q_table/

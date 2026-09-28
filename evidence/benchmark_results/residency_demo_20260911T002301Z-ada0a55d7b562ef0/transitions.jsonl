@@ -1,0 +1,5 @@
+{"envelope_bytes": 3221225472, "from_state": "MXFP8", "timestamp": "2026-09-11T00:23:01.752996+00:00", "to_state": "MXFP4", "trigger": "memory_change"}
+{"envelope_bytes": 1932735283, "from_state": "MXFP4", "timestamp": "2026-09-11T00:23:01.752996+00:00", "to_state": "MXFP2", "trigger": "memory_change"}
+{"envelope_bytes": 1288490188, "from_state": "MXFP2", "timestamp": "2026-09-11T00:23:01.752996+00:00", "to_state": "CORE_ONLY", "trigger": "memory_change"}
+{"envelope_bytes": 1288490188, "from_state": "CORE_ONLY", "timestamp": "2026-09-11T00:23:01.752996+00:00", "to_state": "CORE_ONLY", "trigger": "novel_task"}
+{"envelope_bytes": 3221225472, "from_state": "CORE_ONLY", "timestamp": "2026-09-11T00:23:01.752996+00:00", "to_state": "MXFP4", "trigger": "memory_change"}

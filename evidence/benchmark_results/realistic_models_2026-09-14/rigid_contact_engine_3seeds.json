@@ -1,0 +1,39 @@
+{
+ "label": "realistic_rigid",
+ "solref": "-30000 -150",
+ "solimp": "0.90 0.95 0.001",
+ "seeds": [
+  900,
+  901,
+  902
+ ],
+ "held": {
+  "plate_1": 3,
+  "cup_1": 3,
+  "fork_1": 3,
+  "spoon_1": 3,
+  "napkin_1": 3
+ },
+ "placed": {
+  "plate_1": 2,
+  "cup_1": 3,
+  "fork_1": 3,
+  "spoon_1": 3,
+  "napkin_1": 2
+ },
+ "max_penetration_mm": {
+  "napkin_1|pad": 7.7,
+  "arm|napkin_1": 6.0,
+  "napkin_1|world": 4.4,
+  "spoon_1|world": 3.2,
+  "pad|spoon_1": 2.7,
+  "arm|spoon_1": 2.2,
+  "pad|plate_1": 1.7,
+  "cup_1|world": 1.7,
+  "arm|cup_1": 1.7,
+  "cup_1|pad": 1.6,
+  "fork_1|pad": 1.6,
+  "plate_1|world": 1.3,
+  "arm|fork_1": 1.0
+ }
+}

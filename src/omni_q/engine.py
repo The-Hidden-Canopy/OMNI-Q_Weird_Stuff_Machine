@@ -1,0 +1,706 @@
+"""OmniQ engine — wires the six contracts into one loop.
+
+    observe -> plan -> (route -> manipulate -> observe -> verify)* -> receipt
+
+Recompiles the graph when a constraint is added, a capability disappears, a step
+fails, or verification finds a mismatch. Every transition is published on the
+:class:`~omni_q.events.EventBus` for the UI (OQ-005).
+"""
+
+from __future__ import annotations
+
+import os
+import time
+from dataclasses import replace
+from typing import Any, Iterable
+
+from .contracts import (
+    ActionAuthorization,
+    AuthorizationVerdict,
+    AutonomyMode,
+    Constraint,
+    Device,
+    Manipulate,
+    MissionEnvelope,
+    Observe,
+    Plan,
+    PlanGraph,
+    ReceiptRecord,
+    Step,
+    TransitionRejected,
+    TransitionRequest,
+    Verify,
+    WorldState,
+    merge_mode,
+    validate_operator_constraint,
+)
+from .events import EventBus
+from .expressive import ExpressiveWindowRejected, validate_expressive_step
+from .fleet import (
+    FleetError,
+    FleetFault,
+    FleetReallocation,
+    ManipulationFleet,
+    ReallocationRequest,
+)
+from .provenance import run_id_for
+
+
+class OmniQ:
+    def __init__(
+        self,
+        *,
+        world: Any,               # MockWorld or a real world adapter
+        observer: Observe,
+        planner: Plan,
+        manipulator: Manipulate,
+        verifier: Verify,
+        device: Device,
+        recorder: Any,
+        bus: EventBus | None = None,
+        envelope: MissionEnvelope | None = None,
+        max_revisions: int | None = None,
+    ) -> None:
+        self.world = world
+        self.observer = observer
+        self.planner = planner
+        self.manipulator = manipulator
+        self.verifier = verifier
+        self.device = device
+        self.recorder = recorder
+        self.bus = bus or EventBus()
+        self.envelope = envelope or MissionEnvelope(mission_id="mock")
+        self.max_revisions = (
+            max_revisions if max_revisions is not None else self.envelope.max_revisions
+        )
+
+        self.graph: PlanGraph | None = None
+        self.mode: AutonomyMode = AutonomyMode.NOMINAL
+        self._pending_constraints: list[Constraint] = []
+        self._actions: list[dict[str, Any]] = []
+        self._decisions: list[dict[str, Any]] = []
+        self._pending_fleet_faults: list[tuple[FleetFault, tuple[ReallocationRequest, ...]]] = []
+        self._fleet_fault_ids: set[str] = set()
+        self._run_id = ""
+
+    # -- external control (Speechmatics / UI feed into these) ----------
+    def add_constraint(
+        self,
+        kind: str,
+        value: Any = None,
+        *,
+        source: str = "operator",
+        justification: str | None = None,
+    ) -> None:
+        constraint = validate_operator_constraint(
+            kind,
+            value,
+            source=source,
+            justification=justification,
+        )
+        self._pending_constraints.append(constraint)
+        self.bus.publish("constraint.queued", **constraint.as_dict())
+
+    def report_fleet_fault(
+        self,
+        fault: FleetFault,
+        requests: Iterable[ReallocationRequest] = (),
+    ) -> None:
+        """Queue a fleet-health observation for the next control boundary.
+
+        Queueing is intentionally side-effect free with respect to the fleet,
+        world, plan, and manipulators.  The run loop owns organization checks,
+        event publication, reallocation, and strict recompilation.
+        """
+        if not isinstance(fault, FleetFault):
+            raise FleetError("fleet fault report requires a FleetFault")
+        try:
+            request_list = tuple(requests)
+        except TypeError as exc:
+            raise FleetError("fleet fault requests must be iterable") from exc
+        if any(not isinstance(request, ReallocationRequest) for request in request_list):
+            raise FleetError("fleet fault requests must be ReallocationRequest values")
+        self._pending_fleet_faults.append((fault, request_list))
+
+    def _apply_constraints(self) -> bool:
+        if not self._pending_constraints:
+            return False
+        for c in self._pending_constraints:
+            self.world.add_constraint(c)
+            self.bus.publish("constraint.added", **c.as_dict(),
+                             state_revision=self.world.state().revision)
+            if c.kind == "keep_local":
+                self._escalate(AutonomyMode.LOCAL_ONLY)
+        self._pending_constraints.clear()
+        return True
+
+    def _escalate(self, incoming: AutonomyMode) -> None:
+        merged = merge_mode(self.mode, incoming)
+        if merged is not self.mode:
+            self.bus.publish("mode.changed", frm=self.mode.value, to=merged.value)
+            self.mode = merged
+
+    def _capture_decision(self) -> None:
+        dec = getattr(self.planner, "last_decision", None)
+        if dec is None:
+            return
+        dec.mode = self.mode
+        dec.envelope_digest = self.envelope.digest()
+        d = dec.as_dict()
+        self._decisions.append(d)
+        self.bus.publish("plan.decision", **d, graph_revision=dec.revision)
+
+    def _recompile(self, world: WorldState, reason: str) -> None:
+        self.graph = self.planner.replan(self.graph, world, reason)
+        self._capture_decision()
+        self._emit_graph("graph.recompiled", reason=reason)
+
+    def _apply_pending_fleet_fault(self) -> str:
+        """Process one queued fault at a control-loop boundary.
+
+        Return ``replanned`` when a new graph was installed, ``rejected`` for
+        a non-authoritative observation, and ``hold`` whenever the fault was
+        accepted but safe fleet-aware replanning could not be completed.
+        """
+        if not self._pending_fleet_faults:
+            return "none"
+        fault, requests = self._pending_fleet_faults.pop(0)
+        state = self.world.state()
+
+        if fault.fault_id in self._fleet_fault_ids:
+            self.bus.publish(
+                "fleet.fault.rejected",
+                fault_id=fault.fault_id,
+                reason="duplicate fault_id within run",
+                state_revision=state.revision,
+                source=fault.source,
+            )
+            return "rejected"
+        self._fleet_fault_ids.add(fault.fault_id)
+
+        if fault.org_id != state.org_id:
+            self.bus.publish(
+                "fleet.fault.rejected",
+                fault_id=fault.fault_id,
+                reason="fault organization does not match current world organization",
+                fault_org_id=fault.org_id,
+                world_org_id=state.org_id,
+                state_revision=state.revision,
+                source=fault.source,
+            )
+            return "rejected"
+
+        fault_data = fault.as_dict()
+        fault_data.pop("source", None)
+        self.bus.publish(
+            "fleet.fault.observed",
+            **fault_data,
+            state_revision=state.revision,
+            source=fault.source,
+        )
+
+        reallocate = getattr(self.planner, "reallocate_fleet", None)
+        strict_replan = getattr(self.planner, "replan_strict", None)
+        if not callable(reallocate) or not callable(strict_replan):
+            self._fleet_fault_failure(
+                fault,
+                "planner does not expose the fleet reallocation and strict replan seams",
+            )
+            return "hold"
+        if self.graph is None:
+            self._fleet_fault_failure(fault, "fleet fault arrived without an active graph")
+            return "hold"
+
+        try:
+            _updated_fleet, evidence = reallocate(fault, requests=requests)
+            if not isinstance(_updated_fleet, ManipulationFleet):
+                raise FleetError("fleet reallocation returned an invalid fleet snapshot")
+            if not isinstance(evidence, FleetReallocation):
+                raise FleetError("fleet reallocation returned invalid evidence")
+        except Exception as exc:  # noqa: BLE001 - a fault must fail closed
+            self._fleet_fault_failure(
+                fault, f"fleet reallocation failed: {type(exc).__name__}: {exc}"
+            )
+            return "hold"
+
+        reallocation = evidence.as_dict()
+        self.bus.publish(
+            "fleet.reallocated",
+            **reallocation,
+            state_revision=state.revision,
+            source=fault.source,
+        )
+        # Keep the exact event payload in the durable decision stream so the
+        # receipt can be compared directly with the causal event.
+        self._decisions.append(reallocation)
+        self._escalate(AutonomyMode.DEGRADED)
+
+        prior_graph = self.graph
+        current_world = self._effective_world()
+        reason = f"fleet fault {fault.fault_id}: {fault.reason}"
+        try:
+            fresh_graph = strict_replan(prior_graph, current_world, reason)
+            if not isinstance(fresh_graph, PlanGraph):
+                raise FleetError("strict fleet replan returned a non-PlanGraph value")
+            if fresh_graph is prior_graph or fresh_graph.revision <= prior_graph.revision:
+                raise FleetError("strict fleet replan did not produce a new graph revision")
+        except Exception as exc:  # noqa: BLE001 - never execute the stale graph
+            self._fleet_fault_failure(
+                fault, f"strict fleet replan failed: {type(exc).__name__}: {exc}"
+            )
+            return "hold"
+
+        self.graph = fresh_graph
+        self._capture_decision()
+        self._emit_graph(
+            "graph.recompiled",
+            reason=reason,
+            state_revision=current_world.revision,
+        )
+        return "replanned"
+
+    def _fleet_fault_failure(self, fault: FleetFault, reason: str) -> None:
+        self.bus.publish(
+            "fleet.replan.failed",
+            fault_id=fault.fault_id,
+            reason=reason,
+            state_revision=self.world.state().revision,
+            source=fault.source,
+        )
+        self._escalate(AutonomyMode.HOLD)
+
+    def _effective_world(self) -> WorldState:
+        """Return a snapshot with immutable mission authority applied.
+
+        Mission-envelope restrictions never mutate the world and therefore
+        cannot be removed or widened by a later graph constraint/replan.
+        """
+        state = self.world.state()
+        inherited = list(state.constraints)
+        inherited.extend(
+            Constraint("forbid_object", object_id, source="mission_envelope",
+                       justification="fixed mission authority")
+            for object_id in self.envelope.forbidden_objects
+        )
+        if self.envelope.local_only:
+            inherited.append(Constraint("keep_local", source="mission_envelope",
+                                        justification="fixed mission authority"))
+        return replace(state, constraints=tuple(inherited))
+
+    # -- run --------------------------------------------------------
+    def run(self, goal: str) -> ReceiptRecord:
+        started = time.time()
+        self.world.start_mission(goal)
+        run_config = self._run_config(goal)
+        run_id = run_id_for(run_config)
+        self._run_id = run_id
+        self._actions = []
+        self._decisions = []
+        self._fleet_fault_ids = set()
+        self.bus.begin_run(run_id)
+        # Queued operator constraints are part of this run's authority.  Apply
+        # them before observing or planning so the first graph cannot be
+        # compiled under broader authority than the durable run identity.
+        initial_constraints_applied = self._apply_constraints()
+        world = self._effective_world()
+        self.bus.publish("run.started", goal=goal, envelope=self.envelope.digest(),
+                         state_revision=world.revision)
+        obs = self.observer.observe(world)
+        self.bus.publish("observed", frame=obs.frame,
+                         misplaced=[d.object_id for d in obs.misplaced()],
+                         observation=obs.as_dict(),
+                         state_revision=world.revision)
+
+        self.graph = self.planner.plan(goal, world)
+        self._capture_decision()
+        self._emit_graph("graph.compiled")
+
+        # Preserve a real graph-revision receipt for authority changes.  This
+        # is deliberately a planner replan, not a fabricated event: callers
+        # can reconstruct both the initial constrained graph and its revision.
+        if initial_constraints_applied:
+            self._recompile(world, "queued constraint change")
+
+        revisions = int(initial_constraints_applied)
+        executed: set[str] = set()
+
+        while True:
+            if self._apply_constraints():
+                revisions += 1
+                self._recompile(self._effective_world(), "constraint change")
+                executed.clear()
+
+            fault_result = self._apply_pending_fleet_fault()
+            if fault_result == "replanned":
+                revisions += 1
+                executed.clear()
+                continue
+            if fault_result == "hold":
+                revisions += 1
+                break
+
+            step = self._next_step(executed)
+            if step is None:
+                break
+
+            world = self._effective_world()
+
+            # capability lost? -> recompile onto what remains
+            if step.contract == "manipulate" and not self.manipulator.supports(step.op):
+                revisions += 1
+                self.bus.publish("capability.lost", op=step.op, step=step.id,
+                                 state_revision=world.revision)
+                self._escalate(AutonomyMode.DEGRADED)
+                if revisions > self.max_revisions:
+                    self._escalate(AutonomyMode.HOLD)
+                    break
+                self._recompile(world, f"lost {step.op}")
+                executed.clear()
+                continue
+
+            try:
+                step.device = self.device.route(step, world)
+            except RuntimeError as exc:
+                revisions += 1
+                self.bus.publish("placement.failed", step=step.id, error=str(exc),
+                                 state_revision=world.revision)
+                self._escalate(AutonomyMode.DEGRADED)
+                if revisions > self.max_revisions:
+                    self._escalate(AutonomyMode.HOLD)
+                    break
+                self._recompile(world, "placement failed")
+                executed.clear()
+                continue
+
+            companion = self._companion_step(step, executed) if self.parallel_arms else None
+            if companion is not None:
+                outcome = self._run_steps_parallel([step, companion], world)
+                executed.add(step.id)
+                executed.add(companion.id)
+            else:
+                outcome = self._run_step(step, world)
+                executed.add(step.id)
+
+            if not outcome:
+                revisions += 1
+                if revisions > self.max_revisions:
+                    self._escalate(AutonomyMode.HOLD)
+                    break
+                self._recompile(self._effective_world(), f"{step.id} failed")
+                executed.clear()
+                continue
+
+            if step.contract in {"manipulate", "verify"}:
+                result = self._verify_step(step)
+                if not result.ok:
+                    revisions += 1
+                    if revisions > self.max_revisions:
+                        self._escalate(AutonomyMode.HOLD)
+                        break
+                    self._recompile(self._effective_world(), "verification mismatch")
+                    executed.clear()
+                    continue
+
+        metrics = {
+            "revisions": revisions,
+            "steps_executed": len(self._actions),
+            "wall_seconds": round(time.time() - started, 4),
+            "resolved": not self.world.state().misplaced(),
+            "mode": self.mode.value,
+        }
+        rejected = _merge_rejected(self._decisions)
+        receipt = self.recorder.record(
+            run_id=run_id,
+            goal=goal,
+            inputs={"goal": goal, "world0": {"frame": obs.frame},
+                    "envelope": self.envelope.digest(), "run_config": run_config,
+                    "mode": getattr(self.world, "mode", "mock")},
+            plan=self.graph,
+            actions=self._actions,
+            metrics=metrics,
+            decisions=self._decisions,
+            rejected=rejected,
+        )
+        self.bus.publish("run.finished", metrics=metrics,
+                         content_hash=receipt.content_hash,
+                         state_revision=self.world.state().revision,
+                         graph_revision=self.graph.revision)
+        return receipt
+
+    # -- helpers --------------------------------------------------
+    def _run_config(self, goal: str) -> dict[str, Any]:
+        """Stable run identity; excludes observation ticks and mutable ownership."""
+        state = self._effective_world()
+        # Pending constraints have passed the operator-only validation gate,
+        # but are not yet present in ``state``.  They must nevertheless alter
+        # the deterministic identity; otherwise two materially different runs
+        # collide in the durable ledger.
+        constraints = [constraint.as_dict() for constraint in state.constraints]
+        constraints.extend(constraint.as_dict() for constraint in self._pending_constraints)
+        config = {
+            "goal": goal,
+            "org_id": state.org_id,
+            "envelope": self.envelope.digest(),
+            "objects": {
+                object_id: {
+                    "class": detection.cls,
+                    "zone": detection.zone,
+                    "target_zone": detection.target_zone,
+                    "status": detection.status.value,
+                }
+                for object_id, detection in sorted(state.objects.items())
+            },
+            "constraints": constraints,
+        }
+        planner_context = getattr(self.planner, "run_context", None)
+        if callable(planner_context):
+            config["planner_context"] = planner_context()
+        return config
+
+    #: Simultaneous two-arm execution (2026-09-14): when the next ready step
+    #: has a companion ready on the other arm, the pair is submitted as one
+    #: revision-checked transition and the world runs both primitives at
+    #: once. OMNIQ_PARALLEL_ARMS=0 restores strict one-step execution.
+    parallel_arms = os.environ.get("OMNIQ_PARALLEL_ARMS", "1") not in {"", "0", "false", "no"}
+
+    def _companion_step(self, step: Step, executed: set[str]) -> Step | None:
+        """A second ready manipulation step for the OTHER arm that can run at
+        the same time as ``step``: different object, neither depends on the
+        other, both plain single-arm ops, and the world offers the parallel
+        path. The two-arm plate (bimanual) never pairs."""
+        if self.graph is None or step.contract != "manipulate" or not step.arm:
+            return None
+        if not hasattr(self.world, "apply_transitions_parallel"):
+            return None
+        if step.op not in {"PICK", "MOVE", "PLACE", "OPEN"}:
+            return None
+        bimanual = getattr(self.world, "bimanual_objects", frozenset())
+        if step.args.get("object") in bimanual:
+            return None
+        # A pending two-arm step needs both grippers free: pairing before it
+        # let one arm pick the cup, and the plate's two-arm pinch then opened
+        # that jaw and dropped it (seed 903, 2026-09-14). Both arms stay
+        # unpaired until every bimanual step in the graph has run.
+        if any(o.id not in executed and o.args.get("object") in bimanual for o in self.graph.steps):
+            return None
+        for other in self.graph.topo_order():
+            if other.id in executed or other.id == step.id or other.contract != "manipulate":
+                continue
+            if other.op not in {"PICK", "MOVE", "PLACE", "OPEN"} or not other.arm or other.arm == step.arm:
+                continue
+            if other.args.get("object") == step.args.get("object") or other.args.get("object") in bimanual:
+                continue
+            if step.id in other.deps or other.id in step.deps:
+                continue
+            if not all(dep in executed for dep in other.deps):
+                continue
+            if not self.manipulator.supports(other.op):
+                continue
+            return other
+        return None
+
+    def _run_steps_parallel(self, steps: list[Step], world: WorldState) -> bool:
+        """Execute two steps on different arms as one composite transition."""
+        requests: list[TransitionRequest] = []
+        for step in steps:
+            authorization = self._authorize(step, world)
+            if authorization.verdict is not AuthorizationVerdict.ALLOW:
+                step.state = "denied"
+                step.result = {"authorization": authorization.as_dict()}
+                self._actions.append({"step": step.id, "op": step.op, "arm": step.arm,
+                                      "device": step.device, "state": step.state, "result": step.result})
+                self.bus.publish("step.denied", **step.as_dict())
+                return False
+        for step in steps:
+            try:
+                step.device = self.device.route(step, world)
+            except RuntimeError as exc:
+                step.state = "failed"
+                step.result = {"error": str(exc)}
+                return False
+            step.state = "running"
+            self.bus.publish("step.started", **step.as_dict(), state_revision=world.revision,
+                             graph_revision=self.graph.revision, parallel_with=[s.id for s in steps if s is not step])
+            res = self.manipulator.execute(step, world)
+            if not res.ok:
+                step.state = "failed"
+                step.result = res.detail
+                self._actions.append({"step": step.id, "op": step.op, "arm": step.arm,
+                                      "device": step.device, "state": step.state, "result": step.result})
+                return False
+            requests.append(TransitionRequest(step_id=step.id, op=step.op, args=dict(step.args),
+                                              expected_revision=world.revision, actor=step.device,
+                                              org_id=self.envelope.org_id))
+        try:
+            transitions = self.world.apply_transitions_parallel(requests)
+        except TransitionRejected as exc:
+            for step in steps:
+                step.state = "failed"
+                step.result = {"error": str(exc)}
+                self._actions.append({"step": step.id, "op": step.op, "arm": step.arm,
+                                      "device": step.device, "state": step.state, "result": step.result})
+            return False
+        ok_all = True
+        for step, transition in zip(steps, transitions):
+            step.result = dict(transition.detail)
+            step.state = "done" if transition.ok else "failed"
+            ok_all = ok_all and transition.ok
+            self._actions.append({"step": step.id, "op": step.op, "arm": step.arm,
+                                  "device": step.device, "state": step.state, "result": step.result,
+                                  "parallel_with": [s.id for s in steps if s is not step]})
+            self.bus.publish("step.finished", **step.as_dict(), state_revision=self.world.state().revision,
+                             graph_revision=self.graph.revision)
+        if ok_all:
+            for step in steps:
+                if step.contract in {"manipulate", "verify"}:
+                    result = self._verify_step(step)
+                    if not result.ok:
+                        return False
+        return ok_all
+
+    def _next_step(self, executed: set[str]) -> Step | None:
+        if self.graph is None or self.mode is AutonomyMode.HOLD:
+            return None
+        for step in self.graph.topo_order():
+            if step.id in executed:
+                continue
+            if all(dep in executed for dep in step.deps):
+                return step
+        return None
+
+    def _run_step(self, step: Step, world: WorldState) -> bool:
+        if step.contract == "manipulate":
+            authorization = self._authorize(step, world)
+            if authorization.verdict is not AuthorizationVerdict.ALLOW:
+                step.state = "denied"
+                step.result = {"authorization": authorization.as_dict()}
+                self._actions.append({
+                    "step": step.id, "op": step.op, "arm": step.arm,
+                    "device": step.device, "state": step.state,
+                    "result": step.result,
+                })
+                self.bus.publish("step.denied", **step.as_dict())
+                return False
+
+        step.state = "running"
+        self.bus.publish("step.started", **step.as_dict(),
+                         state_revision=world.revision,
+                         graph_revision=self.graph.revision)
+        if step.contract == "manipulate":
+            res = self.manipulator.execute(step, world)
+            if res.ok:
+                request = TransitionRequest(
+                    step_id=step.id,
+                    op=step.op,
+                    args=dict(step.args),
+                    expected_revision=world.revision,
+                    actor=step.device,
+                    org_id=self.envelope.org_id,
+                )
+                try:
+                    transition = self.world.apply_transition(request)
+                except TransitionRejected as exc:
+                    step.result = {"error": str(exc)}
+                    step.state = "failed"
+                    ok = False
+                else:
+                    step.result = {**res.detail, **transition.detail}
+                    step.state = "done" if transition.ok else "failed"
+                    ok = transition.ok
+            else:
+                step.result = res.detail
+                step.state = "failed"
+                ok = False
+        else:
+            step.result = {"noted": step.op}
+            step.state = "done"
+            ok = True
+        self._actions.append({
+            "step": step.id, "op": step.op, "arm": step.arm,
+            "device": step.device, "state": step.state, "result": step.result,
+        })
+        self.bus.publish("step.finished", **step.as_dict(),
+                         state_revision=self.world.state().revision,
+                         graph_revision=self.graph.revision)
+        return ok
+
+    def _authorize(self, step: Step, world: WorldState) -> ActionAuthorization:
+        """Persist an ALLOW/DENY receipt before asking a manipulator to act."""
+        reason = "permitted by mission envelope and current live state"
+        verdict = AuthorizationVerdict.ALLOW
+        obj_id = step.args.get("object")
+        if not self.envelope.op_permitted(step.op):
+            verdict = AuthorizationVerdict.DENY
+            reason = f"operation {step.op} is outside the mission envelope"
+        elif step.op == "EXPRESS":
+            window = getattr(self.planner, "expressive_window", None)
+            if window is None:
+                verdict = AuthorizationVerdict.DENY
+                reason = "EXPRESS requires an authorized expressive window"
+            else:
+                try:
+                    validate_expressive_step(
+                        window, step, current_world_revision=world.revision)
+                except ExpressiveWindowRejected as exc:
+                    verdict = AuthorizationVerdict.DENY
+                    reason = f"expressive window rejected: {exc}"
+        elif world.org_id != self.envelope.org_id:
+            verdict = AuthorizationVerdict.DENY
+            reason = "world organization scope does not match the mission envelope"
+        elif obj_id in set(self.envelope.forbidden_objects) or obj_id in world.forbidden():
+            verdict = AuthorizationVerdict.DENY
+            reason = f"object {obj_id} is forbidden"
+        elif obj_id and obj_id in world.objects and not world.objects[obj_id].authoritative:
+            verdict = AuthorizationVerdict.REQUIRE_APPROVAL
+            reason = f"object {obj_id} is not backed by live observation"
+
+        proposed = ActionAuthorization(
+            run_id=self._run_id,
+            step_id=step.id,
+            op=step.op,
+            verdict=verdict,
+            reason=reason,
+            state_revision=world.revision,
+            envelope_digest=self.envelope.digest(),
+        )
+        try:
+            finalized = self.recorder.authorize(proposed)
+        except Exception as exc:
+            finalized = ActionAuthorization(
+                run_id=proposed.run_id,
+                step_id=proposed.step_id,
+                op=proposed.op,
+                verdict=AuthorizationVerdict.DENY,
+                reason=f"authorization receipt could not be persisted: {exc}",
+                state_revision=proposed.state_revision,
+                envelope_digest=proposed.envelope_digest,
+            )
+            self.bus.publish("authorization.failed", step=step.id, error=str(exc))
+        self.bus.publish("step.authorized", authorization=finalized.as_dict(),
+                         state_revision=world.revision,
+                         graph_revision=self.graph.revision)
+        return finalized
+
+    def _verify_step(self, step: Step):
+        state = self.world.state()
+        fresh_obs = self.observer.observe(state)
+        result = self.verifier.check(step, fresh_obs)
+        self.bus.publish("verified", step=step.id, ok=result.ok,
+                         mismatch=list(result.mismatch),
+                         state_revision=state.revision,
+                         graph_revision=self.graph.revision)
+        return result
+
+    def _emit_graph(self, kind: str, **extra: Any) -> None:
+        self.bus.publish(kind, graph=self.graph.as_dict(), **extra,
+                         graph_revision=self.graph.revision)
+
+
+def _merge_rejected(decisions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Flatten the per-decision ``rejected`` maps into a de-duplicated list —
+    kept in the receipt so the trace shows what Omni Q chose *not* to do."""
+    seen: dict[tuple[str, str], None] = {}
+    for d in decisions:
+        for target, why in (d.get("rejected") or {}).items():
+            seen.setdefault((target, why), None)
+    return [{"target": t, "reason": w} for (t, w) in seen]

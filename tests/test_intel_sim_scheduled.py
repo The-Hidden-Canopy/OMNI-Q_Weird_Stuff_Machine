@@ -1,0 +1,72 @@
+"""Real MuJoCo Intel sim + bimanual scheduler, wired together zero-touch.
+
+Skipped in the pure-Python core environment; run with the project venv after
+installing the ``intel`` extra (``pip install -e ".[dev,intel]"``).
+"""
+
+from __future__ import annotations
+
+import pytest
+
+
+mujoco = pytest.importorskip("mujoco")
+
+from omni_q.intel_sim import build_intel_sim_engine
+from omni_q.scheduler import ScheduledPlanner
+
+
+def test_scheduled_planner_wraps_intel_planner_and_still_steps_real_physics():
+    """Not asserting resolved is True: full-run grasp success needs
+    orientation-aware IK this adapter doesn't have yet (see
+    tests/test_intel_sim.py). What this covers is that the scheduler wiring
+    itself holds up under a real (possibly failing) physics run -- it still
+    assigns both arms and never errors out, whether or not the grasps land."""
+    engine = build_intel_sim_engine()
+    scheduled = ScheduledPlanner(engine.planner)
+    engine.planner = scheduled
+
+    receipt = engine.run("set the table")
+
+    assert scheduled.last_error is None
+    assert scheduled.last_schedule is not None
+    # Over the whole run, not the last replan: since 2026-09-14 the engine
+    # pairs steps across arms and a run's final graph is often a one-object
+    # retry, whose schedule names a single arm.
+    arms_used = {a["arm"] for a in receipt.actions if a.get("arm") and a["op"] in {"PICK", "MOVE", "PLACE"}}
+    assert arms_used == {"left", "right"}
+    assert engine.world.simulation_summary()["time"] > 0.0
+
+
+def test_distinct_object_zones_let_both_arms_work_concurrently():
+    """OQ-007 regression: a shared literal zone for every tableware item
+    used to collapse the schedule to max_parallelism=1 regardless of arm
+    (see integrations/intel/README.md). Distinct start zones + real region
+    x-centers (scheduler.DEFAULT_LAYOUT) should let left/right run waves
+    together with no false workspace conflicts."""
+    engine = build_intel_sim_engine()
+    scheduled = ScheduledPlanner(engine.planner)
+    engine.planner = scheduled
+
+    # The initial schedule is the claim under test (distinct zones -> waves
+    # with both arms); the run's last replan may be a single-object retry.
+    sch = scheduled.plan("set the table", engine.world.state()) and scheduled.last_schedule
+    assert sch is not None
+    assert sch.metrics["max_parallelism"] >= 2
+    engine.run("set the table")
+    # The original OQ-007 bug this test guards against was a *false*
+    # conflict from every item sharing one literal zone. It was never a
+    # claim that real physics can produce zero workspace conflicts ever --
+    # after restoring real arm-environment collision (removing a
+    # contype/conaffinity no-clip exemption that had let the whole arm
+    # mesh pass through the table/objects), the settled scene genuinely
+    # has one workspace barrier. That's the scheduler correctly protecting
+    # against real simultaneous motion, not the old bug recurring; this
+    # bound would catch a regression back toward the old collapse
+    # (max_parallelism drops or conflicts spike) without asserting an
+    # unrealistic "never any real conflict" guarantee.
+    # 2026-09-14: a second real conflict -- the napkin's zone now sits in the
+    # shared band above the plate (so a failed arm's napkin can be re-routed
+    # to the other arm), and the scheduler correctly serialises it against
+    # the plate's centre work.
+    assert sch.metrics["serialized_conflicts"] <= 2
+    assert not any(b.kind == "reach" for b in sch.barriers)

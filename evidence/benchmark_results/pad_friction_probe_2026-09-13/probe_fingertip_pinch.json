@@ -1,0 +1,20 @@
+{
+  "label": "fingertip_pinch",
+  "pad_friction": "3.00 0.020 0.001",
+  "wall_s": 139.4,
+  "outcomes": {
+    "success": 0,
+    "grasp_failure": 10,
+    "placement_failure": 0,
+    "timeout": 0,
+    "collision": 0,
+    "transition_failure": 0,
+    "unresolved": 0
+  },
+  "per_object": {
+    "held_in_trials": {
+      "plate_1": 10
+    },
+    "placed_in_trials": {}
+  }
+}

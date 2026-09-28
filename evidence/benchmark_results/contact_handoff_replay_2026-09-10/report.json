@@ -1,0 +1,558 @@
+{
+  "kind": "independent contact-handoff structural replay; not a promotion claim",
+  "mode": "simulation-contact-handoff",
+  "outcomes": {
+    "accepted": 30,
+    "failed": 0,
+    "rejected": 0,
+    "successful": 30
+  },
+  "receipts": [
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:2db6053534254ea8f38b799b5f921678321b1014fb9f0aa65df0b00695d7125c",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-00-seed-19.json",
+      "seed": 19,
+      "source": "evidence/benchmark_results/contact_handoff_deterministic_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:2db6053534254ea8f38b799b5f921678321b1014fb9f0aa65df0b00695d7125c",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-01-seed-19.json",
+      "seed": 19,
+      "source": "evidence/benchmark_results/contact_handoff_deterministic_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:2db6053534254ea8f38b799b5f921678321b1014fb9f0aa65df0b00695d7125c",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-02-seed-19.json",
+      "seed": 19,
+      "source": "evidence/benchmark_results/contact_handoff_deterministic_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:2db6053534254ea8f38b799b5f921678321b1014fb9f0aa65df0b00695d7125c",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-03-seed-19.json",
+      "seed": 19,
+      "source": "evidence/benchmark_results/contact_handoff_deterministic_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:2db6053534254ea8f38b799b5f921678321b1014fb9f0aa65df0b00695d7125c",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-04-seed-19.json",
+      "seed": 19,
+      "source": "evidence/benchmark_results/contact_handoff_deterministic_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:2db6053534254ea8f38b799b5f921678321b1014fb9f0aa65df0b00695d7125c",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-05-seed-19.json",
+      "seed": 19,
+      "source": "evidence/benchmark_results/contact_handoff_deterministic_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:2db6053534254ea8f38b799b5f921678321b1014fb9f0aa65df0b00695d7125c",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-06-seed-19.json",
+      "seed": 19,
+      "source": "evidence/benchmark_results/contact_handoff_deterministic_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:2db6053534254ea8f38b799b5f921678321b1014fb9f0aa65df0b00695d7125c",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-07-seed-19.json",
+      "seed": 19,
+      "source": "evidence/benchmark_results/contact_handoff_deterministic_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:2db6053534254ea8f38b799b5f921678321b1014fb9f0aa65df0b00695d7125c",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-08-seed-19.json",
+      "seed": 19,
+      "source": "evidence/benchmark_results/contact_handoff_deterministic_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:2db6053534254ea8f38b799b5f921678321b1014fb9f0aa65df0b00695d7125c",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-09-seed-19.json",
+      "seed": 19,
+      "source": "evidence/benchmark_results/contact_handoff_deterministic_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:dfd8bac5105dfbd46804f12693d8e825702e7d5e6cd7a48c987585ffc4af2eb7",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-00-seed-700.json",
+      "seed": 700,
+      "source": "evidence/benchmark_results/contact_handoff_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:e4d23f7c4e62bb1b07a212cd6cbbd401e644ea1cc0d51dcee4fb0a10dca4fc91",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-01-seed-701.json",
+      "seed": 701,
+      "source": "evidence/benchmark_results/contact_handoff_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:f9061801779e4e9068b6147af5b4e658431bd845e42897cf27bc47938e08a164",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-02-seed-702.json",
+      "seed": 702,
+      "source": "evidence/benchmark_results/contact_handoff_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:3851ed880462543ab37261a6e48b0030d24c03af65fcac1d5968877b91fa582f",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-03-seed-703.json",
+      "seed": 703,
+      "source": "evidence/benchmark_results/contact_handoff_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:7eaf5df10dfb7999657c20435d2f7be55b12eee5a14ff145534a4daf5454657b",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-04-seed-704.json",
+      "seed": 704,
+      "source": "evidence/benchmark_results/contact_handoff_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:910e3171b6609fbbe6692595d5ed3ab1008e5350051aa6b8ad7f8dd68d17edd6",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-05-seed-705.json",
+      "seed": 705,
+      "source": "evidence/benchmark_results/contact_handoff_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:94fd68e898908899a19f843ea31a333b245dcef3e58e3944208a6c5a540e54de",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-06-seed-706.json",
+      "seed": 706,
+      "source": "evidence/benchmark_results/contact_handoff_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:754ba475e1a0d87a739cbe1d19551fb211f1161a0c75493f79a6db29eb8c2ec7",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-07-seed-707.json",
+      "seed": 707,
+      "source": "evidence/benchmark_results/contact_handoff_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:5aef2643c860f4674989749fff01730a686add2934bc6830d3de3d3db3f15c9d",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-08-seed-708.json",
+      "seed": 708,
+      "source": "evidence/benchmark_results/contact_handoff_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:7f70f5499940af14f508c4a139c9f4e1312c22a9e7a83d76281d2010bc7b0213",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-09-seed-709.json",
+      "seed": 709,
+      "source": "evidence/benchmark_results/contact_handoff_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:cc6a51cabea08417e5b27228d96b4e9b0c77a049a1da469bc672f686a8e0959d",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-10-seed-710.json",
+      "seed": 710,
+      "source": "evidence/benchmark_results/contact_handoff_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:6015fff7514a7ef1082458270736e31ef152d17413e84e99c6914fcad4bec00a",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-11-seed-711.json",
+      "seed": 711,
+      "source": "evidence/benchmark_results/contact_handoff_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:3318f9bf3b08412137a914c4d079fd5e9e2ba3196a1880519c462cb8dd5b8c9e",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-12-seed-712.json",
+      "seed": 712,
+      "source": "evidence/benchmark_results/contact_handoff_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:c0f6a38200c2a260cae424e9488e369ae905ff5dbf6844b6f036065a55c2bad1",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-13-seed-713.json",
+      "seed": 713,
+      "source": "evidence/benchmark_results/contact_handoff_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:83e6190d49a6b982cc52b1a3ff1f63d7d63504ee06b78fdb2cfa0287e3dd3e7e",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-14-seed-714.json",
+      "seed": 714,
+      "source": "evidence/benchmark_results/contact_handoff_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:bd38c1fd1d055de324f4e4ffdf2293ecc56acf21868395b601ed7f3635dd0a7c",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-15-seed-715.json",
+      "seed": 715,
+      "source": "evidence/benchmark_results/contact_handoff_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:bb2e9a54c6946ac368f4639407b282ab0e6d0d91e56cff528e68dbe2c4520e58",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-16-seed-716.json",
+      "seed": 716,
+      "source": "evidence/benchmark_results/contact_handoff_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:812c4f4f46c437428fe6daf700b8b23154fb8094b40e238b7ed6482702a7cde0",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-17-seed-717.json",
+      "seed": 717,
+      "source": "evidence/benchmark_results/contact_handoff_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:0bd1ca189919d729c3b6a495205aeb813c64889c5cbdf8f584d44ae6603b4e54",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-18-seed-718.json",
+      "seed": 718,
+      "source": "evidence/benchmark_results/contact_handoff_2026-09-10",
+      "success": true
+    },
+    {
+      "accepted": true,
+      "checks": {
+        "contact_phases": true,
+        "content_hash": true,
+        "final_state": true,
+        "force_bound": true,
+        "joint_margin": true,
+        "phase_order": true
+      },
+      "content_hash": "sha256:6a1f6bb0fa1b7a21ce3a82003bfc3ff141910c46aca7b449472d8adfb9fcd7bc",
+      "mode": "simulation-contact-handoff",
+      "ok": true,
+      "receipt": "trial-19-seed-719.json",
+      "seed": 719,
+      "source": "evidence/benchmark_results/contact_handoff_2026-09-10",
+      "success": true
+    }
+  ],
+  "receipts_seen": 30,
+  "schema_version": 1,
+  "sources": [
+    "evidence/benchmark_results/contact_handoff_deterministic_2026-09-10",
+    "evidence/benchmark_results/contact_handoff_2026-09-10"
+  ]
+}

@@ -1,0 +1,157 @@
+{
+  "kind": "exploratory robustness report; not a promotion claim",
+  "mode": "simulation-contact-handoff",
+  "outcomes": {
+    "ambiguity": 0,
+    "collision": 0,
+    "drop": 0,
+    "other_failure": 0,
+    "success": 20,
+    "timeout": 0
+  },
+  "receipts": [
+    {
+      "failure_reason": null,
+      "receipt": "trial-00-seed-700.json",
+      "seed": 700,
+      "success": true,
+      "trial": 0
+    },
+    {
+      "failure_reason": null,
+      "receipt": "trial-01-seed-701.json",
+      "seed": 701,
+      "success": true,
+      "trial": 1
+    },
+    {
+      "failure_reason": null,
+      "receipt": "trial-02-seed-702.json",
+      "seed": 702,
+      "success": true,
+      "trial": 2
+    },
+    {
+      "failure_reason": null,
+      "receipt": "trial-03-seed-703.json",
+      "seed": 703,
+      "success": true,
+      "trial": 3
+    },
+    {
+      "failure_reason": null,
+      "receipt": "trial-04-seed-704.json",
+      "seed": 704,
+      "success": true,
+      "trial": 4
+    },
+    {
+      "failure_reason": null,
+      "receipt": "trial-05-seed-705.json",
+      "seed": 705,
+      "success": true,
+      "trial": 5
+    },
+    {
+      "failure_reason": null,
+      "receipt": "trial-06-seed-706.json",
+      "seed": 706,
+      "success": true,
+      "trial": 6
+    },
+    {
+      "failure_reason": null,
+      "receipt": "trial-07-seed-707.json",
+      "seed": 707,
+      "success": true,
+      "trial": 7
+    },
+    {
+      "failure_reason": null,
+      "receipt": "trial-08-seed-708.json",
+      "seed": 708,
+      "success": true,
+      "trial": 8
+    },
+    {
+      "failure_reason": null,
+      "receipt": "trial-09-seed-709.json",
+      "seed": 709,
+      "success": true,
+      "trial": 9
+    },
+    {
+      "failure_reason": null,
+      "receipt": "trial-10-seed-710.json",
+      "seed": 710,
+      "success": true,
+      "trial": 10
+    },
+    {
+      "failure_reason": null,
+      "receipt": "trial-11-seed-711.json",
+      "seed": 711,
+      "success": true,
+      "trial": 11
+    },
+    {
+      "failure_reason": null,
+      "receipt": "trial-12-seed-712.json",
+      "seed": 712,
+      "success": true,
+      "trial": 12
+    },
+    {
+      "failure_reason": null,
+      "receipt": "trial-13-seed-713.json",
+      "seed": 713,
+      "success": true,
+      "trial": 13
+    },
+    {
+      "failure_reason": null,
+      "receipt": "trial-14-seed-714.json",
+      "seed": 714,
+      "success": true,
+      "trial": 14
+    },
+    {
+      "failure_reason": null,
+      "receipt": "trial-15-seed-715.json",
+      "seed": 715,
+      "success": true,
+      "trial": 15
+    },
+    {
+      "failure_reason": null,
+      "receipt": "trial-16-seed-716.json",
+      "seed": 716,
+      "success": true,
+      "trial": 16
+    },
+    {
+      "failure_reason": null,
+      "receipt": "trial-17-seed-717.json",
+      "seed": 717,
+      "success": true,
+      "trial": 17
+    },
+    {
+      "failure_reason": null,
+      "receipt": "trial-18-seed-718.json",
+      "seed": 718,
+      "success": true,
+      "trial": 18
+    },
+    {
+      "failure_reason": null,
+      "receipt": "trial-19-seed-719.json",
+      "seed": 719,
+      "success": true,
+      "trial": 19
+    }
+  ],
+  "schema_version": 1,
+  "seed_start": 700,
+  "trials": 20
+}

@@ -1,0 +1,805 @@
+{
+  "final_state_all_in_zone_upright": 9,
+  "kind": "exploratory randomized legacy table-setting report; not a promotion claim",
+  "mode": "simulation-scripted-manipulation",
+  "outcomes": {
+    "collision": 0,
+    "grasp_failure": 1,
+    "placement_failure": 0,
+    "success": 9,
+    "timeout": 0,
+    "transition_failure": 0,
+    "unresolved": 0
+  },
+  "per_object_summary": {
+    "held_in_trials": {
+      "cup_1": 10,
+      "fork_1": 10,
+      "napkin_1": 10,
+      "plate_1": 10,
+      "spoon_1": 10
+    },
+    "placed_in_trials": {
+      "cup_1": 10,
+      "fork_1": 10,
+      "napkin_1": 10,
+      "plate_1": 9,
+      "spoon_1": 10
+    }
+  },
+  "receipts": [
+    {
+      "content_hash": "sha256:979ae25fa7641aefddad261db9e449d00c8c29d65e3708340bc67233319be9b2",
+      "final_state": {
+        "all_in_zone_upright": true,
+        "cup_1": {
+          "distance_m": 0.0241,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "upper_right"
+        },
+        "fork_1": {
+          "distance_m": 0.0281,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0005,
+          "zone": "left"
+        },
+        "napkin_1": {
+          "distance_m": 0.0193,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "lower_left"
+        },
+        "plate_1": {
+          "distance_m": 0.0099,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "center"
+        },
+        "spoon_1": {
+          "distance_m": 0.0203,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0004,
+          "zone": "right"
+        }
+      },
+      "goal": "set the table",
+      "outcome": "success",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": true,
+          "placed": true
+        },
+        "napkin_1": {
+          "held": true,
+          "placed": true
+        },
+        "plate_1": {
+          "held": true,
+          "placed": true
+        },
+        "spoon_1": {
+          "held": true,
+          "placed": true
+        }
+      },
+      "receipt": "trial-00-seed-900.json",
+      "resolved": true,
+      "run_id": "cfeb7d9d9600",
+      "scene": {
+        "background_jitter": 0.1,
+        "color_jitter": 0.12,
+        "friction_jitter": 0.15,
+        "light_angle_jitter_rad": 0.35,
+        "light_diffuse_jitter": 0.3,
+        "mass_jitter": 0.25,
+        "position_jitter_m": 0.012,
+        "randomized": true,
+        "seed": 900,
+        "yaw_jitter_rad": 0.2
+      },
+      "seed": 900,
+      "trial": 0
+    },
+    {
+      "content_hash": "sha256:ee49cc9f8131472a23e1e55b3e3e8c0c1694cbe9f7e3253182218696358a9153",
+      "final_state": {
+        "all_in_zone_upright": true,
+        "cup_1": {
+          "distance_m": 0.0468,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "upper_right"
+        },
+        "fork_1": {
+          "distance_m": 0.0284,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0005,
+          "zone": "left"
+        },
+        "napkin_1": {
+          "distance_m": 0.0183,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "lower_left"
+        },
+        "plate_1": {
+          "distance_m": 0.0223,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "center"
+        },
+        "spoon_1": {
+          "distance_m": 0.0068,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0004,
+          "zone": "right"
+        }
+      },
+      "goal": "please set the table for dinner",
+      "outcome": "success",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": true,
+          "placed": true
+        },
+        "napkin_1": {
+          "held": true,
+          "placed": true
+        },
+        "plate_1": {
+          "held": true,
+          "placed": true
+        },
+        "spoon_1": {
+          "held": true,
+          "placed": true
+        }
+      },
+      "receipt": "trial-01-seed-901.json",
+      "resolved": true,
+      "run_id": "4c41ee47527e",
+      "scene": {
+        "background_jitter": 0.1,
+        "color_jitter": 0.12,
+        "friction_jitter": 0.15,
+        "light_angle_jitter_rad": 0.35,
+        "light_diffuse_jitter": 0.3,
+        "mass_jitter": 0.25,
+        "position_jitter_m": 0.012,
+        "randomized": true,
+        "seed": 901,
+        "yaw_jitter_rad": 0.2
+      },
+      "seed": 901,
+      "trial": 1
+    },
+    {
+      "content_hash": "sha256:877532299416358a1587518f6e3f7bf66c61b71cf02e001cda35156722dfbe37",
+      "final_state": {
+        "all_in_zone_upright": true,
+        "cup_1": {
+          "distance_m": 0.0367,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "upper_right"
+        },
+        "fork_1": {
+          "distance_m": 0.0353,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0005,
+          "zone": "left"
+        },
+        "napkin_1": {
+          "distance_m": 0.0189,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "lower_left"
+        },
+        "plate_1": {
+          "distance_m": 0.0062,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "center"
+        },
+        "spoon_1": {
+          "distance_m": 0.0092,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0004,
+          "zone": "right"
+        }
+      },
+      "goal": "set up the table now",
+      "outcome": "success",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": true,
+          "placed": true
+        },
+        "napkin_1": {
+          "held": true,
+          "placed": true
+        },
+        "plate_1": {
+          "held": true,
+          "placed": true
+        },
+        "spoon_1": {
+          "held": true,
+          "placed": true
+        }
+      },
+      "receipt": "trial-02-seed-902.json",
+      "resolved": true,
+      "run_id": "8f8ef3425d1d",
+      "scene": {
+        "background_jitter": 0.1,
+        "color_jitter": 0.12,
+        "friction_jitter": 0.15,
+        "light_angle_jitter_rad": 0.35,
+        "light_diffuse_jitter": 0.3,
+        "mass_jitter": 0.25,
+        "position_jitter_m": 0.012,
+        "randomized": true,
+        "seed": 902,
+        "yaw_jitter_rad": 0.2
+      },
+      "seed": 902,
+      "trial": 2
+    },
+    {
+      "content_hash": "sha256:e06c01a1f4046ea7e384a997486a8a419877b9aee8666190cd261495d00c6075",
+      "final_state": {
+        "all_in_zone_upright": true,
+        "cup_1": {
+          "distance_m": 0.0275,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "upper_right"
+        },
+        "fork_1": {
+          "distance_m": 0.0443,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0005,
+          "zone": "left"
+        },
+        "napkin_1": {
+          "distance_m": 0.0187,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "lower_left"
+        },
+        "plate_1": {
+          "distance_m": 0.0141,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "center"
+        },
+        "spoon_1": {
+          "distance_m": 0.0045,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0004,
+          "zone": "right"
+        }
+      },
+      "goal": "can you set the table",
+      "outcome": "success",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": true,
+          "placed": true
+        },
+        "napkin_1": {
+          "held": true,
+          "placed": true
+        },
+        "plate_1": {
+          "held": true,
+          "placed": true
+        },
+        "spoon_1": {
+          "held": true,
+          "placed": true
+        }
+      },
+      "receipt": "trial-03-seed-903.json",
+      "resolved": true,
+      "run_id": "2485bb5ecbcd",
+      "scene": {
+        "background_jitter": 0.1,
+        "color_jitter": 0.12,
+        "friction_jitter": 0.15,
+        "light_angle_jitter_rad": 0.35,
+        "light_diffuse_jitter": 0.3,
+        "mass_jitter": 0.25,
+        "position_jitter_m": 0.012,
+        "randomized": true,
+        "seed": 903,
+        "yaw_jitter_rad": 0.2
+      },
+      "seed": 903,
+      "trial": 3
+    },
+    {
+      "content_hash": "sha256:82a06d15e441bfb0ac1185811c7fc59f982b72a446c6d58f3b9d24c77229e68e",
+      "final_state": {
+        "all_in_zone_upright": true,
+        "cup_1": {
+          "distance_m": 0.008,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "upper_right"
+        },
+        "fork_1": {
+          "distance_m": 0.0148,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0005,
+          "zone": "left"
+        },
+        "napkin_1": {
+          "distance_m": 0.0191,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "lower_left"
+        },
+        "plate_1": {
+          "distance_m": 0.0068,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "center"
+        },
+        "spoon_1": {
+          "distance_m": 0.0191,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0004,
+          "zone": "right"
+        }
+      },
+      "goal": "time to set the table",
+      "outcome": "success",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": true,
+          "placed": true
+        },
+        "napkin_1": {
+          "held": true,
+          "placed": true
+        },
+        "plate_1": {
+          "held": true,
+          "placed": true
+        },
+        "spoon_1": {
+          "held": true,
+          "placed": true
+        }
+      },
+      "receipt": "trial-04-seed-904.json",
+      "resolved": true,
+      "run_id": "5132589a32d4",
+      "scene": {
+        "background_jitter": 0.1,
+        "color_jitter": 0.12,
+        "friction_jitter": 0.15,
+        "light_angle_jitter_rad": 0.35,
+        "light_diffuse_jitter": 0.3,
+        "mass_jitter": 0.25,
+        "position_jitter_m": 0.012,
+        "randomized": true,
+        "seed": 904,
+        "yaw_jitter_rad": 0.2
+      },
+      "seed": 904,
+      "trial": 4
+    },
+    {
+      "content_hash": "sha256:0c86e156b69d1fab6b8b44ff8887c70ef5854efc382a8e80b825235ff5d31170",
+      "final_state": {
+        "all_in_zone_upright": true,
+        "cup_1": {
+          "distance_m": 0.0183,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "upper_right"
+        },
+        "fork_1": {
+          "distance_m": 0.0178,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0005,
+          "zone": "left"
+        },
+        "napkin_1": {
+          "distance_m": 0.0155,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "lower_left"
+        },
+        "plate_1": {
+          "distance_m": 0.0178,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "center"
+        },
+        "spoon_1": {
+          "distance_m": 0.0048,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0004,
+          "zone": "right"
+        }
+      },
+      "goal": "set the table for the meal",
+      "outcome": "success",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": true,
+          "placed": true
+        },
+        "napkin_1": {
+          "held": true,
+          "placed": true
+        },
+        "plate_1": {
+          "held": true,
+          "placed": true
+        },
+        "spoon_1": {
+          "held": true,
+          "placed": true
+        }
+      },
+      "receipt": "trial-05-seed-905.json",
+      "resolved": true,
+      "run_id": "9501631c85f0",
+      "scene": {
+        "background_jitter": 0.1,
+        "color_jitter": 0.12,
+        "friction_jitter": 0.15,
+        "light_angle_jitter_rad": 0.35,
+        "light_diffuse_jitter": 0.3,
+        "mass_jitter": 0.25,
+        "position_jitter_m": 0.012,
+        "randomized": true,
+        "seed": 905,
+        "yaw_jitter_rad": 0.2
+      },
+      "seed": 905,
+      "trial": 5
+    },
+    {
+      "content_hash": "sha256:25ff82bd6edbe7dda313f43628a2c6ef4e2549d6719729bca895f8beef37c8b1",
+      "final_state": {
+        "all_in_zone_upright": true,
+        "cup_1": {
+          "distance_m": 0.0314,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "upper_right"
+        },
+        "fork_1": {
+          "distance_m": 0.0144,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0005,
+          "zone": "left"
+        },
+        "napkin_1": {
+          "distance_m": 0.0183,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "lower_left"
+        },
+        "plate_1": {
+          "distance_m": 0.0319,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "center"
+        },
+        "spoon_1": {
+          "distance_m": 0.0197,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0004,
+          "zone": "right"
+        }
+      },
+      "goal": "go ahead and set the table",
+      "outcome": "success",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": true,
+          "placed": true
+        },
+        "napkin_1": {
+          "held": true,
+          "placed": true
+        },
+        "plate_1": {
+          "held": true,
+          "placed": true
+        },
+        "spoon_1": {
+          "held": true,
+          "placed": true
+        }
+      },
+      "receipt": "trial-06-seed-906.json",
+      "resolved": true,
+      "run_id": "ac4ab9a55ab7",
+      "scene": {
+        "background_jitter": 0.1,
+        "color_jitter": 0.12,
+        "friction_jitter": 0.15,
+        "light_angle_jitter_rad": 0.35,
+        "light_diffuse_jitter": 0.3,
+        "mass_jitter": 0.25,
+        "position_jitter_m": 0.012,
+        "randomized": true,
+        "seed": 906,
+        "yaw_jitter_rad": 0.2
+      },
+      "seed": 906,
+      "trial": 6
+    },
+    {
+      "content_hash": "sha256:80ff68f3a08482db25f9527154a01c4bd4377a0fa142a4509ccd4d327fab935a",
+      "final_state": {
+        "all_in_zone_upright": true,
+        "cup_1": {
+          "distance_m": 0.0301,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "upper_right"
+        },
+        "fork_1": {
+          "distance_m": 0.0154,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0005,
+          "zone": "left"
+        },
+        "napkin_1": {
+          "distance_m": 0.0188,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "lower_left"
+        },
+        "plate_1": {
+          "distance_m": 0.0131,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "center"
+        },
+        "spoon_1": {
+          "distance_m": 0.0072,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0004,
+          "zone": "right"
+        }
+      },
+      "goal": "set the dinner table",
+      "outcome": "success",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": true,
+          "placed": true
+        },
+        "napkin_1": {
+          "held": true,
+          "placed": true
+        },
+        "plate_1": {
+          "held": true,
+          "placed": true
+        },
+        "spoon_1": {
+          "held": true,
+          "placed": true
+        }
+      },
+      "receipt": "trial-07-seed-907.json",
+      "resolved": true,
+      "run_id": "47acc85747c8",
+      "scene": {
+        "background_jitter": 0.1,
+        "color_jitter": 0.12,
+        "friction_jitter": 0.15,
+        "light_angle_jitter_rad": 0.35,
+        "light_diffuse_jitter": 0.3,
+        "mass_jitter": 0.25,
+        "position_jitter_m": 0.012,
+        "randomized": true,
+        "seed": 907,
+        "yaw_jitter_rad": 0.2
+      },
+      "seed": 907,
+      "trial": 7
+    },
+    {
+      "content_hash": "sha256:ed7da14ae443d74867559de1f15a0c849b505a325970921304f1e90ab75c2dca",
+      "final_state": {
+        "all_in_zone_upright": false,
+        "cup_1": {
+          "distance_m": 0.0024,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "upper_right"
+        },
+        "fork_1": {
+          "distance_m": 0.034,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0005,
+          "zone": "left"
+        },
+        "napkin_1": {
+          "distance_m": 0.0197,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "lower_left"
+        },
+        "plate_1": {
+          "distance_m": 0.1823,
+          "in_zone_upright": false,
+          "tilt_rad": 0.0,
+          "zone": "center"
+        },
+        "spoon_1": {
+          "distance_m": 0.0328,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0004,
+          "zone": "right"
+        }
+      },
+      "goal": "set the table, thanks",
+      "outcome": "grasp_failure",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": true,
+          "placed": true
+        },
+        "napkin_1": {
+          "held": true,
+          "placed": true
+        },
+        "plate_1": {
+          "held": true,
+          "placed": false
+        },
+        "spoon_1": {
+          "held": true,
+          "placed": true
+        }
+      },
+      "receipt": "trial-08-seed-908.json",
+      "resolved": false,
+      "run_id": "c750d00f1580",
+      "scene": {
+        "background_jitter": 0.1,
+        "color_jitter": 0.12,
+        "friction_jitter": 0.15,
+        "light_angle_jitter_rad": 0.35,
+        "light_diffuse_jitter": 0.3,
+        "mass_jitter": 0.25,
+        "position_jitter_m": 0.012,
+        "randomized": true,
+        "seed": 908,
+        "yaw_jitter_rad": 0.2
+      },
+      "seed": 908,
+      "trial": 8
+    },
+    {
+      "content_hash": "sha256:59055536fbce3e0ac4aaff019408443681fb944913c68791a39f1fdc0afce0bd",
+      "final_state": {
+        "all_in_zone_upright": true,
+        "cup_1": {
+          "distance_m": 0.0345,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "upper_right"
+        },
+        "fork_1": {
+          "distance_m": 0.0286,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0005,
+          "zone": "left"
+        },
+        "napkin_1": {
+          "distance_m": 0.0197,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "lower_left"
+        },
+        "plate_1": {
+          "distance_m": 0.0199,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0,
+          "zone": "center"
+        },
+        "spoon_1": {
+          "distance_m": 0.0081,
+          "in_zone_upright": true,
+          "tilt_rad": 0.0004,
+          "zone": "right"
+        }
+      },
+      "goal": "could you please go ahead and set the table for us",
+      "outcome": "success",
+      "per_object": {
+        "cup_1": {
+          "held": true,
+          "placed": true
+        },
+        "fork_1": {
+          "held": true,
+          "placed": true
+        },
+        "napkin_1": {
+          "held": true,
+          "placed": true
+        },
+        "plate_1": {
+          "held": true,
+          "placed": true
+        },
+        "spoon_1": {
+          "held": true,
+          "placed": true
+        }
+      },
+      "receipt": "trial-09-seed-909.json",
+      "resolved": true,
+      "run_id": "105bd8c1b49b",
+      "scene": {
+        "background_jitter": 0.1,
+        "color_jitter": 0.12,
+        "friction_jitter": 0.15,
+        "light_angle_jitter_rad": 0.35,
+        "light_diffuse_jitter": 0.3,
+        "mass_jitter": 0.25,
+        "position_jitter_m": 0.012,
+        "randomized": true,
+        "seed": 909,
+        "yaw_jitter_rad": 0.2
+      },
+      "seed": 909,
+      "trial": 9
+    }
+  ],
+  "schema_version": 3,
+  "seed_start": 900,
+  "trials": 10
+}

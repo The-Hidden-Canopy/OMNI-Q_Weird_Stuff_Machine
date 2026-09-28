@@ -1,0 +1,30 @@
+description: Ultralytics YOLOv8n model trained on data\table_yolo_v4\data.yaml
+author: Ultralytics
+date: '2026-09-15T10:32:54.957049-05:00'
+version: 8.4.146
+license: AGPL-3.0 License (https://ultralytics.com/license)
+docs: https://docs.ultralytics.com
+stride: 32
+task: detect
+head: Detect
+batch: 1
+imgsz:
+- 640
+- 640
+names:
+  0: plate
+  1: cup
+  2: fork
+  3: spoon
+  4: knife
+  5: napkin
+  6: drawer
+args:
+  data: C:\Users\damio\OneDrive\Desktop\hack-a-thons\AI Infra\project\OMNI-Q_Weird_Stuff_Machine\data\table_yolo_v4\data.yaml
+  batch: 1
+  fraction: 1.0
+  quantize: 8
+  nms: null
+  dynamic: false
+channels: 3
+end2end: false

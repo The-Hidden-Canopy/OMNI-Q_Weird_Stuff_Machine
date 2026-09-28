@@ -1,0 +1,27 @@
+{
+  "label": "yaw_fold",
+  "pad_friction": "3.00 0.020 0.001",
+  "wall_s": 110.0,
+  "outcomes": {
+    "success": 0,
+    "grasp_failure": 10,
+    "placement_failure": 0,
+    "timeout": 0,
+    "collision": 0,
+    "transition_failure": 0,
+    "unresolved": 0
+  },
+  "per_object": {
+    "held_in_trials": {
+      "cup_1": 10,
+      "plate_1": 10,
+      "fork_1": 10,
+      "spoon_1": 7
+    },
+    "placed_in_trials": {
+      "cup_1": 9,
+      "fork_1": 10,
+      "spoon_1": 7
+    }
+  }
+}

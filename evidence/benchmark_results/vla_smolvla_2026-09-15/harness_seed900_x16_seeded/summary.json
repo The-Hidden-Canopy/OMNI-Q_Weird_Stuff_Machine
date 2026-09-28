@@ -1,0 +1,30 @@
+{
+ "checkpoint": "C:/Users/damio/OneDrive/Desktop/hack-a-thons/AI Infra/project/OMNI-Q_Weird_Stuff_Machine/outputs/train/smolvla_so101_table_20260915_0419/checkpoints/008000/pretrained_model",
+ "trials": 16,
+ "resolved": 12,
+ "placements": 76,
+ "final_ok": 12,
+ "vla_steps": {
+  "PICK:fallback": 89,
+  "MOVE:fallback": 74
+ },
+ "fallback_enabled": true,
+ "seeds": [
+  900,
+  901,
+  902,
+  903,
+  904,
+  905,
+  906,
+  907,
+  908,
+  909,
+  910,
+  911,
+  912,
+  913,
+  914,
+  915
+ ]
+}

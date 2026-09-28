@@ -1,0 +1,24 @@
+{
+ "checkpoint": "outputs/train/smolvla_so101_table_20260915_0419/checkpoints/008000/pretrained_model",
+ "trials": 10,
+ "resolved": 8,
+ "placements": 48,
+ "final_ok": 8,
+ "vla_steps": {
+  "PICK:fallback": 65,
+  "MOVE:fallback": 59
+ },
+ "fallback_enabled": true,
+ "seeds": [
+  900,
+  901,
+  902,
+  903,
+  904,
+  905,
+  906,
+  907,
+  908,
+  909
+ ]
+}

@@ -1,0 +1,35 @@
+{
+  "available_devices": {
+    "CPU": "Intel(R) Core(TM) 5 210H",
+    "GPU.0": "Intel(R) Graphics (iGPU)",
+    "GPU.1": "NVIDIA GeForce RTX 4050 Laptop GPU (dGPU)"
+  },
+  "device": "GPU.0",
+  "device_full_name": "Intel(R) Graphics (iGPU)",
+  "input_shape": [
+    1,
+    3,
+    640,
+    640
+  ],
+  "iterations": 200,
+  "latency_ms": {
+    "max": 17.671,
+    "mean": 12.048,
+    "min": 10.4,
+    "p50": 12.019,
+    "p95": 14.087
+  },
+  "measured_at": "2026-09-10T20:10:08Z",
+  "memory_rss_mb": {
+    "after_peak": 354.7,
+    "before": 345.8,
+    "delta": 9.0
+  },
+  "model": "yolov8n_hituav_thermal.xml",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python": "3.12.10",
+  "seed": 7,
+  "variant": "openvino-gpu.0-fp32",
+  "warmup": 50
+}

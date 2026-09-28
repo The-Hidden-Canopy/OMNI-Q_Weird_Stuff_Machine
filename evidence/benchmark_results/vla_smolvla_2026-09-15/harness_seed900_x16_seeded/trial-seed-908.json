@@ -1,0 +1,1831 @@
+{
+ "trial": {
+  "seed": 908,
+  "goal": "set the table, thanks",
+  "resolved": false,
+  "placed": 4,
+  "final_all_in_zone_upright": false,
+  "vla_steps": {
+   "PICK:fallback": 4,
+   "MOVE:fallback": 4
+  },
+  "vla_attempts": [
+   {
+    "op": "PICK",
+    "object": "cup_1",
+    "arm": "right",
+    "ok": false,
+    "ticks": 80,
+    "reason": "budget exhausted",
+    "wall_s": 3.9,
+    "lift_height_m": -0.0
+   },
+   {
+    "op": "MOVE",
+    "object": "cup_1",
+    "arm": "right",
+    "ok": false,
+    "ticks": 14,
+    "reason": "grasp slipping (10 mm)",
+    "wall_s": 1.0
+   },
+   {
+    "op": "PICK",
+    "object": "fork_1",
+    "arm": "left",
+    "ok": false,
+    "ticks": 80,
+    "reason": "budget exhausted",
+    "wall_s": 3.7,
+    "lift_height_m": 0.0
+   },
+   {
+    "op": "MOVE",
+    "object": "fork_1",
+    "arm": "left",
+    "ok": false,
+    "ticks": 40,
+    "reason": "budget exhausted",
+    "wall_s": 2.0
+   },
+   {
+    "op": "PICK",
+    "object": "spoon_1",
+    "arm": "right",
+    "ok": false,
+    "ticks": 80,
+    "reason": "budget exhausted",
+    "wall_s": 3.6,
+    "lift_height_m": 0.0
+   },
+   {
+    "op": "MOVE",
+    "object": "spoon_1",
+    "arm": "right",
+    "ok": false,
+    "ticks": 5,
+    "reason": "grasp slipping (11 mm)",
+    "wall_s": 0.6
+   },
+   {
+    "op": "PICK",
+    "object": "napkin_1",
+    "arm": "left",
+    "ok": false,
+    "ticks": 80,
+    "reason": "budget exhausted",
+    "wall_s": 3.8,
+    "lift_height_m": 0.0
+   },
+   {
+    "op": "MOVE",
+    "object": "napkin_1",
+    "arm": "left",
+    "ok": false,
+    "ticks": 40,
+    "reason": "budget exhausted",
+    "wall_s": 2.1
+   }
+  ],
+  "wall_s": 61
+ },
+ "receipt": {
+  "run_id": "c750d00f1580",
+  "goal": "set the table, thanks",
+  "inputs": {
+   "goal": "set the table, thanks",
+   "world0": {
+    "frame": 2
+   },
+   "envelope": "sha256:e0b82fe4ad97d48a8a2f8761cf82493e049ef88119ba4c62096bd9b506d14e26",
+   "run_config": {
+    "goal": "set the table, thanks",
+    "org_id": "local-demo",
+    "envelope": "sha256:e0b82fe4ad97d48a8a2f8761cf82493e049ef88119ba4c62096bd9b506d14e26",
+    "objects": {
+     "cup_1": {
+      "class": "cup",
+      "zone": "tray_cup",
+      "target_zone": "upper_right",
+      "status": "live"
+     },
+     "drawer": {
+      "class": "fixture",
+      "zone": "closed",
+      "target_zone": "closed",
+      "status": "live"
+     },
+     "fork_1": {
+      "class": "fork",
+      "zone": "drawer",
+      "target_zone": "left",
+      "status": "live"
+     },
+     "napkin_1": {
+      "class": "napkin",
+      "zone": "tray_napkin",
+      "target_zone": "lower_left",
+      "status": "live"
+     },
+     "plate_1": {
+      "class": "plate",
+      "zone": "tray_plate",
+      "target_zone": "center",
+      "status": "live"
+     },
+     "spoon_1": {
+      "class": "spoon",
+      "zone": "drawer",
+      "target_zone": "right",
+      "status": "live"
+     }
+    },
+    "constraints": []
+   },
+   "mode": "simulation-scripted-manipulation"
+  },
+  "plan": {
+   "goal": "set the table, thanks",
+   "revision": 6,
+   "steps": [
+    {
+     "id": "pick_plate_1",
+     "contract": "manipulate",
+     "op": "PICK",
+     "args": {
+      "object": "plate_1"
+     },
+     "deps": [],
+     "arm": "left",
+     "device": "intel.left_arm",
+     "state": "failed",
+     "result": {
+      "requested_pick": "plate_1",
+      "before_revision": 20,
+      "grasped": "plate_1",
+      "state_revision": 21,
+      "grasp": "bimanual_edge",
+      "arms": {
+       "left": {
+        "seed_scan_error_m": 0.0054,
+        "approach_error_m": 0.058773,
+        "reach_error_m": 0.042549,
+        "grasp_sensor": {
+         "jaw_commanded_rad": -0.174,
+         "jaw_actual_rad": -0.171,
+         "jaw_stalled": false,
+         "jaw_stall_angle_rad": null,
+         "pad_contacts": [],
+         "contact_pad_count": 0,
+         "max_contact_force_n": 0.0
+        },
+        "grip_point": [
+         0.1689,
+         0.0208,
+         0.0614
+        ],
+        "lift_scan_error_m": 0.0039
+       },
+       "right": {
+        "seed_scan_error_m": 0.1322,
+        "approach_error_m": 0.18765,
+        "reach_error_m": 0.139063,
+        "grasp_sensor": {
+         "jaw_commanded_rad": -0.174,
+         "jaw_actual_rad": -0.171,
+         "jaw_stalled": false,
+         "jaw_stall_angle_rad": null,
+         "pad_contacts": [],
+         "contact_pad_count": 0,
+         "max_contact_force_n": 0.0
+        },
+        "grip_point": [
+         0.2628,
+         0.052,
+         0.0632
+        ],
+        "lift_scan_error_m": 0.0846
+       }
+      },
+      "attempt": 4,
+      "rim_rotation_deg": -12.0,
+      "rim_plan": {
+       "rotation_deg": -12.0,
+       "clearance_m": 0.068
+      },
+      "reach_error_m": 0.139063,
+      "lift_height_m": -0.0259,
+      "tilt_rad": 0.0,
+      "held": false,
+      "grasp_sensor": {
+       "contact_pad_count": 0,
+       "max_contact_force_n": 0.0,
+       "jaw_commanded_rad": -0.174,
+       "jaw_actual_rad": {
+        "left": -0.171,
+        "right": -0.171
+       }
+      },
+      "retries": [],
+      "reason": "bimanual pinch did not lift",
+      "sim_time": 242.94,
+      "controller_steps": 121470,
+      "simulation_mode": "simulation-scripted-manipulation",
+      "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+     },
+     "rationale": "plate_1 is in tray_plate, belongs in center"
+    },
+    {
+     "id": "move_plate_1",
+     "contract": "manipulate",
+     "op": "MOVE",
+     "args": {
+      "object": "plate_1",
+      "to": "center"
+     },
+     "deps": [
+      "pick_plate_1"
+     ],
+     "arm": "left",
+     "device": null,
+     "state": "pending",
+     "result": null,
+     "rationale": "carry plate_1 -> center"
+    },
+    {
+     "id": "verify_final",
+     "contract": "verify",
+     "op": "VERIFY",
+     "args": {},
+     "deps": [
+      "move_plate_1"
+     ],
+     "arm": null,
+     "device": null,
+     "state": "pending",
+     "result": null,
+     "rationale": "re-check workspace after action"
+    }
+   ]
+  },
+  "actions": [
+   {
+    "step": "open_drawer",
+    "op": "OPEN",
+    "arm": "left",
+    "device": "intel.left_arm",
+    "state": "done",
+    "result": {
+     "op": "OPEN",
+     "args": {
+      "object": "drawer"
+     },
+     "before_revision": 1,
+     "state_revision": 2,
+     "sim_time": 0.84,
+     "controller_steps": 420,
+     "simulation_mode": "simulation-scripted-manipulation",
+     "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+    }
+   },
+   {
+    "step": "pick_plate_1",
+    "op": "PICK",
+    "arm": "left",
+    "device": "intel.left_arm",
+    "state": "done",
+    "result": {
+     "requested_pick": "plate_1",
+     "before_revision": 2,
+     "grasped": "plate_1",
+     "state_revision": 3,
+     "grasp": "bimanual_edge",
+     "arms": {
+      "left": {
+       "seed_scan_error_m": 0.0078,
+       "approach_error_m": 0.006114,
+       "reach_error_m": 0.004016,
+       "grasp_sensor": {
+        "jaw_commanded_rad": -0.174,
+        "jaw_actual_rad": -0.1274,
+        "jaw_stalled": true,
+        "jaw_stall_angle_rad": -0.1231,
+        "pad_contacts": [
+         "left_fixed_jaw_pad_1",
+         "left_moving_jaw_pad_1"
+        ],
+        "contact_pad_count": 2,
+        "max_contact_force_n": 14.139
+       },
+       "grip_point": [
+        -0.003,
+        -0.1553,
+        0.0355
+       ],
+       "lift_scan_error_m": 0.0047
+      },
+      "right": {
+       "seed_scan_error_m": 0.0019,
+       "approach_error_m": 0.003928,
+       "reach_error_m": 0.005951,
+       "grasp_sensor": {
+        "jaw_commanded_rad": -0.174,
+        "jaw_actual_rad": -0.1474,
+        "jaw_stalled": true,
+        "jaw_stall_angle_rad": -0.1455,
+        "pad_contacts": [
+         "right_fixed_jaw_pad_1",
+         "right_moving_jaw_pad_1"
+        ],
+        "contact_pad_count": 2,
+        "max_contact_force_n": 7.464
+       },
+       "grip_point": [
+        0.0939,
+        -0.1463,
+        0.0394
+       ],
+       "lift_scan_error_m": 0.004
+      }
+     },
+     "attempt": 0,
+     "rim_rotation_deg": 0.0,
+     "rim_plan": {
+      "rotation_deg": 0.0,
+      "clearance_m": null
+     },
+     "reach_error_m": 0.005951,
+     "lift_height_m": 0.0793,
+     "tilt_rad": 0.0888,
+     "held": true,
+     "grasp_sensor": {
+      "contact_pad_count": 4,
+      "max_contact_force_n": 14.139,
+      "jaw_commanded_rad": -0.174,
+      "jaw_actual_rad": {
+       "left": -0.1274,
+       "right": -0.1474
+      }
+     },
+     "retries": [],
+     "reason": null,
+     "sim_time": 10.83,
+     "controller_steps": 5415,
+     "simulation_mode": "simulation-scripted-manipulation",
+     "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+    }
+   },
+   {
+    "step": "move_plate_1",
+    "op": "MOVE",
+    "arm": "left",
+    "device": "intel.left_arm",
+    "state": "failed",
+    "result": {
+     "requested_move": "plate_1",
+     "to": "center",
+     "before_revision": 3,
+     "moved": "plate_1",
+     "state_revision": 4,
+     "grasp": "bimanual_edge",
+     "reach_error_m": 0.008496,
+     "carry_error_m": 0.080336,
+     "carry_corrections_m": [
+      0.0524,
+      0.0369,
+      0.0239
+     ],
+     "placement_error_m": 0.1593,
+     "tilt_rad": 0.0,
+     "placed": false,
+     "settle": {
+      "settle_steps": 80,
+      "settle_speed_mps": 2e-05,
+      "settle_drift_m": 9.1e-05,
+      "table_supported": true,
+      "settled": true,
+      "position": [
+       0.156315,
+       -0.129216,
+       0.01049
+      ]
+     },
+     "safety": {
+      "after": {
+       "safe": true,
+       "reason": null
+      }
+     },
+     "reason": "placement offset",
+     "sim_time": 24.19,
+     "controller_steps": 12095,
+     "simulation_mode": "simulation-scripted-manipulation",
+     "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+    }
+   },
+   {
+    "step": "open_drawer",
+    "op": "OPEN",
+    "arm": "left",
+    "device": "intel.left_arm",
+    "state": "done",
+    "result": {
+     "op": "OPEN",
+     "args": {
+      "object": "drawer"
+     },
+     "before_revision": 4,
+     "state_revision": 5,
+     "sim_time": 24.23,
+     "controller_steps": 12115,
+     "simulation_mode": "simulation-scripted-manipulation",
+     "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+    }
+   },
+   {
+    "step": "pick_plate_1",
+    "op": "PICK",
+    "arm": "left",
+    "device": "intel.left_arm",
+    "state": "failed",
+    "result": {
+     "requested_pick": "plate_1",
+     "before_revision": 5,
+     "grasped": "plate_1",
+     "state_revision": 6,
+     "grasp": "bimanual_edge",
+     "arms": {
+      "left": {
+       "seed_scan_error_m": 0.0078,
+       "approach_error_m": 0.011717,
+       "reach_error_m": 0.010361,
+       "grasp_sensor": {
+        "jaw_commanded_rad": -0.174,
+        "jaw_actual_rad": -0.15,
+        "jaw_stalled": true,
+        "jaw_stall_angle_rad": -0.1496,
+        "pad_contacts": [
+         "left_fixed_jaw_pad_1",
+         "left_moving_jaw_pad_1"
+        ],
+        "contact_pad_count": 2,
+        "max_contact_force_n": 6.642
+       },
+       "grip_point": [
+        0.0838,
+        -0.0718,
+        0.0355
+       ],
+       "lift_scan_error_m": 0.0049
+      },
+      "right": {
+       "seed_scan_error_m": 0.0756,
+       "approach_error_m": 0.075025,
+       "reach_error_m": 0.016758,
+       "grasp_sensor": {
+        "jaw_commanded_rad": -0.174,
+        "jaw_actual_rad": -0.0947,
+        "jaw_stalled": true,
+        "jaw_stall_angle_rad": -0.0929,
+        "pad_contacts": [
+         "right_fixed_jaw_pad_1",
+         "right_fixed_jaw_pad_2",
+         "right_moving_jaw_pad_1",
+         "right_moving_jaw_pad_2"
+        ],
+        "contact_pad_count": 4,
+        "max_contact_force_n": 26.531
+       },
+       "grip_point": [
+        0.1841,
+        -0.041,
+        0.0355
+       ],
+       "lift_scan_error_m": 0.0114
+      }
+     },
+     "attempt": 0,
+     "rim_rotation_deg": 0.0,
+     "rim_plan": {
+      "rotation_deg": 0.0,
+      "clearance_m": null
+     },
+     "reach_error_m": 0.016758,
+     "lift_height_m": 0.1163,
+     "tilt_rad": 0.2393,
+     "held": false,
+     "grasp_sensor": {
+      "contact_pad_count": 6,
+      "max_contact_force_n": 26.531,
+      "jaw_commanded_rad": -0.174,
+      "jaw_actual_rad": {
+       "left": -0.15,
+       "right": -0.0947
+      }
+     },
+     "retries": [],
+     "reason": "plate tilted in the pinch",
+     "sim_time": 24.23,
+     "controller_steps": 12115,
+     "simulation_mode": "simulation-scripted-manipulation",
+     "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+    }
+   },
+   {
+    "step": "open_drawer",
+    "op": "OPEN",
+    "arm": "left",
+    "device": "intel.left_arm",
+    "state": "done",
+    "result": {
+     "op": "OPEN",
+     "args": {
+      "object": "drawer"
+     },
+     "before_revision": 6,
+     "state_revision": 7,
+     "sim_time": 24.27,
+     "controller_steps": 12135,
+     "simulation_mode": "simulation-scripted-manipulation",
+     "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+    }
+   },
+   {
+    "step": "pick_cup_1",
+    "op": "PICK",
+    "arm": "right",
+    "device": "intel.right_arm",
+    "state": "done",
+    "result": {
+     "requested_pick": "cup_1",
+     "before_revision": 7,
+     "grasped": "cup_1",
+     "state_revision": 8,
+     "grasp": "contact",
+     "reach_error_m": 0.042595,
+     "lift_height_m": 0.0505,
+     "held": true,
+     "grasp_sensor": {
+      "jaw_commanded_rad": -0.174,
+      "jaw_actual_rad": -0.1373,
+      "jaw_stalled": true,
+      "jaw_stall_angle_rad": -0.1337,
+      "pad_contacts": [
+       "right_fixed_jaw_pad_1",
+       "right_fixed_jaw_pad_2",
+       "right_fixed_jaw_pad_3",
+       "right_moving_jaw_pad_1"
+      ],
+      "contact_pad_count": 4,
+      "max_contact_force_n": 16.148,
+      "descend_stopped_by_contact_n": null
+     },
+     "retries": [
+      {
+       "reason": "slipped_regrasp_toward_head",
+       "roll_rad": -1.2544,
+       "dz_m": -0.002,
+       "shift_toward_head_m": 0.02,
+       "lift_m": 0.0505,
+       "contact_pad_count": 4,
+       "max_contact_force_n": 16.148
+      }
+     ],
+     "orientation": {
+      "clearance": {
+       "position_error_m": 0.027786,
+       "orientation_error_rad": 0.109068,
+       "orientation_satisfied": false
+      },
+      "pinch": {
+       "position_error_m": 0.058869,
+       "orientation_error_rad": 0.18879,
+       "orientation_satisfied": false
+      },
+      "lift": {
+       "position_error_m": 0.009744,
+       "retry_roll_rad": -1.254383,
+       "retry_reason": "slipped_regrasp_toward_head"
+      },
+      "roll_hint_rad": -1.254383
+     },
+     "safety": {
+      "approach": {
+       "safe": true,
+       "reason": null,
+       "min_joint_margin_rad": 0.151539,
+       "relative_object_pad_distance_m": 0.0,
+       "max_contact_force_n": 0.09843,
+       "other_pad_clearance_m": 0.328708
+      }
+     },
+     "vla_attempt": {
+      "ok": false,
+      "ticks": 80,
+      "reason": "budget exhausted",
+      "wall_s": 3.9
+     },
+     "fallback": "governed primitive (continued from the VLA's approach)",
+     "sim_time": 55.45,
+     "controller_steps": 27725,
+     "simulation_mode": "simulation-scripted-manipulation",
+     "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+    }
+   },
+   {
+    "step": "move_cup_1",
+    "op": "MOVE",
+    "arm": "right",
+    "device": "intel.right_arm",
+    "state": "done",
+    "result": {
+     "requested_move": "cup_1",
+     "to": "upper_right",
+     "before_revision": 8,
+     "moved": "cup_1",
+     "state_revision": 9,
+     "grasp": "contact",
+     "reach_error_m": 0.01198,
+     "placement_error_m": 0.0238,
+     "tilt_rad": 0.0,
+     "placed": true,
+     "settle": {
+      "settle_steps": 80,
+      "settle_speed_mps": 0.0,
+      "settle_drift_m": 0.0,
+      "table_supported": true,
+      "settled": true,
+      "position": [
+       0.123152,
+       -0.042757,
+       0.044993
+      ]
+     },
+     "safety": {
+      "before": {
+       "safe": true,
+       "reason": null,
+       "min_joint_margin_rad": 0.035586,
+       "relative_object_pad_distance_m": 0.035208,
+       "max_contact_force_n": 2.059412,
+       "other_pad_clearance_m": 0.376135
+      },
+      "after": {
+       "safe": true,
+       "reason": null,
+       "min_joint_margin_rad": 0.087938,
+       "relative_object_pad_distance_m": 0.0,
+       "max_contact_force_n": 0.09843,
+       "other_pad_clearance_m": null
+      }
+     },
+     "reason": null,
+     "orientation": {
+      "place": {
+       "position_error_m": 0.01198,
+       "orientation_error_rad": 0.050555,
+       "orientation_satisfied": true
+      },
+      "retract": {
+       "position_error_m": 0.029039
+      },
+      "roll_hint_rad": -1.237651
+     },
+     "fallback": "governed primitive (continued from the VLA's carry)",
+     "vla_attempt": {
+      "ok": false,
+      "ticks": 14,
+      "reason": "grasp slipping (10 mm)",
+      "wall_s": 1.0
+     },
+     "sim_time": 64.204,
+     "controller_steps": 32102,
+     "simulation_mode": "simulation-scripted-manipulation",
+     "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+    }
+   },
+   {
+    "step": "pick_fork_1",
+    "op": "PICK",
+    "arm": "left",
+    "device": "intel.left_arm",
+    "state": "done",
+    "result": {
+     "requested_pick": "fork_1",
+     "before_revision": 9,
+     "grasped": "fork_1",
+     "state_revision": 10,
+     "grasp": "contact",
+     "reach_error_m": 0.085747,
+     "lift_height_m": 0.0407,
+     "held": true,
+     "grasp_sensor": {
+      "jaw_commanded_rad": -0.174,
+      "jaw_actual_rad": -0.0252,
+      "jaw_stalled": false,
+      "jaw_stall_angle_rad": null,
+      "pad_contacts": [
+       "left_fixed_jaw_pad_1"
+      ],
+      "contact_pad_count": 1,
+      "max_contact_force_n": 7.629,
+      "descend_stopped_by_contact_n": null
+     },
+     "retries": [
+      {
+       "reason": "no_contact_descend",
+       "roll_rad": 1.62,
+       "dz_m": -0.004,
+       "shift_toward_head_m": 0.0,
+       "lift_m": -0.0056,
+       "contact_pad_count": 1,
+       "max_contact_force_n": 11.553
+      },
+      {
+       "reason": "slipped_regrasp_toward_head",
+       "roll_rad": 1.62,
+       "dz_m": -0.002,
+       "shift_toward_head_m": 0.02,
+       "lift_m": 0.0407,
+       "contact_pad_count": 1,
+       "max_contact_force_n": 7.629
+      }
+     ],
+     "orientation": {
+      "clearance": {
+       "position_error_m": 0.035974,
+       "orientation_error_rad": 0.028603,
+       "orientation_satisfied": false
+      },
+      "pinch": {
+       "position_error_m": 0.058643,
+       "orientation_error_rad": 0.02196,
+       "orientation_satisfied": false
+      },
+      "lift": {
+       "position_error_m": 0.009896,
+       "retry_roll_rad": 1.62,
+       "retry_reason": "slipped_regrasp_toward_head"
+      },
+      "roll_hint_rad": 1.62
+     },
+     "safety": {
+      "approach": {
+       "safe": true,
+       "reason": null,
+       "min_joint_margin_rad": 0.574159,
+       "relative_object_pad_distance_m": 0.0,
+       "max_contact_force_n": 0.09843,
+       "other_pad_clearance_m": 0.588487
+      }
+     },
+     "vla_attempt": {
+      "ok": false,
+      "ticks": 80,
+      "reason": "budget exhausted",
+      "wall_s": 3.7
+     },
+     "fallback": "governed primitive (continued from the VLA's approach)",
+     "sim_time": 106.05,
+     "controller_steps": 53025,
+     "simulation_mode": "simulation-scripted-manipulation",
+     "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+    }
+   },
+   {
+    "step": "move_fork_1",
+    "op": "MOVE",
+    "arm": "left",
+    "device": "intel.left_arm",
+    "state": "done",
+    "result": {
+     "requested_move": "fork_1",
+     "to": "left",
+     "before_revision": 10,
+     "moved": "fork_1",
+     "state_revision": 11,
+     "grasp": "contact",
+     "reach_error_m": 0.058174,
+     "placement_error_m": 0.0468,
+     "tilt_rad": 3.1388,
+     "placed": true,
+     "settle": {
+      "settle_steps": 80,
+      "settle_speed_mps": 0.0,
+      "settle_drift_m": 0.0,
+      "table_supported": true,
+      "settled": true,
+      "position": [
+       -0.19879,
+       -0.093854,
+       0.003394
+      ]
+     },
+     "safety": {
+      "before": {
+       "safe": true,
+       "reason": null,
+       "min_joint_margin_rad": 0.357419,
+       "relative_object_pad_distance_m": 0.013479,
+       "max_contact_force_n": 5.598296,
+       "other_pad_clearance_m": 0.441958
+      },
+      "after": {
+       "safe": true,
+       "reason": null,
+       "min_joint_margin_rad": 0.091756,
+       "relative_object_pad_distance_m": 0.0,
+       "max_contact_force_n": 0.153639,
+       "other_pad_clearance_m": null
+      }
+     },
+     "reason": null,
+     "orientation": {
+      "place": {
+       "position_error_m": 0.058174,
+       "orientation_error_rad": 0.303608,
+       "orientation_satisfied": false
+      },
+      "retract": {
+       "position_error_m": 0.058369
+      },
+      "roll_hint_rad": 1.682815
+     },
+     "fallback": "governed primitive (continued from the VLA's carry)",
+     "vla_attempt": {
+      "ok": false,
+      "ticks": 40,
+      "reason": "budget exhausted",
+      "wall_s": 2.0
+     },
+     "sim_time": 117.158,
+     "controller_steps": 58579,
+     "simulation_mode": "simulation-scripted-manipulation",
+     "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+    }
+   },
+   {
+    "step": "pick_spoon_1",
+    "op": "PICK",
+    "arm": "right",
+    "device": "intel.right_arm",
+    "state": "done",
+    "result": {
+     "requested_pick": "spoon_1",
+     "before_revision": 11,
+     "grasped": "spoon_1",
+     "state_revision": 12,
+     "grasp": "contact",
+     "reach_error_m": 0.067489,
+     "lift_height_m": 0.06,
+     "held": true,
+     "grasp_sensor": {
+      "jaw_commanded_rad": -0.174,
+      "jaw_actual_rad": 0.0315,
+      "jaw_stalled": false,
+      "jaw_stall_angle_rad": null,
+      "pad_contacts": [
+       "right_fixed_jaw_pad_1"
+      ],
+      "contact_pad_count": 1,
+      "max_contact_force_n": 1.699,
+      "descend_stopped_by_contact_n": null
+     },
+     "retries": [
+      {
+       "reason": "no_contact_descend",
+       "roll_rad": -1.526,
+       "dz_m": -0.004,
+       "shift_toward_head_m": 0.0,
+       "lift_m": -0.0,
+       "contact_pad_count": 0,
+       "max_contact_force_n": 0.0
+      },
+      {
+       "reason": "roll_alternative",
+       "roll_rad": -1.65,
+       "dz_m": 0.0,
+       "shift_toward_head_m": 0.0,
+       "lift_m": -0.0,
+       "contact_pad_count": 0,
+       "max_contact_force_n": 0.0
+      },
+      {
+       "reason": "no_contact_descend",
+       "roll_rad": -1.65,
+       "dz_m": -0.004,
+       "shift_toward_head_m": 0.0,
+       "lift_m": -0.0,
+       "contact_pad_count": 0,
+       "max_contact_force_n": 0.0
+      },
+      {
+       "reason": "roll_alternative",
+       "roll_rad": 1.65,
+       "dz_m": 0.0,
+       "shift_toward_head_m": 0.0,
+       "lift_m": 0.06,
+       "contact_pad_count": 1,
+       "max_contact_force_n": 1.699
+      }
+     ],
+     "orientation": {
+      "clearance": {
+       "position_error_m": 0.045036,
+       "orientation_error_rad": 0.048547,
+       "orientation_satisfied": false
+      },
+      "pinch": {
+       "position_error_m": 0.067984,
+       "orientation_error_rad": 0.054733,
+       "orientation_satisfied": false
+      },
+      "lift": {
+       "position_error_m": 0.009902,
+       "retry_roll_rad": 1.65,
+       "retry_reason": "roll_alternative"
+      },
+      "roll_hint_rad": 1.65
+     },
+     "safety": {
+      "approach": {
+       "safe": true,
+       "reason": null,
+       "min_joint_margin_rad": 0.508292,
+       "relative_object_pad_distance_m": 0.0,
+       "max_contact_force_n": 0.153639,
+       "other_pad_clearance_m": 0.589026
+      }
+     },
+     "vla_attempt": {
+      "ok": false,
+      "ticks": 80,
+      "reason": "budget exhausted",
+      "wall_s": 3.6
+     },
+     "fallback": "governed primitive (continued from the VLA's approach)",
+     "sim_time": 183.688,
+     "controller_steps": 91844,
+     "simulation_mode": "simulation-scripted-manipulation",
+     "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+    }
+   },
+   {
+    "step": "move_spoon_1",
+    "op": "MOVE",
+    "arm": "right",
+    "device": "intel.right_arm",
+    "state": "done",
+    "result": {
+     "requested_move": "spoon_1",
+     "to": "right",
+     "before_revision": 12,
+     "moved": "spoon_1",
+     "state_revision": 13,
+     "grasp": "contact",
+     "reach_error_m": 0.103344,
+     "placement_error_m": 0.0558,
+     "tilt_rad": 0.0004,
+     "placed": true,
+     "settle": {
+      "settle_steps": 80,
+      "settle_speed_mps": 0.0,
+      "settle_drift_m": 0.0,
+      "table_supported": true,
+      "settled": true,
+      "position": [
+       0.246184,
+       -0.108614,
+       0.008895
+      ]
+     },
+     "safety": {
+      "before": {
+       "safe": true,
+       "reason": null,
+       "min_joint_margin_rad": 0.482441,
+       "relative_object_pad_distance_m": 0.038728,
+       "max_contact_force_n": 5.541391,
+       "other_pad_clearance_m": 0.457205
+      },
+      "after": {
+       "safe": true,
+       "reason": null,
+       "min_joint_margin_rad": 0.091599,
+       "relative_object_pad_distance_m": 0.0,
+       "max_contact_force_n": 0.153639,
+       "other_pad_clearance_m": null
+      }
+     },
+     "reason": null,
+     "orientation": {
+      "place": {
+       "position_error_m": 0.103344,
+       "orientation_error_rad": 0.357007,
+       "orientation_satisfied": false
+      },
+      "retract": {
+       "position_error_m": 0.058054
+      },
+      "roll_hint_rad": 1.565955
+     },
+     "fallback": "governed primitive (continued from the VLA's carry)",
+     "vla_attempt": {
+      "ok": false,
+      "ticks": 5,
+      "reason": "grasp slipping (11 mm)",
+      "wall_s": 0.6
+     },
+     "sim_time": 191.648,
+     "controller_steps": 95824,
+     "simulation_mode": "simulation-scripted-manipulation",
+     "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+    }
+   },
+   {
+    "step": "pick_napkin_1",
+    "op": "PICK",
+    "arm": "left",
+    "device": "intel.left_arm",
+    "state": "done",
+    "result": {
+     "requested_pick": "napkin_1",
+     "before_revision": 13,
+     "grasped": "napkin_1",
+     "state_revision": 14,
+     "grasp": "contact",
+     "reach_error_m": 0.00992,
+     "lift_height_m": 0.0685,
+     "held": true,
+     "grasp_sensor": {
+      "jaw_commanded_rad": -0.174,
+      "jaw_actual_rad": -0.1524,
+      "jaw_stalled": true,
+      "jaw_stall_angle_rad": -0.1519,
+      "pad_contacts": [
+       "left_fixed_jaw_pad_1",
+       "left_moving_jaw_pad_1"
+      ],
+      "contact_pad_count": 2,
+      "max_contact_force_n": 3.399,
+      "descend_stopped_by_contact_n": null
+     },
+     "retries": [],
+     "orientation": {
+      "clearance": {
+       "position_error_m": 0.01197,
+       "orientation_error_rad": 0.034785,
+       "orientation_satisfied": true
+      },
+      "pinch": {
+       "position_error_m": 0.014213,
+       "orientation_error_rad": 0.055203,
+       "orientation_satisfied": false
+      },
+      "lift": {
+       "position_error_m": 0.009973,
+       "retry_reason": "first_attempt"
+      },
+      "roll_hint_rad": 1.55035
+     },
+     "safety": {
+      "approach": {
+       "safe": true,
+       "reason": null,
+       "min_joint_margin_rad": 0.12942,
+       "relative_object_pad_distance_m": 0.0,
+       "max_contact_force_n": 0.153639,
+       "other_pad_clearance_m": 0.332244
+      }
+     },
+     "vla_attempt": {
+      "ok": false,
+      "ticks": 80,
+      "reason": "budget exhausted",
+      "wall_s": 3.8
+     },
+     "fallback": "governed primitive (continued from the VLA's approach)",
+     "sim_time": 208.314,
+     "controller_steps": 104157,
+     "simulation_mode": "simulation-scripted-manipulation",
+     "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+    }
+   },
+   {
+    "step": "move_napkin_1",
+    "op": "MOVE",
+    "arm": "left",
+    "device": "intel.left_arm",
+    "state": "done",
+    "result": {
+     "requested_move": "napkin_1",
+     "to": "lower_left",
+     "before_revision": 14,
+     "moved": "napkin_1",
+     "state_revision": 15,
+     "grasp": "contact",
+     "reach_error_m": 0.01191,
+     "placement_error_m": 0.011,
+     "tilt_rad": 0.0,
+     "placed": true,
+     "settle": {
+      "settle_steps": 80,
+      "settle_speed_mps": 0.0,
+      "settle_drift_m": 0.0,
+      "table_supported": true,
+      "settled": true,
+      "position": [
+       -0.009272,
+       0.045863,
+       0.008892
+      ]
+     },
+     "safety": {
+      "before": {
+       "safe": true,
+       "reason": null,
+       "min_joint_margin_rad": 0.636687,
+       "relative_object_pad_distance_m": 0.039083,
+       "max_contact_force_n": 3.416164,
+       "other_pad_clearance_m": 0.285197
+      },
+      "after": {
+       "safe": true,
+       "reason": null,
+       "min_joint_margin_rad": 0.091641,
+       "relative_object_pad_distance_m": 0.0,
+       "max_contact_force_n": 0.153639,
+       "other_pad_clearance_m": null
+      }
+     },
+     "reason": null,
+     "orientation": {
+      "place": {
+       "position_error_m": 0.01191,
+       "orientation_error_rad": 0.0314,
+       "orientation_satisfied": true
+      },
+      "retract": {
+       "position_error_m": 0.011956
+      },
+      "roll_hint_rad": 1.609725
+     },
+     "fallback": "governed primitive (continued from the VLA's carry)",
+     "vla_attempt": {
+      "ok": false,
+      "ticks": 40,
+      "reason": "budget exhausted",
+      "wall_s": 2.1
+     },
+     "sim_time": 216.974,
+     "controller_steps": 108487,
+     "simulation_mode": "simulation-scripted-manipulation",
+     "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+    }
+   },
+   {
+    "step": "pick_plate_1",
+    "op": "PICK",
+    "arm": "left",
+    "device": "intel.left_arm",
+    "state": "failed",
+    "result": {
+     "requested_pick": "plate_1",
+     "before_revision": 15,
+     "grasped": "plate_1",
+     "state_revision": 16,
+     "grasp": "bimanual_edge",
+     "arms": {
+      "left": {
+       "seed_scan_error_m": 0.0047,
+       "approach_error_m": 0.01242,
+       "reach_error_m": 0.017834,
+       "grasp_sensor": {
+        "jaw_commanded_rad": -0.174,
+        "jaw_actual_rad": -0.171,
+        "jaw_stalled": false,
+        "jaw_stall_angle_rad": null,
+        "pad_contacts": [],
+        "contact_pad_count": 0,
+        "max_contact_force_n": 0.0
+       },
+       "grip_point": [
+        0.0671,
+        -0.0818,
+        0.0355
+       ],
+       "lift_scan_error_m": 0.0046
+      },
+      "right": {
+       "seed_scan_error_m": 0.0739,
+       "approach_error_m": 0.097,
+       "reach_error_m": 0.068471,
+       "grasp_sensor": {
+        "jaw_commanded_rad": -0.174,
+        "jaw_actual_rad": -0.1297,
+        "jaw_stalled": true,
+        "jaw_stall_angle_rad": -0.1212,
+        "pad_contacts": [
+         "right_fixed_jaw_pad_1",
+         "right_moving_jaw_pad_1"
+        ],
+        "contact_pad_count": 2,
+        "max_contact_force_n": 22.916
+       },
+       "grip_point": [
+        0.161,
+        -0.0308,
+        0.0355
+       ],
+       "lift_scan_error_m": 0.0126
+      }
+     },
+     "attempt": 1,
+     "rim_rotation_deg": 12.0,
+     "rim_plan": {
+      "rotation_deg": 12.0,
+      "clearance_m": 0.04
+     },
+     "reach_error_m": 0.068471,
+     "lift_height_m": 0.0679,
+     "tilt_rad": 0.3256,
+     "held": false,
+     "grasp_sensor": {
+      "contact_pad_count": 2,
+      "max_contact_force_n": 22.916,
+      "jaw_commanded_rad": -0.174,
+      "jaw_actual_rad": {
+       "left": -0.171,
+       "right": -0.1297
+      }
+     },
+     "retries": [],
+     "reason": "plate tilted in the pinch",
+     "sim_time": 216.974,
+     "controller_steps": 108487,
+     "simulation_mode": "simulation-scripted-manipulation",
+     "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+    }
+   },
+   {
+    "step": "pick_plate_1",
+    "op": "PICK",
+    "arm": "left",
+    "device": "intel.left_arm",
+    "state": "done",
+    "result": {
+     "requested_pick": "plate_1",
+     "before_revision": 16,
+     "grasped": "plate_1",
+     "state_revision": 17,
+     "grasp": "bimanual_edge",
+     "arms": {
+      "left": {
+       "seed_scan_error_m": 0.0022,
+       "approach_error_m": 0.007653,
+       "reach_error_m": 0.015874,
+       "grasp_sensor": {
+        "jaw_commanded_rad": -0.174,
+        "jaw_actual_rad": -0.1498,
+        "jaw_stalled": true,
+        "jaw_stall_angle_rad": -0.1495,
+        "pad_contacts": [
+         "left_fixed_jaw_pad_1",
+         "left_moving_jaw_pad_1"
+        ],
+        "contact_pad_count": 2,
+        "max_contact_force_n": 6.513
+       },
+       "grip_point": [
+        0.0604,
+        -0.1,
+        0.0355
+       ],
+       "lift_scan_error_m": 0.0044
+      },
+      "right": {
+       "seed_scan_error_m": 0.0575,
+       "approach_error_m": 0.074745,
+       "reach_error_m": 0.042745,
+       "grasp_sensor": {
+        "jaw_commanded_rad": -0.174,
+        "jaw_actual_rad": -0.0384,
+        "jaw_stalled": true,
+        "jaw_stall_angle_rad": -0.0259,
+        "pad_contacts": [
+         "right_fixed_jaw_pad_1",
+         "right_moving_jaw_pad_1",
+         "right_moving_jaw_pad_2"
+        ],
+        "contact_pad_count": 3,
+        "max_contact_force_n": 26.521
+       },
+       "grip_point": [
+        0.1417,
+        -0.0305,
+        0.0356
+       ],
+       "lift_scan_error_m": 0.0067
+      }
+     },
+     "attempt": 2,
+     "rim_rotation_deg": 24.0,
+     "rim_plan": {
+      "rotation_deg": 24.0,
+      "clearance_m": 0.022
+     },
+     "reach_error_m": 0.042745,
+     "lift_height_m": 0.0889,
+     "tilt_rad": 0.1394,
+     "held": true,
+     "grasp_sensor": {
+      "contact_pad_count": 5,
+      "max_contact_force_n": 26.521,
+      "jaw_commanded_rad": -0.174,
+      "jaw_actual_rad": {
+       "left": -0.1498,
+       "right": -0.0384
+      }
+     },
+     "retries": [],
+     "reason": null,
+     "sim_time": 227.594,
+     "controller_steps": 113797,
+     "simulation_mode": "simulation-scripted-manipulation",
+     "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+    }
+   },
+   {
+    "step": "move_plate_1",
+    "op": "MOVE",
+    "arm": "left",
+    "device": "intel.left_arm",
+    "state": "failed",
+    "result": {
+     "requested_move": "plate_1",
+     "to": "center",
+     "before_revision": 17,
+     "moved": "plate_1",
+     "state_revision": 18,
+     "grasp": "bimanual_edge",
+     "reach_error_m": 0.056618,
+     "carry_error_m": 0.136538,
+     "carry_corrections_m": [
+      0.125,
+      0.1049,
+      0.0941
+     ],
+     "placement_error_m": 0.273,
+     "tilt_rad": 0.5536,
+     "placed": false,
+     "settle": {
+      "settle_steps": 80,
+      "settle_speed_mps": 0.001704,
+      "settle_drift_m": 0.000268,
+      "table_supported": true,
+      "settled": true,
+      "position": [
+       0.24268,
+       -0.034981,
+       0.036363
+      ]
+     },
+     "safety": {
+      "after": {
+       "safe": true,
+       "reason": null
+      }
+     },
+     "reason": "placement offset",
+     "sim_time": 242.94,
+     "controller_steps": 121470,
+     "simulation_mode": "simulation-scripted-manipulation",
+     "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+    }
+   },
+   {
+    "step": "pick_plate_1",
+    "op": "PICK",
+    "arm": "left",
+    "device": "intel.left_arm",
+    "state": "failed",
+    "result": {
+     "requested_pick": "plate_1",
+     "before_revision": 18,
+     "grasped": "plate_1",
+     "state_revision": 19,
+     "grasp": "bimanual_edge",
+     "arms": {
+      "left": {
+       "seed_scan_error_m": 0.0038,
+       "approach_error_m": 0.05173,
+       "reach_error_m": 0.054328,
+       "grasp_sensor": {
+        "jaw_commanded_rad": -0.174,
+        "jaw_actual_rad": -0.171,
+        "jaw_stalled": false,
+        "jaw_stall_angle_rad": null,
+        "pad_contacts": [],
+        "contact_pad_count": 0,
+        "max_contact_force_n": 0.0
+       },
+       "grip_point": [
+        0.1979,
+        0.046,
+        0.0614
+       ],
+       "lift_scan_error_m": 0.0003
+      },
+      "right": {
+       "seed_scan_error_m": 0.1114,
+       "approach_error_m": 0.133824,
+       "reach_error_m": 0.118325,
+       "grasp_sensor": {
+        "jaw_commanded_rad": -0.174,
+        "jaw_actual_rad": -0.171,
+        "jaw_stalled": false,
+        "jaw_stall_angle_rad": null,
+        "pad_contacts": [],
+        "contact_pad_count": 0,
+        "max_contact_force_n": 0.0
+       },
+       "grip_point": [
+        0.296,
+        0.0325,
+        0.0632
+       ],
+       "lift_scan_error_m": 0.0693
+      }
+     },
+     "attempt": 2,
+     "rim_rotation_deg": -36.0,
+     "rim_plan": {
+      "rotation_deg": -36.0,
+      "clearance_m": 0.107
+     },
+     "reach_error_m": 0.118325,
+     "lift_height_m": -0.0259,
+     "tilt_rad": 0.0,
+     "held": false,
+     "grasp_sensor": {
+      "contact_pad_count": 0,
+      "max_contact_force_n": 0.0,
+      "jaw_commanded_rad": -0.174,
+      "jaw_actual_rad": {
+       "left": -0.171,
+       "right": -0.171
+      }
+     },
+     "retries": [],
+     "reason": "bimanual pinch did not lift",
+     "sim_time": 242.94,
+     "controller_steps": 121470,
+     "simulation_mode": "simulation-scripted-manipulation",
+     "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+    }
+   },
+   {
+    "step": "pick_plate_1",
+    "op": "PICK",
+    "arm": "left",
+    "device": "intel.left_arm",
+    "state": "failed",
+    "result": {
+     "requested_pick": "plate_1",
+     "before_revision": 19,
+     "grasped": "plate_1",
+     "state_revision": 20,
+     "grasp": "bimanual_edge",
+     "arms": {
+      "left": {
+       "seed_scan_error_m": 0.0015,
+       "approach_error_m": 0.040449,
+       "reach_error_m": 0.041708,
+       "grasp_sensor": {
+        "jaw_commanded_rad": -0.174,
+        "jaw_actual_rad": -0.171,
+        "jaw_stalled": false,
+        "jaw_stall_angle_rad": null,
+        "pad_contacts": [],
+        "contact_pad_count": 0,
+        "max_contact_force_n": 0.0
+       },
+       "grip_point": [
+        0.1821,
+        0.0349,
+        0.0614
+       ],
+       "lift_scan_error_m": 0.0043
+      },
+      "right": {
+       "seed_scan_error_m": 0.1317,
+       "approach_error_m": 0.162893,
+       "reach_error_m": 0.130423,
+       "grasp_sensor": {
+        "jaw_commanded_rad": -0.174,
+        "jaw_actual_rad": -0.171,
+        "jaw_stalled": false,
+        "jaw_stall_angle_rad": null,
+        "pad_contacts": [],
+        "contact_pad_count": 0,
+        "max_contact_force_n": 0.0
+       },
+       "grip_point": [
+        0.2805,
+        0.044,
+        0.0632
+       ],
+       "lift_scan_error_m": 0.0791
+      }
+     },
+     "attempt": 3,
+     "rim_rotation_deg": -24.0,
+     "rim_plan": {
+      "rotation_deg": -24.0,
+      "clearance_m": 0.088
+     },
+     "reach_error_m": 0.130423,
+     "lift_height_m": -0.0259,
+     "tilt_rad": 0.0,
+     "held": false,
+     "grasp_sensor": {
+      "contact_pad_count": 0,
+      "max_contact_force_n": 0.0,
+      "jaw_commanded_rad": -0.174,
+      "jaw_actual_rad": {
+       "left": -0.171,
+       "right": -0.171
+      }
+     },
+     "retries": [],
+     "reason": "bimanual pinch did not lift",
+     "sim_time": 242.94,
+     "controller_steps": 121470,
+     "simulation_mode": "simulation-scripted-manipulation",
+     "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+    }
+   },
+   {
+    "step": "pick_plate_1",
+    "op": "PICK",
+    "arm": "left",
+    "device": "intel.left_arm",
+    "state": "failed",
+    "result": {
+     "requested_pick": "plate_1",
+     "before_revision": 20,
+     "grasped": "plate_1",
+     "state_revision": 21,
+     "grasp": "bimanual_edge",
+     "arms": {
+      "left": {
+       "seed_scan_error_m": 0.0054,
+       "approach_error_m": 0.058773,
+       "reach_error_m": 0.042549,
+       "grasp_sensor": {
+        "jaw_commanded_rad": -0.174,
+        "jaw_actual_rad": -0.171,
+        "jaw_stalled": false,
+        "jaw_stall_angle_rad": null,
+        "pad_contacts": [],
+        "contact_pad_count": 0,
+        "max_contact_force_n": 0.0
+       },
+       "grip_point": [
+        0.1689,
+        0.0208,
+        0.0614
+       ],
+       "lift_scan_error_m": 0.0039
+      },
+      "right": {
+       "seed_scan_error_m": 0.1322,
+       "approach_error_m": 0.18765,
+       "reach_error_m": 0.139063,
+       "grasp_sensor": {
+        "jaw_commanded_rad": -0.174,
+        "jaw_actual_rad": -0.171,
+        "jaw_stalled": false,
+        "jaw_stall_angle_rad": null,
+        "pad_contacts": [],
+        "contact_pad_count": 0,
+        "max_contact_force_n": 0.0
+       },
+       "grip_point": [
+        0.2628,
+        0.052,
+        0.0632
+       ],
+       "lift_scan_error_m": 0.0846
+      }
+     },
+     "attempt": 4,
+     "rim_rotation_deg": -12.0,
+     "rim_plan": {
+      "rotation_deg": -12.0,
+      "clearance_m": 0.068
+     },
+     "reach_error_m": 0.139063,
+     "lift_height_m": -0.0259,
+     "tilt_rad": 0.0,
+     "held": false,
+     "grasp_sensor": {
+      "contact_pad_count": 0,
+      "max_contact_force_n": 0.0,
+      "jaw_commanded_rad": -0.174,
+      "jaw_actual_rad": {
+       "left": -0.171,
+       "right": -0.171
+      }
+     },
+     "retries": [],
+     "reason": "bimanual pinch did not lift",
+     "sim_time": 242.94,
+     "controller_steps": 121470,
+     "simulation_mode": "simulation-scripted-manipulation",
+     "physics_note": "PICK/MOVE/PLACE on tracked tableware use real IK + a contact-driven grasp (no teleport, no velocity override); everything else is still a coarse scripted pose"
+    }
+   }
+  ],
+  "metrics": {
+   "revisions": 7,
+   "steps_executed": 20,
+   "wall_seconds": 61.0513,
+   "resolved": false,
+   "mode": "HOLD"
+  },
+  "hashes": {
+   "inputs": "ecefd9638a728593e8a8354914d9a822ac4e3382f9dbef9950c06ffeb45b69a3",
+   "plan": "c927572248779f051f530768e96a29c24464d9d8fa0f0a107c92a31e7d2a70d1",
+   "actions": "37041a66389f9866aa285cf4a3c89947fc5dcc3e1c1087d7874494376da0d901"
+  },
+  "decisions": [
+   {
+    "goal": "set the table, thanks",
+    "revision": 0,
+    "selected_ops": [
+     "PICK",
+     "MOVE",
+     "PICK",
+     "MOVE",
+     "PICK",
+     "MOVE",
+     "PICK",
+     "MOVE",
+     "PICK",
+     "MOVE",
+     "VERIFY"
+    ],
+    "candidates_considered": 5,
+    "candidates_feasible": 5,
+    "governing_constraints": [],
+    "rejected": {},
+    "mode": "NOMINAL",
+    "state_hash": "c417397a22e37591",
+    "envelope_digest": "sha256:e0b82fe4ad97d48a8a2f8761cf82493e049ef88119ba4c62096bd9b506d14e26",
+    "latency_ms": 0.0,
+    "reason": "5 object(s) actionable, 0 rejected"
+   },
+   {
+    "goal": "set the table, thanks",
+    "revision": 1,
+    "selected_ops": [
+     "PICK",
+     "MOVE",
+     "PICK",
+     "MOVE",
+     "PICK",
+     "MOVE",
+     "PICK",
+     "MOVE",
+     "PICK",
+     "MOVE",
+     "VERIFY"
+    ],
+    "candidates_considered": 5,
+    "candidates_feasible": 5,
+    "governing_constraints": [],
+    "rejected": {},
+    "mode": "NOMINAL",
+    "state_hash": "dc87d3be8a14cb43",
+    "envelope_digest": "sha256:e0b82fe4ad97d48a8a2f8761cf82493e049ef88119ba4c62096bd9b506d14e26",
+    "latency_ms": 0.0,
+    "reason": "replan: move_plate_1 failed"
+   },
+   {
+    "goal": "set the table, thanks",
+    "revision": 2,
+    "selected_ops": [
+     "PICK",
+     "MOVE",
+     "PICK",
+     "MOVE",
+     "PICK",
+     "MOVE",
+     "PICK",
+     "MOVE",
+     "PICK",
+     "MOVE",
+     "VERIFY"
+    ],
+    "candidates_considered": 5,
+    "candidates_feasible": 5,
+    "governing_constraints": [],
+    "rejected": {},
+    "mode": "NOMINAL",
+    "state_hash": "75d88033d9e048ea",
+    "envelope_digest": "sha256:e0b82fe4ad97d48a8a2f8761cf82493e049ef88119ba4c62096bd9b506d14e26",
+    "latency_ms": 0.0,
+    "reason": "replan: pick_plate_1 failed"
+   },
+   {
+    "goal": "set the table, thanks",
+    "revision": 3,
+    "selected_ops": [
+     "PICK",
+     "MOVE",
+     "VERIFY"
+    ],
+    "candidates_considered": 1,
+    "candidates_feasible": 1,
+    "governing_constraints": [],
+    "rejected": {},
+    "mode": "NOMINAL",
+    "state_hash": "dec846d63a772be9",
+    "envelope_digest": "sha256:e0b82fe4ad97d48a8a2f8761cf82493e049ef88119ba4c62096bd9b506d14e26",
+    "latency_ms": 0.0,
+    "reason": "replan: pick_plate_1 failed"
+   },
+   {
+    "goal": "set the table, thanks",
+    "revision": 4,
+    "selected_ops": [
+     "PICK",
+     "MOVE",
+     "VERIFY"
+    ],
+    "candidates_considered": 1,
+    "candidates_feasible": 1,
+    "governing_constraints": [],
+    "rejected": {},
+    "mode": "NOMINAL",
+    "state_hash": "4d28767d75a9bc1f",
+    "envelope_digest": "sha256:e0b82fe4ad97d48a8a2f8761cf82493e049ef88119ba4c62096bd9b506d14e26",
+    "latency_ms": 0.0,
+    "reason": "replan: move_plate_1 failed"
+   },
+   {
+    "goal": "set the table, thanks",
+    "revision": 5,
+    "selected_ops": [
+     "PICK",
+     "MOVE",
+     "VERIFY"
+    ],
+    "candidates_considered": 1,
+    "candidates_feasible": 1,
+    "governing_constraints": [],
+    "rejected": {},
+    "mode": "NOMINAL",
+    "state_hash": "f67c58b3f2e69e45",
+    "envelope_digest": "sha256:e0b82fe4ad97d48a8a2f8761cf82493e049ef88119ba4c62096bd9b506d14e26",
+    "latency_ms": 0.0,
+    "reason": "replan: pick_plate_1 failed"
+   },
+   {
+    "goal": "set the table, thanks",
+    "revision": 6,
+    "selected_ops": [
+     "PICK",
+     "MOVE",
+     "VERIFY"
+    ],
+    "candidates_considered": 1,
+    "candidates_feasible": 1,
+    "governing_constraints": [],
+    "rejected": {},
+    "mode": "NOMINAL",
+    "state_hash": "4e7bb69f64b8efcb",
+    "envelope_digest": "sha256:e0b82fe4ad97d48a8a2f8761cf82493e049ef88119ba4c62096bd9b506d14e26",
+    "latency_ms": 0.0,
+    "reason": "replan: pick_plate_1 failed"
+   }
+  ],
+  "rejected": [],
+  "provenance": {
+   "generated_at": "2026-09-15T13:22:29.759125+00:00",
+   "generated_by": "omni_q.engine",
+   "platform": "Windows-11-10.0.26200-SP0",
+   "python": "3.12.10",
+   "machine": "AMD64",
+   "package_versions": {
+    "omni-q": "0.1.0",
+    "pytest": "9.1.1"
+   },
+   "git_commit": "cab734571753dee6611901900822b1731f988aef"
+  },
+  "parent_hash": "GENESIS",
+  "content_hash": "sha256:b36816d404e8ff3912505a3de6f6735d3b12ddea39dba73841f8ffc1e893af58",
+  "ts": 1789478549.784126
+ }
+}

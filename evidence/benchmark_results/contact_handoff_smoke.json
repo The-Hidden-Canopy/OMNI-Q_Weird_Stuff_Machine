@@ -1,0 +1,155 @@
+{
+  "contact_transitions": [
+    {
+      "from": [],
+      "phase": "initial_settle",
+      "sim_time_s": 5.336,
+      "to": [
+        "cup:table"
+      ]
+    },
+    {
+      "from": [
+        "cup:table"
+      ],
+      "phase": "initial_settle",
+      "sim_time_s": 5.516,
+      "to": []
+    }
+  ],
+  "content_hash": "sha256:9f609813a7aa5cb9e3bc3cbf5a9f45c427cb4b9e2cf7cf54f89cae8ea0051175",
+  "controller": {
+    "gripper_closed_rad": 0.75,
+    "gripper_open_rad": 1.65,
+    "ik_damping": 0.001,
+    "ik_iterations": 700,
+    "ik_tolerance_m": 0.002,
+    "interpolation_segments": 8,
+    "joint_limit_margin_rad": 0.03,
+    "max_contact_force_n": 15.0,
+    "max_relative_cup_distance_m": 0.105,
+    "motion_steps_per_segment": 75,
+    "motion_timeout_steps": 120,
+    "orientation_jitter_rad": 0.025,
+    "position_jitter_m": 0.002,
+    "randomized": false,
+    "seed": 19,
+    "settle_steps": 140,
+    "shared_workspace_x_limit_m": 0.18
+  },
+  "failure_reason": "controller timeout: left inverse-kinematics target not reached",
+  "final_cup_pose": {
+    "linear_velocity": [
+      0.375237,
+      0.045324,
+      -1.206061
+    ],
+    "position": [
+      0.478411,
+      -0.018782,
+      -0.052091
+    ],
+    "quaternion": [
+      0.371958,
+      0.697012,
+      -0.494065,
+      0.362936
+    ]
+  },
+  "final_owner": null,
+  "final_stable": false,
+  "mjcf_sha256": "sha256:01ba27751d11a1de5a0cd67c6a43bd294f8e1d1140fe06455958414960fbbf05",
+  "mode": "simulation-contact-handoff",
+  "phase_timings": [
+    {
+      "duration_s": 0.28,
+      "end_s": 5.614,
+      "phase": "initial_settle",
+      "start_s": 5.334
+    }
+  ],
+  "randomized": false,
+  "schema_version": 1,
+  "seed": 19,
+  "source_state_revision": 1,
+  "state_samples": [
+    {
+      "contacts": [
+        "cup:table"
+      ],
+      "cup": {
+        "linear_velocity": [
+          0.329073,
+          0.126411,
+          -0.0
+        ],
+        "position": [
+          0.380225,
+          -0.043418,
+          0.024947
+        ],
+        "quaternion": [
+          -0.686216,
+          -0.579399,
+          -0.405335,
+          0.170608
+        ]
+      },
+      "min_joint_margin_rad": 0.090025,
+      "ownership": null,
+      "phase": "initial",
+      "sim_time_s": 5.334
+    },
+    {
+      "contacts": [],
+      "cup": {
+        "linear_velocity": [
+          0.375237,
+          0.045324,
+          -1.206061
+        ],
+        "position": [
+          0.478411,
+          -0.018782,
+          -0.052091
+        ],
+        "quaternion": [
+          0.371958,
+          0.697012,
+          -0.494065,
+          0.362936
+        ]
+      },
+      "min_joint_margin_rad": 0.090025,
+      "ownership": null,
+      "phase": "initial_settle",
+      "sim_time_s": 5.614
+    },
+    {
+      "contacts": [],
+      "cup": {
+        "linear_velocity": [
+          0.375237,
+          0.045324,
+          -1.206061
+        ],
+        "position": [
+          0.478411,
+          -0.018782,
+          -0.052091
+        ],
+        "quaternion": [
+          0.371958,
+          0.697012,
+          -0.494065,
+          0.362936
+        ]
+      },
+      "min_joint_margin_rad": 0.090025,
+      "ownership": null,
+      "phase": "final",
+      "sim_time_s": 5.614
+    }
+  ],
+  "success": false
+}

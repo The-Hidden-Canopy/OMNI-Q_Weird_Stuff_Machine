@@ -1,0 +1,168 @@
+{
+  "kind": "exploratory randomized legacy table-setting report; not a promotion claim",
+  "mode": "simulation-scripted-manipulation",
+  "outcomes": {
+    "collision": 0,
+    "grasp_failure": 10,
+    "placement_failure": 0,
+    "success": 0,
+    "timeout": 0,
+    "transition_failure": 0,
+    "unresolved": 0
+  },
+  "receipts": [
+    {
+      "content_hash": "sha256:6b80bc40aeb5e8143e02c0fa208fc9d92eb4f34b8536702471e1244a256b791b",
+      "outcome": "grasp_failure",
+      "receipt": "trial-00-seed-701.json",
+      "resolved": false,
+      "run_id": "1f179c836745",
+      "scene": {
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 701,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 701,
+      "trial": 0
+    },
+    {
+      "content_hash": "sha256:6abde05e31f54bccc9b4518d54d25fb5868e10394e4192e8066f08ef8e050f4c",
+      "outcome": "grasp_failure",
+      "receipt": "trial-01-seed-702.json",
+      "resolved": false,
+      "run_id": "1f179c836745",
+      "scene": {
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 702,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 702,
+      "trial": 1
+    },
+    {
+      "content_hash": "sha256:8419f48d13851b11a4ff65bf0458825a2bd9e1462becd33e812281970f82d705",
+      "outcome": "grasp_failure",
+      "receipt": "trial-02-seed-703.json",
+      "resolved": false,
+      "run_id": "1f179c836745",
+      "scene": {
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 703,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 703,
+      "trial": 2
+    },
+    {
+      "content_hash": "sha256:b54b700ee2b75b523df816f78858b062130e21114caf839d29b7fc69928765a3",
+      "outcome": "grasp_failure",
+      "receipt": "trial-03-seed-704.json",
+      "resolved": false,
+      "run_id": "1f179c836745",
+      "scene": {
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 704,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 704,
+      "trial": 3
+    },
+    {
+      "content_hash": "sha256:a8465df1dd7e5218e1355c33f20ec77b74c90b4b0875bb36159db23598d954fb",
+      "outcome": "grasp_failure",
+      "receipt": "trial-04-seed-705.json",
+      "resolved": false,
+      "run_id": "1f179c836745",
+      "scene": {
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 705,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 705,
+      "trial": 4
+    },
+    {
+      "content_hash": "sha256:12ee6acbd861b2dd66887ae1159c3a092accd335d5ad29596efc3c83b54549f5",
+      "outcome": "grasp_failure",
+      "receipt": "trial-05-seed-706.json",
+      "resolved": false,
+      "run_id": "1f179c836745",
+      "scene": {
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 706,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 706,
+      "trial": 5
+    },
+    {
+      "content_hash": "sha256:85ade1aff691af23ac41d8785105d1717e0352a93979e9d76a84cff348806b16",
+      "outcome": "grasp_failure",
+      "receipt": "trial-06-seed-707.json",
+      "resolved": false,
+      "run_id": "1f179c836745",
+      "scene": {
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 707,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 707,
+      "trial": 6
+    },
+    {
+      "content_hash": "sha256:4155fa4c55511b163addbbd977a64ee81c26a2a3166dc3a37c53f383eb5009e0",
+      "outcome": "grasp_failure",
+      "receipt": "trial-07-seed-708.json",
+      "resolved": false,
+      "run_id": "1f179c836745",
+      "scene": {
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 708,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 708,
+      "trial": 7
+    },
+    {
+      "content_hash": "sha256:f46c0aed883d265b4175bce3fa682097a86d59c2a2a20424a8c0a5468246d1bf",
+      "outcome": "grasp_failure",
+      "receipt": "trial-08-seed-709.json",
+      "resolved": false,
+      "run_id": "1f179c836745",
+      "scene": {
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 709,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 709,
+      "trial": 8
+    },
+    {
+      "content_hash": "sha256:0b0fa34e911b8f9bb654ce93fe65d3839128b91b1c008164f07d7b803f4d5ae4",
+      "outcome": "grasp_failure",
+      "receipt": "trial-09-seed-710.json",
+      "resolved": false,
+      "run_id": "1f179c836745",
+      "scene": {
+        "position_jitter_m": 0.003,
+        "randomized": true,
+        "seed": 710,
+        "yaw_jitter_rad": 0.08
+      },
+      "seed": 710,
+      "trial": 9
+    }
+  ],
+  "schema_version": 1,
+  "seed_start": 701,
+  "trials": 10
+}

@@ -1,0 +1,22 @@
+{
+  "artifact_files": [
+    "manifest.json",
+    "decision.json",
+    "transitions.jsonl",
+    "checksums.json"
+  ],
+  "counts": {
+    "transitions": 5
+  },
+  "created_at": "2026-09-11T00:23:01.758981+00:00",
+  "metadata": {
+    "autonomy": "NOMINAL",
+    "body_params": 6000000000,
+    "final_state": "MXFP4",
+    "graph_revision": 4
+  },
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python_version": "3.12.10",
+  "run_id": "residency_demo_20260911T002301Z",
+  "schema_version": "1.0.0"
+}

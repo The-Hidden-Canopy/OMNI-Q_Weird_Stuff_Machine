@@ -1,0 +1,3 @@
+# Intel integration (SO-101 / MuJoCo) python deps.
+# Install: .venv/Scripts/pip install -r integrations/intel/requirements.txt
+mujoco>=3.2
