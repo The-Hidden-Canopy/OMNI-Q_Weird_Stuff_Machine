@@ -250,7 +250,7 @@ class FakeVerifier:
 
 
 class FakeRecorder:
-    """Parent-chained, self-describing receipts (bounded evidence ledger ledger + private evidence-governance prototype chain)."""
+    """Parent-chained, self-describing receipts with bounded provenance."""
 
     def __init__(self) -> None:
         self.records: list[ReceiptRecord] = []
