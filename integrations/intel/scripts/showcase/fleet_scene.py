@@ -22,6 +22,10 @@ What is real and what is scripted, so nobody is misled by the footage:
 
 The submission code is not modified: the extension happens on the XML
 string in this process only, by wrapping ``load_dual_so101_model``.
+
+Optional drone assets are enabled only when ``OMNI_SHOWCASE_ASSET_ROOT`` points
+to a directory containing ``skydio_x2/assets``. Without that explicit binding,
+the showcase remains valid and runs without the drone asset.
 """
 from __future__ import annotations
 
