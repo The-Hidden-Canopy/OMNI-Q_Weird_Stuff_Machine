@@ -5,8 +5,8 @@ Takes the submission's own generated MJCF (``dual_so101_xml``) and extends
 it, additively, with:
 
 * extra "units": more tables, each with its own pair of SO-101 arms (same
-  pinned public arm asset asset, same actuators), cups and plates to work on;
-* ``drone_01``: the public arm asset Skydio X2 model as a mocap (kinematic) body;
+  pinned public arm asset, same actuators), cups and plates to work on;
+* ``drone_01``: an optional public Skydio X2 model as a mocap (kinematic) body;
 * ``mobile_01``: a small wheeled rover, mocap-driven, carrying a tray with a
   cup on it (the cup is a real free body riding on the tray).
 
@@ -26,6 +26,7 @@ string in this process only, by wrapping ``load_dual_so101_model``.
 from __future__ import annotations
 
 import copy
+import os
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -39,8 +40,12 @@ from omni_q.intel_sim import (  # noqa: E402
     ARM_ASSETS, ARM_XML, PAD_FRICTION, PAD_SOLIMP, PAD_SOLREF, _hollow_cup, _lipped_plate, _prefixed,
 )
 
-public showcase assets = Path.home() / "public-assets"
-SKYDIO = public showcase assets / "skydio_x2" / "assets"
+_showcase_asset_root = os.environ.get("OMNI_SHOWCASE_ASSET_ROOT")
+SKYDIO = (
+    Path(_showcase_asset_root).expanduser() / "skydio_x2" / "assets"
+    if _showcase_asset_root
+    else None
+)
 
 # unit index -> table centre x (the submission table is unit 1 at x = 0, y = -0.10)
 UNIT_X = {2: 1.15, 3: -1.15, 4: 2.30}
@@ -138,7 +143,7 @@ def extend_fleet_xml(xml: str, *, units: int = 4, drone: bool = True, rover: boo
 
 def fleet_assets() -> dict[str, bytes]:
     assets = {f"assets/{p.name}": p.read_bytes() for p in ARM_ASSETS.glob("*.stl")}
-    if SKYDIO.exists():
+    if SKYDIO is not None and SKYDIO.exists():
         assets["assets/X2_lowpoly.obj"] = (SKYDIO / "X2_lowpoly.obj").read_bytes()
         assets["assets/X2_lowpoly_texture.png"] = (SKYDIO / "X2_lowpoly_texture_SpinningProps_1024.png").read_bytes()
     return assets
@@ -150,6 +155,11 @@ def install(units: int = 4, drone: bool = True, rover: bool = True) -> None:
     import mujoco
 
     def load(config=None):
-        xml = extend_fleet_xml(intel_sim.dual_so101_xml(config), units=units, drone=drone and SKYDIO.exists(), rover=rover)
+        xml = extend_fleet_xml(
+            intel_sim.dual_so101_xml(config),
+            units=units,
+            drone=drone and SKYDIO is not None and SKYDIO.exists(),
+            rover=rover,
+        )
         return mujoco.MjModel.from_xml_string(xml, assets=fleet_assets())
     intel_sim.load_dual_so101_model = load
