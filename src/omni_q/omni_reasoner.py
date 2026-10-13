@@ -1,24 +1,20 @@
-"""Reasoner backends — the bridge between the IDA Omni body and Omni Q planning.
+"""Reasoner backends — the bridge between an optional model runtime and planning.
 
 A *reasoner* turns a rendered prompt into text advice. Two backends:
 
 - :class:`MockReasoner` — deterministic stand-in so the whole Omni Q loop is
   testable while the IDA Omni body is still in pretrain.
-- :class:`OmniReferenceReasoner` — identity-gated loader around the
-  ``OmniInference`` harness (vendored from private query prototype_CLI under
-  ``integrations/intel/vendor/omni_reference/``), which itself loads the
-  ``OmniMorphableForCausalLM`` reference body (vendored model closure from
-  private training prototype, same package). Nothing here reimplements either: this module
-  is a thin, truthful adapter.
+- :class:`OmniReferenceReasoner` — identity-gated loader around an optional
+  operator-supplied ``omni_reference`` runtime. The runtime is deliberately
+  not shipped in this public repository.
 
-Truth-in-labeling (private query prototype_CLI law 3): an unavailable backend raises
+Truth-in-labeling: an unavailable backend raises
 :class:`ReasonerUnavailable`; it never silently degrades to something else.
 The planner layer records which backend produced every decision.
 
-Portions derived from *The Hidden Canopy LLC* —
-[`private training prototype`](https://github.com/The-Hidden-Canopy/private training prototype) and
-[`private query prototype_CLI`](https://github.com/The-Hidden-Canopy/private query prototype_CLI).
-Used with permission.
+The public package owns the adapter contract and fail-closed admission. A
+private deployment may provide the runtime through the documented local binding
+without adding that runtime to this repository.
 """
 
 from __future__ import annotations
@@ -54,16 +50,16 @@ def _last_position_head(weight):
     and 0.76 s/token versus 1.08 s/token** -- the discarded rows were also
     pure compute.
 
-    Substituted onto the loaded model rather than patched into the vendored
-    package, so ``omni_reference`` stays byte-identical to its source. The
+    Substituted onto the loaded model rather than patched into the operator
+    runtime. The
     contract that matters is preserved exactly: ``logits[0, -1]`` is the same
     vector it always was, because only rows ``generate`` never indexes are
     the ones now missing. Positions other than the last are NOT available
     through this head -- training reads many positions and must not use it
-    (see ``reasoner/train_planner_reasoner.py``, which keeps its own head).
+    (the training-side path keeps its own head).
 
     This is the same defect class as the native trainer's ``[T, vocab]``
-    logits buffer (private training prototype ``f4196c7e``): a full-vocabulary surface
+    logits buffer from the reference runtime: a full-vocabulary surface
     materialized where a single row was wanted.
 
     Built here rather than at module scope because ``torch`` is a lazy
@@ -135,40 +131,23 @@ class MockReasoner:
         )
 
 
-_VENDOR_PARENT = Path(__file__).resolve().parents[2] / "integrations" / "intel" / "vendor"
-VENDORED_OMNI_REFERENCE = _VENDOR_PARENT / "omni_reference"
-VENDORED_TOKENIZERS = VENDORED_OMNI_REFERENCE / "tokenizers"
-VENDORED_TOKENIZER = VENDORED_TOKENIZERS / "omni_prism_bpe_256k"
-EXTERNAL_ENV_VAR = "OMNIQ_OMNI_REFERENCE_EXTERNAL"
-_EXTERNAL_TRUTHY = {"1", "true", "yes", "on"}
+RUNTIME_ROOT_ENV_VAR = "OMNIQ_REASONER_RUNTIME_ROOT"
+TOKENIZER_ENV_VAR = "OMNIQ_REASONER_TOKENIZER"
 
 
 class OmniReferenceReasoner:
-    """Identity-gated IDA Omni reference inference.
+    """Identity-gated inference through an operator-supplied runtime.
 
-    Loads through the vendored harness
-    (:func:`omni_reference.omni_inference.load_omni_reference`, see
-    ``integrations/intel/vendor/omni_reference/`` — checkpoint digest,
-    architecture hash, execution revision, FP32 precision, and
-    completed-example boundary are all verified by that loader; a mismatched
-    artifact is refused by name) and generates through the session-isolated,
-    serial-turn-publication ``OmniInference`` harness. Generation is greedy
-    fixed-boundary recompute; answer tokens are V2 private continuation, so
-    committed evidence history is never mutated by decoding.
+    The runtime must be supplied through ``runtime_root`` or
+    ``OMNIQ_REASONER_RUNTIME_ROOT``. It must expose the bounded
+    ``omni_reference.omni_inference`` loader and its own artifact checks. A
+    missing or malformed runtime is rejected; the public package never falls
+    back to a model, checkpoint, tokenizer, or deployment path of its own.
 
     Dependencies (``torch``, ``transformers``) are imported lazily so Omni Q
     stays dependency-free unless this backend is actually configured. The
-    tokenizer defaults to the vendored copy under
-    ``integrations/intel/vendor/omni_reference/tokenizers/``, resolved from
-    the receipt's recorded ``tokenizer_path`` (explicit ``tokenizer_path``
-    always wins).
-
-    Escape hatch — **dev parity check only**: passing ``ask_ida_cli_root`` /
-    ``ida_train_root`` (or setting ``OMNIQ_OMNI_REFERENCE_EXTERNAL=1`` with
-    ``OMNIQ_ASK_IDA_CLI_ROOT`` / ``OMNIQ_IDA_TRAIN_V2_ROOT``) loads the
-    harness and model from those external checkouts instead of the vendored
-    package, purely to diff vendored-vs-source behavior. It is not the
-    supported path; the vendored package is the dependency.
+    ``tokenizer_path`` is explicit or resolves to ``<runtime_root>/tokenizer``;
+    it is never inferred from a public checkout or a receipt path.
     """
 
     backend = "omni_torch_reference"
@@ -178,53 +157,24 @@ class OmniReferenceReasoner:
         checkpoint: "str | Path",
         receipt: "str | Path",
         *,
-        ask_ida_cli_root: "str | Path | None" = None,
-        ida_train_root: "str | Path | None" = None,
+        runtime_root: "str | Path | None" = None,
         tokenizer_path: "str | Path | None" = None,
         device: str = "cpu",
         max_new_tokens: int = 64,
     ) -> None:
         self.checkpoint = Path(checkpoint)
         self.receipt = Path(receipt)
-        self.external = bool(
-            ask_ida_cli_root or ida_train_root
-            or os.environ.get(EXTERNAL_ENV_VAR, "").strip().lower() in _EXTERNAL_TRUTHY)
-        self.ask_ida_cli_root = Path(ask_ida_cli_root or os.environ.get(
-            "OMNIQ_ASK_IDA_CLI_ROOT", "E:/HiddenCanopy/private query prototype_CLI"))
-        self.ida_train_root = Path(ida_train_root or os.environ.get(
-            "OMNIQ_IDA_TRAIN_V2_ROOT", "E:/HiddenCanopy/private training prototype"))
-        if tokenizer_path:
-            self.tokenizer_path = Path(tokenizer_path)
-        elif self.external:
-            self.tokenizer_path = (self.ida_train_root / "artifacts" / "tokenizers"
-                                   / "omni_prism_bpe_256k")
-        else:
-            self.tokenizer_path = self._vendored_tokenizer_default()
+        configured_root = runtime_root or os.environ.get(RUNTIME_ROOT_ENV_VAR)
+        self.runtime_root = Path(configured_root).expanduser() if configured_root else None
+        configured_tokenizer = tokenizer_path or os.environ.get(TOKENIZER_ENV_VAR)
+        self.tokenizer_path = Path(configured_tokenizer).expanduser() if configured_tokenizer else (
+            self.runtime_root / "tokenizer" if self.runtime_root else None
+        )
         self.device = device
         self.max_new_tokens = max_new_tokens
         self._inference: Any = None
         self._tokenizer: Any = None
         self._artifact_identity: dict[str, Any] = {}
-
-    def _vendored_tokenizer_default(self) -> Path:
-        """Vendored tokenizer dir matching the checkpoint receipt's record.
-
-        The receipt names the tokenizer the artifact was built with (e.g.
-        ``ida_lattice_bpe_32k``); a mismatch against the model's vocab is
-        refused by the harness as invalid evidence tokens, so the default is
-        resolved from the receipt, falling back to ``omni_prism_bpe_256k``.
-        """
-        name = None
-        try:
-            import json
-            meta = json.loads(self.receipt.read_text(encoding="utf-8"))
-            rel = meta.get("config", {}).get("tokenizer_path")
-            name = Path(rel).name if rel else None
-        except Exception:
-            name = None
-        if name and (VENDORED_TOKENIZERS / name).is_dir():
-            return VENDORED_TOKENIZERS / name
-        return VENDORED_TOKENIZER
 
     @property
     def artifact_identity(self) -> dict[str, Any]:
@@ -236,23 +186,24 @@ class OmniReferenceReasoner:
             sys.path.insert(0, root_s)
 
     def _load(self) -> None:
+        if self.runtime_root is None:
+            raise ReasonerUnavailable(
+                f"operator reasoner runtime is not configured; set {RUNTIME_ROOT_ENV_VAR}"
+            )
+        if not self.runtime_root.is_dir():
+            raise ReasonerUnavailable(f"reasoner runtime root is not a directory: {self.runtime_root}")
+        if self.tokenizer_path is None or not self.tokenizer_path.exists():
+            raise ReasonerUnavailable(
+                f"reasoner tokenizer is not configured or does not exist: {self.tokenizer_path}"
+            )
+
         from transformers import AutoTokenizer  # lazy: heavy dep, opt-in backend
 
-        if self.external:
-            # Dev parity check only (see class docstring): load from the
-            # external private query prototype_CLI / private training prototype checkouts.
-            self._ensure_on_path(self.ask_ida_cli_root)
-            self._ensure_on_path(self.ida_train_root / "src")
-            from ask_ida_cli.omni_inference import (  # noqa: PLC0415
-                OmniInference,
-                load_omni_reference,
-            )
-        else:
-            self._ensure_on_path(VENDORED_OMNI_REFERENCE.parent)
-            from omni_reference.omni_inference import (  # noqa: PLC0415
-                OmniInference,
-                load_omni_reference,
-            )
+        self._ensure_on_path(self.runtime_root)
+        from omni_reference.omni_inference import (  # noqa: PLC0415
+            OmniInference,
+            load_omni_reference,
+        )
 
         model = load_omni_reference(self.checkpoint, self.receipt,
                                     device=self.device)
@@ -270,7 +221,7 @@ class OmniReferenceReasoner:
 
     def _generate_fenced(self, session_id: str, ids: list[int], max_new: int, vocabulary, eos_id: int) -> list[int]:
         """Greedy decode with identifier slots fenced to ``vocabulary``
-        (omni_q.plan_grammar). Same forward call as the vendored generate,
+        (omni_q.plan_grammar). Same forward call as the runtime generate,
         same head; the only difference is the mask over the next token.
         Measured on r1 (reasoner/README.md): acceptance 0.12 -> 0.46,
         usable plans 0.33 -> 0.67, with no retraining."""
@@ -311,7 +262,7 @@ class OmniReferenceReasoner:
                 self._load()
             except Exception as exc:  # deps missing, identity mismatch, ...
                 raise ReasonerUnavailable(
-                    f"omni reference reasoner unavailable: {exc}") from exc
+                    f"external reasoner unavailable: {exc}") from exc
         ids = self._tokenizer(prompt, add_special_tokens=False)["input_ids"]
         if not ids:
             raise ReasonerUnavailable("prompt produced no evidence tokens")

@@ -2,8 +2,8 @@
 
 Born-compressed storage rule: the hub repo (``KissTheHabit/yolov8n-table-yolo``)
 must not carry fp32 weight files. This packager converts an ultralytics
-``.pt`` checkpoint into one packed npz + manifest per residency-slider tier
-(mxfp8 / mxfp4 / mxfp2, codec: ``integrations/qualcomm/lowbit``), plus an
+``.pt`` checkpoint into one packed npz + manifest per supported public tier
+(mxfp8 / mxfp4, codec: ``integrations/qualcomm/lowbit``), plus an
 optional standalone loader so anyone can pull a compressed master and
 dequantize it locally with only numpy + torch.
 
@@ -12,7 +12,7 @@ Usage (what goes on the HF card)::
     # one-time: produce packed masters + the standalone loader
     python perception/package_quant_weights.py \
         --weights models/table_yolo_v2_ft_2026-09-11.pt \
-        --formats mxfp8,mxfp4,mxfp2 \
+        --formats mxfp8,mxfp4 \
         --out-dir hf_repo_weights/ --loader
 
     # consumer side: pull a master, restore a working .pt
@@ -46,13 +46,10 @@ byte-exact passthrough entries, marked ``dtype_passthrough`` in the manifest.
 (passthroughs are exact by construction). ``totals.ratio`` is
 ``packed_bytes / (params * 4)`` against the fp32 master.
 
-Honesty: weight-only RNE + software dequantize. mxfp8 is ~lossless;
-mxfp4/mxfp2 collapse this detector's mAP — the per-tier weight_cosine stats
-in each manifest are the packaging-side evidence pointer, eval arms under
-``evidence/benchmark_results/yolo_2bit_map_20260911_071815-*``.
-
-Portions derived from *The Hidden Canopy LLC* — [`private training prototype`](https://github.com/The-Hidden-Canopy/private training prototype).
-Used with permission.
+Honesty: weight-only RNE + software dequantize. mxfp8 is the higher-fidelity
+public arm; mxfp4 is a lower-fidelity reference arm. The per-tier
+``weight_cosine`` values in each manifest are packaging-side evidence only and
+do not establish hardware support or deployment readiness.
 """
 
 from __future__ import annotations
@@ -73,7 +70,7 @@ from integrations.qualcomm.lowbit import (  # noqa: E402
     quantize_tensor,
 )
 from integrations.qualcomm.lowbit.lowbit_formats import CODE_BITS  # noqa: E402
-from integrations.qualcomm.lowbit.vendor.mxfp_scales import (  # noqa: E402
+from integrations.qualcomm.lowbit.scale_codec import (  # noqa: E402
     FP8_E4M3_MAX,
     e4m3_pack,
     e4m3_unpack,
@@ -82,13 +79,13 @@ from integrations.qualcomm.lowbit.vendor.mxfp_scales import (  # noqa: E402
 )
 
 HONESTY_LABEL = (
-    "weight-only RNE, software dequantize; mxfp4/mxfp2 collapse this "
-    "detector's mAP — see stats"
+    "weight-only RNE, software dequantize; compare per-tier cosine statistics "
+    "and validate the target workload separately"
 )
-HONESTY_ARMS_REF = "evidence/benchmark_results/yolo_2bit_map_20260911_071815-*"
+HONESTY_ARMS_REF = "manifest weight_cosine statistics; no hardware claim"
 
 LOADER_SOURCE = '''#!/usr/bin/env python
-"""Standalone low-bit weight-master loader (mxfp8 / mxfp4 / nvint2 / mxfp2).
+"""Standalone low-bit weight-master loader (mxfp8 / mxfp4).
 
 Reconstructs an ultralytics state_dict from a packed ``.npz`` produced by
 OMNI-Q's ``perception/package_quant_weights.py`` — dequantize locally, no
@@ -104,7 +101,8 @@ ultralytics model with::
     model = YOLO("<original>.pt")           # architecture + meta
     model.model.load_state_dict(torch.load("restored.pt", map_location="cpu"))
 
-Portions derived from *The Hidden Canopy LLC* — [OMNI-Q_Weird_Stuff_Machine](https://github.com/The-Hidden-Canopy/OMNI-Q_Weird_Stuff_Machine) lowbit codec. Used with permission.
+The loader contains only the public MXFP8 and MXFP4 decode paths and has no
+dependency on a source checkout.
 """
 
 from __future__ import annotations
@@ -114,8 +112,8 @@ import json
 
 import numpy as np
 
-_BLOCK_SIZES = {"mxfp8": 32, "mxfp4": 32, "nvint2": 16, "mxfp2": 32}
-_CODE_BITS = {"mxfp8": 8, "mxfp4": 4, "nvint2": 2, "mxfp2": 2}
+_BLOCK_SIZES = {"mxfp8": 32, "mxfp4": 32}
+_CODE_BITS = {"mxfp8": 8, "mxfp4": 4}
 _TINY = 1.0e-30
 
 
@@ -126,7 +124,7 @@ def _torch():
 
 
 # --------------------------------------------------------------------------- #
-# UE8M0 block scales + E4M3 payload (ported from lowbit/vendor/mxfp_scales.py)  #
+# UE8M0 block scales + E4M3 payload.                                  #
 # --------------------------------------------------------------------------- #
 def _build_e4m3_lut() -> np.ndarray:
     lut = np.empty(256, dtype=np.float32)
@@ -160,11 +158,9 @@ def _safe_scale(code: np.ndarray) -> np.ndarray:
 
 
 # --------------------------------------------------------------------------- #
-# Payload ladders (ported from lowbit_formats.py / vendor/mxfp2_codec.py)       #
+# Public payload ladders.                                                       #
 # --------------------------------------------------------------------------- #
 _MXFP4_MAGNITUDES = np.array([0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0], dtype=np.float64)
-_TERNARY_MAGNITUDES = np.array([0.0, 1.0], dtype=np.float64)
-_INT2_LEVELS = np.array([-1.5, -0.5, 0.5, 1.5], dtype=np.float64)
 
 
 def _mxfp4_unpack(codes: np.ndarray) -> np.ndarray:
@@ -173,31 +169,9 @@ def _mxfp4_unpack(codes: np.ndarray) -> np.ndarray:
     return np.where((c & 0x08) != 0, -mag, mag).astype(np.float32)
 
 
-def _ternary_unpack(codes: np.ndarray) -> np.ndarray:
-    """code & 1 -> magnitude index; code & 2 -> sign (0x2 decodes to -0.0)."""
-    c = np.asarray(codes, dtype=np.uint8)
-    mag = _TERNARY_MAGNITUDES[(c & 0x01)]
-    return np.where((c & 0x02) != 0, -mag, mag).astype(np.float32)
-
-
-def _int2_unpack(codes: np.ndarray) -> np.ndarray:
-    return _INT2_LEVELS[np.asarray(codes, dtype=np.uint8) & 0x03].astype(np.float32)
-
-
 # --------------------------------------------------------------------------- #
-# Storage unpacking (4 x 2-bit / 2 x 4-bit per byte; ported from lowbit_formats)#
+# Storage unpacking (two 4-bit codes per byte).                               #
 # --------------------------------------------------------------------------- #
-def _unpack_codes(payload, numel: int) -> np.ndarray:
-    """4 x 2-bit codes per byte, little-endian within the byte."""
-    b = np.frombuffer(payload, dtype=np.uint8).reshape(-1)
-    codes = np.empty(b.size * 4, dtype=np.uint8)
-    codes[0::4] = b & 0x03
-    codes[1::4] = (b >> 2) & 0x03
-    codes[2::4] = (b >> 4) & 0x03
-    codes[3::4] = (b >> 6) & 0x03
-    return codes[:numel]
-
-
 def _unpack_nibbles(payload, numel: int) -> np.ndarray:
     """2 x 4-bit codes per byte, low nibble first."""
     b = np.frombuffer(payload, dtype=np.uint8).reshape(-1)
@@ -208,14 +182,16 @@ def _unpack_nibbles(payload, numel: int) -> np.ndarray:
 
 
 def _unpack_auto(payload, numel: int, fmt: str) -> np.ndarray:
+    if fmt not in _CODE_BITS:
+        raise ValueError(f"unsupported public format {fmt!r}")
     bits = _CODE_BITS[fmt]
     if bits == 8:
         return np.frombuffer(payload, dtype=np.uint8)[:numel]
-    return _unpack_nibbles(payload, numel) if bits == 4 else _unpack_codes(payload, numel)
+    return _unpack_nibbles(payload, numel)
 
 
 # --------------------------------------------------------------------------- #
-# Tensor decode — mirrors the repo codec's dequantize_tensor, op for op         #
+# Tensor decode — mirrors the public codec's dequantize_tensor.                #
 # --------------------------------------------------------------------------- #
 def decode_payload(meta: dict, payload, scales) -> np.ndarray:
     """Dequantize one packed tensor entry to float32 (exact repo-codec twin)."""
@@ -233,17 +209,6 @@ def decode_payload(meta: dict, payload, scales) -> np.ndarray:
     if fmt == "mxfp4":
         values = _mxfp4_unpack(codes)
         per_elem = _safe_scale(block_scales[:expect]).repeat(meta["block_size"])[:n]
-        return (values * per_elem).astype(np.float32)
-    if fmt == "mxfp2":
-        values = _ternary_unpack(codes)
-        per_elem = _safe_scale(block_scales[:expect]).repeat(meta["block_size"])[:n]
-        return (values * per_elem).astype(np.float32)
-    if fmt == "nvint2":
-        values = _int2_unpack(codes)
-        per_elem = (
-            np.maximum(_e4m3_unpack(block_scales[:expect]), np.float32(_TINY)).astype(np.float64)
-            * float(meta.get("tensor_scale", 1.0))
-        ).repeat(meta["block_size"])[:n]
         return (values * per_elem).astype(np.float32)
     raise ValueError(f"unknown format {fmt!r}")
 
@@ -364,7 +329,7 @@ def rne_reproject_tensor(t: np.ndarray) -> np.ndarray:
     keep the top 3 mantissa bits with ties-to-even, then rebias by the block
     exponent (an exact exponent shift). Elements clamped to the block's
     saturation threshold encode to 0x7E by construction. Floored blocks
-    (codes < 28: tiny amax) and zero-scale blocks fall back to exact vendored
+    (codes < 28: tiny amax) and zero-scale blocks fall back to exact public
     helpers. Same shape/dtype as the input.
     """
     payload, codes, applied, n, shape = _rne_pack(t)
@@ -378,8 +343,7 @@ def rne_reproject_tensor(t: np.ndarray) -> np.ndarray:
 def rne_pack_tensor(t: np.ndarray):
     """Pack an fp32 tensor to MXFP8 bytes + its dequantized fp32 view, sharing
     ``rne_reproject_tensor``'s exact code path (the packed Lion optimizer's
-    repack primitive — private training prototype ``k_lion_mxfp8``'s encode half at torch
-    level).
+    repack primitive's encode half at torch level).
 
     Returns ``(payload, scales, dequant)``: payload uint8 with one E4M3 byte
     per element (sliced to numel, matching the codec byte stream on partial
@@ -472,7 +436,7 @@ def _rne_pack(t: np.ndarray):
     payload = code8 | sign
     floored = lo & ~zb
     if floored.any():
-        # Rare tiny-amax blocks: recompute through the vendored f64 pack so the
+        # Rare tiny-amax blocks: recompute through the public f64 pack so the
         # division by the 1e-30 floor rounds exactly like the slow path.
         hit = np.broadcast_to(floored[:, None], blocks.shape)
         rows = np.repeat(np.nonzero(floored)[0], 32)

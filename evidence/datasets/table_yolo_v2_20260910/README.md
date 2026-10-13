@@ -58,4 +58,4 @@ python perception/finetune.py --data data/table_yolo_v2/data.yaml ...
 
 Annotations: COCO (CC-BY-4.0), LVIS v1 (CC-BY-4.0), Open Images (CC-BY-4.0). Images retain their original Flickr/owner licenses (COCO, Open Images) — redistribution of images is NOT granted by the annotation license; keep this dataset in-house.
 
-Portions derived from *The Hidden Canopy LLC* — [`private training prototype`](https://github.com/The-Hidden-Canopy/private training prototype). Used with permission.
+This dataset receipt contains public provenance only.

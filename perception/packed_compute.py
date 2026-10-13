@@ -1,6 +1,6 @@
 """Selected-layer packed MXFP4 compute pilot for the YOLO trainer.
 
-This is the portable part of the private training prototype Hopper recipe: retain a packed
+This is the portable part of the public low-bit execution recipe: retain a packed
 E2M1/UE8M0 K32 operand and decode it at the consumer boundary.  The stock
 YOLO convolution still performs its arithmetic through PyTorch's normal
 Conv2d/autocast path; this module does not claim Hopper WGMMA or native

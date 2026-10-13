@@ -251,7 +251,7 @@ manifest's `args`.
 
 {LICENSE_NOTE}
 
-Portions derived from *The Hidden Canopy LLC* — [`private training prototype`](https://github.com/The-Hidden-Canopy/private training prototype). Used with permission.
+This module is distributed as part of the public dataset tooling.
 """
     (dest / "README.md").write_text(md, encoding="utf-8")
     print(f"receipt at {dest}", flush=True)

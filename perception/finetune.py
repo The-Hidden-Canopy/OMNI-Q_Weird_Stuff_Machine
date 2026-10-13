@@ -15,9 +15,8 @@ weight state is an MXFP8 E4M3 payload plus UE8M0 K32 scales, and Lion momentum
 is BF16. The stock YOLO graph retains a floating-point compute view because
 its Conv2d/Linear/autograd path requires floating parameters; this mode does
 not claim zero floating-point model residency. Repacking happens inside the
-optimizer step, not in a batch-end callback. Design source: the private training prototype
-MXFP4-master simulation ablation (``docs/mxfp4-master-sim-ablation-2026-09-09.md``
-in private training prototype) — per-step RNE re-encode of the master is stable; stochastic
+optimizer step, not in a batch-end callback. The public MXFP4-master simulation
+reference establishes that per-step RNE re-encode of the master is stable; stochastic
 rounding *on the master* is a refuted unbounded random walk (SR is for
 gradients only). MXFP4/MXFP2 masters are sim-only and refused at admission.
 
@@ -41,7 +40,7 @@ HF_BASE_REPO = "KissTheHabit/yolov8n-hituav-thermal-finetune"
 _BASE_CANDIDATES = ("best.pt", "weights/best.pt", "yolov8n-hituav.pt", "model.pt")
 
 ABLACTION_REF = (
-    "private training prototype docs/mxfp4-master-sim-ablation-2026-09-09.md"
+    "public MXFP4-master simulation reference"
 )
 MASTER_TRAIN_FORMAT = "mxfp8"
 MASTER_SIM_ONLY_FORMATS = ("mxfp4", "mxfp2")
@@ -50,7 +49,7 @@ PACKED_LION_DEFAULT_LR = 3e-4
 
 _REFUSAL_MSG = (
     "--w-master {fmt!r} is refused at admission: MXFP4/MXFP2 masters are "
-    "SIM-ONLY residency states, not trainable masters. The private training prototype sim "
+    "SIM-ONLY residency states, not trainable masters. The public simulation "
     "ablation (" + ABLACTION_REF + ") shows per-step RNE re-encode of the "
     "master is stable while stochastic rounding on the master is a refuted "
     "unbounded random walk (SR is for gradients only). Use --w-master mxfp8."
@@ -91,8 +90,8 @@ def manifest_path_for(npz_path: str | Path) -> Path:
 def check_master_format_contract(npz_path: str | Path, requested: str) -> dict:
     """Resume-gate contract: master format must equal the requested residency.
 
-    PrecisionContract-shaped check (vendored IDEA, not code) — design source:
-    private training prototype ``native/include/ida_native/omni_precision.hpp:33-45``
+    PrecisionContract-shaped check (policy, not code) — design source:
+    the public native precision contract
     (``OmniMasterFormat`` + ``omni_master_format_valid``: the master format is
     a checked contract at the checkpoint boundary, refused otherwise). When a
     sibling ``.manifest.json`` exists its ``format`` must match ``requested``;
@@ -107,7 +106,7 @@ def check_master_format_contract(npz_path: str | Path, requested: str) -> dict:
             f"master format contract violated: {manifest_path_for(npz_path).name} "
             f"says format={actual!r} but --w-master requests {requested!r}. "
             "Refusing to train a master under the wrong residency format "
-            "(contract shape: private training prototype omni_precision.hpp:33-45)."
+            "(contract shape: public native precision contract)."
         )
     return manifest
 
@@ -408,7 +407,7 @@ def main(argv=None) -> None:
     ap.add_argument("--w-master", default="none",
                     help="{none,mxfp8} use packed MXFP8 Lion optimizer state; "
                          "mxfp4/mxfp2 are sim-only and refused "
-                         "(private training prototype sim ablation)")
+                         "(public simulation reference)")
     ap.add_argument(
         "--packed-compute",
         choices=("none", "mxfp4"),

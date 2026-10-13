@@ -1,12 +1,11 @@
-"""Low-bit weight formats for CPU devices (OMNI-Q's own layer + vendored codecs).
+"""Public low-bit weight formats for CPU devices.
 
 Public API:
     quantize_tensor(values, fmt) / dequantize_tensor(packed)  -- tensor level
-    pack_codes / unpack_codes                                 -- 4x2-bit storage
+    pack_nibbles / unpack_nibbles                             -- 2x4-bit storage
 
-Formats: "mxfp8" (E4M3 × UE8M0 resident top tier), "mxfp4" (4-bit ladder
-reference), "nvint2", "mxfp2" — evaluated symmetrically; no preassigned
-verdicts. Provenance: vendor/SOURCE.md.
+Formats: "mxfp8" (E4M3 × UE8M0 resident top tier) and "mxfp4" (4-bit
+reference ladder). Experimental formats are not shipped by the public build.
 """
 
 from .lowbit_formats import (
@@ -14,9 +13,9 @@ from .lowbit_formats import (
     BLOCK_SIZES,
     PackedTensor,
     dequantize_tensor,
-    pack_codes,
+    pack_nibbles,
     quantize_tensor,
-    unpack_codes,
+    unpack_nibbles,
 )
 
 __all__ = [
@@ -25,6 +24,6 @@ __all__ = [
     "PackedTensor",
     "quantize_tensor",
     "dequantize_tensor",
-    "pack_codes",
-    "unpack_codes",
+    "pack_nibbles",
+    "unpack_nibbles",
 ]

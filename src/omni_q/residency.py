@@ -1,4 +1,3 @@
-# Portions derived from *The Hidden Canopy LLC* — [`private training prototype`](https://github.com/The-Hidden-Canopy/private training prototype). Used with permission.
 """Born-compressed residency: OMNI is never resident in FP32/BF16.
 
 The owner's thesis: the model is **born compressed**. FP32/BF16 is never a
@@ -8,7 +7,8 @@ norms) inside kernels, never as "the model lives in BF16." A single
 
 * **MXFP8** — the high-fidelity compressed master (~1 byte/weight).
 * **MXFP4** — the same body recompiled lower (~0.5 byte/weight).
-* **MXFP2** — extreme residency (~0.25 byte/weight).
+* **MXFP2** — planning-only extreme residency (~0.25 byte/weight); no public
+  storage codec is implied.
 
 Through all three MX tiers the *same* body/capability stays resident; only
 the format changes. Below the MXFP2 envelope the neural reasoner is evicted:

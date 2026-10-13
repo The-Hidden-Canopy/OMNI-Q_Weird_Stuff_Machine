@@ -39,8 +39,7 @@ from omni_q.intel_sim import (  # noqa: E402
     ARM_ASSETS, ARM_XML, PAD_FRICTION, PAD_SOLIMP, PAD_SOLREF, _hollow_cup, _lipped_plate, _prefixed,
 )
 
-public showcase assets = Path.home() / "public-assets" / "Local" / "Temp" / "public showcase" / \
-    "C--Users-damio-OneDrive-Documents-GitHub-private training prototype" / "4d0ed848-645b-4064-8e50-825fa786fd35" / "scratchpad" / "public-assets"
+public showcase assets = Path.home() / "public-assets"
 SKYDIO = public showcase assets / "skydio_x2" / "assets"
 
 # unit index -> table centre x (the submission table is unit 1 at x = 0, y = -0.10)

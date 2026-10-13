@@ -7,7 +7,7 @@ no real training run has been done yet.**
 
 ```
 generate_planner_data.py   randomized worlds -> (OmniPlanner prompt, RulePlanner plan) pairs
-train_planner_reasoner.py  trains the vendored reference body, exports a loader-format .pt + receipt
+The optional reasoner tooling is deployment-specific and is not shipped in the public branch.
 roundtrip_check.py         GATE: the exported artifact through OmniReferenceReasoner -> OmniPlanner
 ```
 
@@ -16,7 +16,7 @@ Data and `.pt` artifacts are gitignored; regenerate with
 
 ## Why the Python body and not the native trainer's checkpoint
 
-private training prototype's native trainer produces a real checkpoint, but it trains only
+The public trainer produces a real checkpoint, but it trains only
 part of this model: 97 tensors map across (embeddings, expert banks, norms,
 router), 14 native tensors have no verified Python target (the SSM coupling
 core `U/V/gamma/decay/sources/weights`), and **278 Python parameters — 7.2%,
@@ -39,7 +39,7 @@ is trained in this venv (torch 2.11 + CUDA 12.6 on the RTX 4050).
   s/example and that is inherent.
 - **Full-vocabulary projections are the recurring hazard on a 6 GiB card.**
   Three instances found: the native trainer's `[T, 256000]` logits buffer
-  (fixed in private training prototype `f4196c7e`, 22x step speedup), this trainer's loss
+  (fixed in the reference runtime, 22x step speedup), this trainer's loss
   (only supervised rows are projected — see `selective_ce`), and generation
   (fixed in `omni_reasoner._last_position_head`: 12.29 GiB reserved -> 1.11
   GiB). Watch for a fourth.

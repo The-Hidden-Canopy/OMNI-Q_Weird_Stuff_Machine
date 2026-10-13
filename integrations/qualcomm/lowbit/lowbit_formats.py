@@ -1,27 +1,16 @@
-"""Low-bit weight formats for CPU devices — storage packing + tensor API.
+"""Public low-bit weight formats for CPU devices.
 
-Sits on top of the vendored 2-bit codec (`vendor/`, MXFP2 + NVINT2) and adds:
+The public CPU path provides:
 
-- **4×2-bit-per-byte payload packing** for on-disk / in-RAM storage (the
-  vendored codec works in per-element uint8 codes; the on-disk format packs
-  four codes per byte).
 - **MXFP8** (E4M3fn payload × UE8M0 K32) as the resident top tier of the
-  compression slider — per the OCP MX specification. Payload codes are the
-  vendored finite-only e4m3fn byte codec (`e4m3_pack`/`e4m3_unpack`); block
-  scales reuse the same `encode_scale`/`safe_scale` UE8M0 machinery.
+  compression slider — per the OCP MX specification.
 - **MXFP4** (E2M1 payload × UE8M0 K32) as the 4-bit ladder reference arm —
-  implemented locally against the same vendored `encode_scale`/`safe_scale`
-  helpers, kept format-symmetric with the 2-bit arms ("a format is a format").
+  implemented locally against the public scale helpers.
 - `quantize_tensor` / `dequantize_tensor` — one-call weight compress/restore
   with error stats, the surface the YOLO evaluation tiers consume.
 
-Attribution: the scale helpers and 2-bit ladders are vendored from The
-Hidden Canopy LLC's private training prototype (see vendor/SOURCE.md); the packing, MXFP4
-arm, and tensor API are OMNI-Q's own layer on top.
-
-Portions derived from *The Hidden Canopy LLC* —
-[`private training prototype`](https://github.com/The-Hidden-Canopy/private training prototype).
-Used with permission.
+Experimental or deployment-specific low-bit formats are intentionally absent
+from the public API until they have an independently releasable implementation.
 """
 
 from __future__ import annotations
@@ -31,17 +20,11 @@ from typing import Any
 
 import numpy as np
 
-from .vendor.mxfp2_codec import (
-    BLOCK_SIZE_MXFP2,
-    BLOCK_SIZE_NVINT2,
-    decode_tensor as decode_tensor_2bit,
-    encode_tensor as encode_tensor_2bit,
-)
-from .vendor.mxfp_scales import e4m3_pack, e4m3_unpack, encode_scale, safe_scale
+from .scale_codec import e4m3_pack, e4m3_unpack, encode_scale, safe_scale
 
-FORMATS = ("mxfp8", "mxfp4", "nvint2", "mxfp2")
-BLOCK_SIZES = {"mxfp8": 32, "mxfp4": 32, "nvint2": BLOCK_SIZE_NVINT2, "mxfp2": BLOCK_SIZE_MXFP2}
-CODE_BITS = {"mxfp8": 8, "mxfp4": 4, "nvint2": 2, "mxfp2": 2}
+FORMATS = ("mxfp8", "mxfp4")
+BLOCK_SIZES = {"mxfp8": 32, "mxfp4": 32}
+CODE_BITS = {"mxfp8": 8, "mxfp4": 4}
 
 # MXFP8 (E4M3fn) payload: finite-only byte codec, max normal 448; the NaN
 # codes 0x7F/0xFF are reserved for non-finite inputs. Per OCP MX spec.
@@ -53,32 +36,8 @@ _MXFP4_MAX = 6.0
 
 
 # --------------------------------------------------------------------------- #
-# 4-codes-per-byte packing (OMNI-Q storage layer; codecs stay per-element)      #
+# 4-bit storage packing (two nibbles per byte).                              #
 # --------------------------------------------------------------------------- #
-def pack_codes(codes: np.ndarray) -> bytes:
-    """Pack per-element 2-bit codes (uint8 0..3) four per byte, little-endian
-    within the byte (first element in bits 0-1)."""
-    c = np.asarray(codes, dtype=np.uint8).reshape(-1)
-    pad = (-c.size) % 4
-    if pad:
-        c = np.concatenate([c, np.zeros(pad, dtype=np.uint8)])
-    out = (
-        c[0::4] | (c[1::4] << 2) | (c[2::4] << 4) | (c[3::4] << 6)
-    ).astype(np.uint8)
-    return out.tobytes()
-
-
-def unpack_codes(payload: bytes | np.ndarray, numel: int) -> np.ndarray:
-    """Inverse of :func:`pack_codes`; returns the first ``numel`` codes."""
-    b = np.frombuffer(payload, dtype=np.uint8).reshape(-1)
-    codes = np.empty(b.size * 4, dtype=np.uint8)
-    codes[0::4] = b & 0x03
-    codes[1::4] = (b >> 2) & 0x03
-    codes[2::4] = (b >> 4) & 0x03
-    codes[3::4] = (b >> 6) & 0x03
-    return codes[:numel]
-
-
 def pack_nibbles(codes: np.ndarray) -> bytes:
     """Pack per-element 4-bit codes (uint8 0..15) two per byte, low nibble
     first (4-bit formats: mxfp4)."""
@@ -99,20 +58,24 @@ def unpack_nibbles(payload: bytes | np.ndarray, numel: int) -> np.ndarray:
     return codes[:numel]
 
 
-def _pack_codes_auto(codes: np.ndarray, fmt: str) -> bytes:
+def _pack_payload(codes: np.ndarray, fmt: str) -> bytes:
     if CODE_BITS[fmt] == 8:
         return np.asarray(codes, dtype=np.uint8).tobytes()
-    return pack_nibbles(codes) if CODE_BITS[fmt] == 4 else pack_codes(codes)
+    if CODE_BITS[fmt] == 4:
+        return pack_nibbles(codes)
+    raise ValueError(f"format {fmt!r} has no public storage codec")
 
 
-def _unpack_codes_auto(payload: bytes | np.ndarray, numel: int, fmt: str) -> np.ndarray:
+def _unpack_payload(payload: bytes | np.ndarray, numel: int, fmt: str) -> np.ndarray:
     if CODE_BITS[fmt] == 8:
         return np.frombuffer(payload, dtype=np.uint8)[:numel]
-    return unpack_nibbles(payload, numel) if CODE_BITS[fmt] == 4 else unpack_codes(payload, numel)
+    if CODE_BITS[fmt] == 4:
+        return unpack_nibbles(payload, numel)
+    raise ValueError(f"format {fmt!r} has no public storage codec")
 
 
 # --------------------------------------------------------------------------- #
-# MXFP8 arm (OCP MX: E4M3fn payload on the vendored UE8M0 block scales)         #
+# MXFP8 arm (OCP MX: E4M3fn payload on the public UE8M0 block scales)           #
 # --------------------------------------------------------------------------- #
 def _encode_mxfp8(values: np.ndarray, block: int = 32):
     flat = np.asarray(values, dtype=np.float64).reshape(-1)
@@ -142,7 +105,7 @@ def _decode_mxfp8(payload, scales, numel=None, block: int = 32):
 
 
 # --------------------------------------------------------------------------- #
-# MXFP4 ladder arm (local implementation on the vendored UE8M0 helpers)         #
+# MXFP4 ladder arm (local implementation on the public UE8M0 helpers)           #
 # --------------------------------------------------------------------------- #
 def _mxfp4_pack_rne(normalized: np.ndarray) -> np.ndarray:
     v = np.asarray(normalized, dtype=np.float64)
@@ -201,18 +164,17 @@ def _decode_mxfp4(payload, scales, numel=None, block: int = 32):
 class PackedTensor:
     """A weight tensor compressed to a low-bit master."""
 
-    fmt: str                                  # mxfp8 | mxfp4 | nvint2 | mxfp2
+    fmt: str                                  # mxfp8 | mxfp4
     shape: tuple[int, ...]
     numel: int
-    payload: bytes                            # 1 byte (mxfp8) / 2 x 4-bit (mxfp4) /
-                                              # 4 x 2-bit codes per byte
+    payload: bytes                            # 1 byte (mxfp8) / 2 x 4-bit (mxfp4)
     scales: bytes                             # block scale bytes
-    tensor_scale: float = 1.0                 # nvint2 only
+    tensor_scale: float = 1.0                 # reserved for future public formats
     stats: dict[str, Any] = field(default_factory=dict)
 
     @property
     def bytes_total(self) -> int:
-        return len(self.payload) + len(self.scales) + (4 if self.fmt == "nvint2" else 0)
+        return len(self.payload) + len(self.scales)
 
     @property
     def bits_per_weight(self) -> float:
@@ -242,19 +204,16 @@ def quantize_tensor(values: np.ndarray, fmt: str, *, mode: str = "rne") -> Packe
     elif fmt == "mxfp4":
         codes, scales = _encode_mxfp4(flat)
         tensor_scale = 1.0
-    elif fmt == "mxfp2":
-        codes, scales = encode_tensor_2bit(flat, fmt="mxfp2", mode="rne")
-        tensor_scale = 1.0
     else:
-        codes, scales, tensor_scale = encode_tensor_2bit(flat, fmt="nvint2", mode="rne")
+        raise ValueError(f"format {fmt!r} is not enabled in the public build")
     restored = dequantize_tensor(PackedTensor(
         fmt=fmt, shape=arr.shape, numel=flat.size,
-        payload=_pack_codes_auto(codes, fmt), scales=scales.tobytes(),
+        payload=_pack_payload(codes, fmt), scales=scales.tobytes(),
         tensor_scale=float(tensor_scale)))
     rel, cos = _rel_cos(restored.reshape(-1), flat.astype(np.float64))
     return PackedTensor(
         fmt=fmt, shape=arr.shape, numel=flat.size,
-        payload=_pack_codes_auto(codes, fmt), scales=scales.tobytes(),
+        payload=_pack_payload(codes, fmt), scales=scales.tobytes(),
         tensor_scale=float(tensor_scale),
         stats={"weight_rel_err": rel, "weight_cosine": cos,
                "block_size": BLOCK_SIZES[fmt], "mode": mode,
@@ -264,16 +223,12 @@ def quantize_tensor(values: np.ndarray, fmt: str, *, mode: str = "rne") -> Packe
 
 def dequantize_tensor(packed: PackedTensor) -> np.ndarray:
     """Restore a float32 weight tensor from its low-bit master."""
-    codes = _unpack_codes_auto(packed.payload, packed.numel, packed.fmt)
+    codes = _unpack_payload(packed.payload, packed.numel, packed.fmt)
     scales = np.frombuffer(packed.scales, dtype=np.uint8)
     if packed.fmt == "mxfp8":
         flat = _decode_mxfp8(codes, scales, packed.numel)
     elif packed.fmt == "mxfp4":
         flat = _decode_mxfp4(codes, scales, packed.numel)
-    elif packed.fmt in ("mxfp2", "nvint2"):
-        flat = decode_tensor_2bit(codes, scales, packed.numel,
-                                  fmt=packed.fmt,
-                                  tensor_scale=packed.tensor_scale)
     else:
         raise ValueError(f"unknown format {packed.fmt!r}")
     return flat.reshape(packed.shape)

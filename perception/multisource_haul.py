@@ -61,7 +61,7 @@ back automatically and records which one was used.  Napkin has NO boxable
 class in the OIDv7 descriptions csv at all — Open Images can supply only 6 of
 the 7 classes; napkin stays an LVIS source.
 
-Portions derived from *The Hidden Canopy LLC* — [`private training prototype`](https://github.com/The-Hidden-Canopy/private training prototype). Used with permission.
+This module is distributed as part of the public dataset tooling.
 """
 
 from __future__ import annotations
@@ -686,7 +686,7 @@ python perception/finetune.py --data {str(out).replace(chr(92), '/')}/data.yaml 
 
 {LICENSE_NOTE}
 
-Portions derived from *The Hidden Canopy LLC* — [`private training prototype`](https://github.com/The-Hidden-Canopy/private training prototype). Used with permission.
+This module is distributed as part of the public dataset tooling.
 """
     (dest / "README.md").write_text(md, encoding="utf-8")
     return dest
@@ -1579,7 +1579,7 @@ manifest's `args`.
 
 {LICENSE_NOTE}
 
-Portions derived from *The Hidden Canopy LLC* — [`private training prototype`](https://github.com/The-Hidden-Canopy/private training prototype). Used with permission.
+This module is distributed as part of the public dataset tooling.
 """
     (dest / "README.md").write_text(md, encoding="utf-8")
     return dest

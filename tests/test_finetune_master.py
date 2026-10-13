@@ -6,13 +6,11 @@ update semantics, refusal of sim-only mxfp4/mxfp2 masters, the resume-gate
 format contract, and CLI wiring of --base/*.npz + --w-master with a fake YOLO
 (no real weights, no training).
 
-Design source for the residency semantics: the private training prototype MXFP4-master sim
-ablation (docs/mxfp4-master-sim-ablation-2026-09-09.md in private training prototype) — RNE
+Design source for the residency semantics: the public MXFP4-master simulation
+reference — RNE
 re-encode of the master each step is stable; SR on the master is a refuted
 random walk; mxfp4/mxfp2 masters are sim-only and refused at admission.
 
-Portions derived from *The Hidden Canopy LLC* — [`private training prototype`](https://github.com/The-Hidden-Canopy/private training prototype).
-Used with permission.
 """
 
 from __future__ import annotations

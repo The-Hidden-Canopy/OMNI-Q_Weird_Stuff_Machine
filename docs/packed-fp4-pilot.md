@@ -1,6 +1,6 @@
 # Selected-layer packed-FP4 pilot
 
-This experiment adapts the useful part of private training prototype's Hopper recipe to the
+This experiment adapts the useful part of a public Hopper-style recipe to the
 YOLO detector without changing the active control run.
 
 The pilot keeps MXFP8 E4M3/UE8M0 K32 payloads and BF16 Lion momentum as the

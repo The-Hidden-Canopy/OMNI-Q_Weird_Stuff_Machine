@@ -47,7 +47,7 @@ post-deadline appendix.
 
 ## Related owned assets
 
-IDA model family (IDA_AI ~966M, IDA_MoE, IDA_Swift/_Native), private training prototype
+IDA model family (IDA_AI ~966M, IDA_MoE, IDA_Swift/_Native), native training
 Nemotron 4.19B, MLPerf/SQuAD native-training artifacts. See
 [`../docs/strategy-notes.md`](../docs/strategy-notes.md) for the full inventory —
 most are for building Omni Q, not for the on-device hackathon artifact.

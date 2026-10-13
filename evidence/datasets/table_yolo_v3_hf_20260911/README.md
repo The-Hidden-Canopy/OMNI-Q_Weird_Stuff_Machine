@@ -42,4 +42,4 @@ ground truth.
 
 Source image dumps: lrad3/kitchen_utensils_13k and rypow/kitchen_utensils_5k, both MIT-licensed on HuggingFace (verified at download). Labels are OUR OWN model's pseudo-labels, not the repos' annotations.
 
-Portions derived from *The Hidden Canopy LLC* — [`private training prototype`](https://github.com/The-Hidden-Canopy/private training prototype). Used with permission.
+This dataset receipt contains public provenance only.

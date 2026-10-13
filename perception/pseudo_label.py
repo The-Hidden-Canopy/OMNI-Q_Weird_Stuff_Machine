@@ -32,7 +32,7 @@ Flow (download first, then inference, so a mid-way failure keeps the HF cache):
         --weights models/table_yolo_v2_ft_2026-09-11.pt \
         --out data/table_yolo_v3_hf --work-dir data/_hf_pseudo
 
-Portions derived from *The Hidden Canopy LLC* — [`private training prototype`](https://github.com/The-Hidden-Canopy/private training prototype). Used with permission.
+This module is distributed as part of the public dataset tooling.
 """
 
 from __future__ import annotations
@@ -335,7 +335,7 @@ ground truth.
 
 {manifest.get('license_note')}
 
-Portions derived from *The Hidden Canopy LLC* — [`private training prototype`](https://github.com/The-Hidden-Canopy/private training prototype). Used with permission.
+This module is distributed as part of the public dataset tooling.
 """
     (dest / "README.md").write_text(md, encoding="utf-8")
     return dest

@@ -13,16 +13,14 @@ to remove the compute view as well.
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterable
-from pathlib import Path
 
 import numpy as np
 import torch
 from torch import Tensor
 from torch.optim import Optimizer
 
-from integrations.qualcomm.lowbit.vendor.mxfp_scales import (
+from integrations.qualcomm.lowbit.scale_codec import (
     _E4M3_UNPACK_LUT,
 )
 
@@ -33,46 +31,6 @@ STATE_FORMAT = "mxfp8_e4m3_ue8m0_k32"
 
 _E4M3_LUT_NP = np.asarray(_E4M3_UNPACK_LUT, dtype=np.float32)
 _E4M3_GRID_NP = _E4M3_LUT_NP[:127]
-
-_NATIVE_EXTENSION = None
-_NATIVE_ATTEMPTED = False
-_NATIVE_FAILURE = None
-_NATIVE_STEP_USED = False
-
-
-def _load_native_extension():
-    """Load the optional fused CUDA step once, leaving the reference fallback intact."""
-    global _NATIVE_ATTEMPTED, _NATIVE_EXTENSION, _NATIVE_FAILURE
-    if _NATIVE_ATTEMPTED:
-        return _NATIVE_EXTENSION
-    _NATIVE_ATTEMPTED = True
-    if not torch.cuda.is_available():
-        _NATIVE_FAILURE = "CUDA is unavailable"
-        if os.getenv("OMNIQ_REQUIRE_NATIVE_FUSION", "").lower() in {"1", "true", "yes"}:
-            raise RuntimeError("native packed Lion fusion is required but CUDA is unavailable")
-        return None
-    try:
-        from torch.utils.cpp_extension import load
-
-        root = Path(__file__).resolve().parents[1]
-        vendor = root / "integrations" / "qualcomm" / "lowbit" / "vendor" / "ida_train_v2"
-        _NATIVE_EXTENSION = load(
-            name="omniq_packed_lion_v1",
-            sources=[str(Path(__file__).with_name("native_packed_optimizer.cu"))],
-            extra_include_paths=[str(root), str(vendor.parent)],
-            extra_cuda_cflags=["-O3"],
-            verbose=False,
-        )
-        print("packed Lion native fusion loaded: omniq_packed_lion_v1")
-    except Exception as exc:  # pragma: no cover - hardware/toolchain dependent
-        _NATIVE_FAILURE = f"{type(exc).__name__}: {exc}"
-        print(f"packed Lion native fusion unavailable; using torch fallback: {exc}")
-        if os.getenv("OMNIQ_REQUIRE_NATIVE_FUSION", "").lower() in {"1", "true", "yes"}:
-            raise RuntimeError(
-                "native packed Lion fusion is required but failed to load"
-            ) from exc
-    return _NATIVE_EXTENSION
-
 
 def _e4m3_lut(device: torch.device) -> Tensor:
     return torch.as_tensor(_E4M3_LUT_NP, dtype=torch.float32, device=device)
@@ -164,7 +122,7 @@ def pack_mxfp8(values: Tensor) -> tuple[Tensor, Tensor, Tensor]:
 class PackedMXFP8Lion(Optimizer):
     """Lion whose persistent weight state is MXFP8 payload/scales.
 
-    The update matches the private training prototype packed Lion equation:
+    The update uses a packed MXFP8 payload and BF16 momentum:
 
     ``direction = beta1 * momentum + (1-beta1) * grad``
     ``momentum = beta2 * momentum + (1-beta2) * grad``
@@ -245,29 +203,15 @@ class PackedMXFP8Lion(Optimizer):
 
     @torch.no_grad()
     def step(self, closure=None):
-        global _NATIVE_STEP_USED
         loss = None
         if closure is not None:
             with torch.enable_grad():
                 loss = closure()
 
-        native_extension = (
-            _load_native_extension()
-            if any(parameter.is_cuda for group in self.param_groups
-                   for parameter in group["params"])
-            else None
-        )
-
         for group in self.param_groups:
             beta1, beta2 = group["betas"]
             lr = float(group["lr"])
             weight_decay = float(group["weight_decay"])
-            native_payloads = []
-            native_scales = []
-            native_momenta = []
-            native_gradients = []
-            native_computes = []
-            native_parameters = []
             for parameter in group["params"]:
                 if parameter.grad is None:
                     continue
@@ -278,44 +222,6 @@ class PackedMXFP8Lion(Optimizer):
                 self._validate_state(parameter, state)
 
                 gradient_view = parameter.grad.detach().reshape(-1)
-                compute_view = parameter.data.reshape(-1)
-                if (
-                    native_extension is not None
-                    and parameter.data.dtype == torch.float32
-                    and gradient_view.dtype == torch.float32
-                    and parameter.data.is_contiguous()
-                    and parameter.grad.is_contiguous()
-                    and compute_view.is_contiguous()
-                    and gradient_view.is_contiguous()
-                ):
-                    if hasattr(native_extension, "lion_step_multi"):
-                        native_payloads.append(state["payload"])
-                        native_scales.append(state["scales"])
-                        native_momenta.append(state["momentum"])
-                        native_gradients.append(gradient_view)
-                        native_computes.append(compute_view)
-                        native_parameters.append(parameter)
-                    else:
-                        # Keep an already-loaded older extension on its native
-                        # path while a long-lived process transitions to the
-                        # multi-tensor entry point.
-                        if not _NATIVE_STEP_USED:
-                            print("packed Lion native fusion active for FP32 compute/gradient views")
-                            _NATIVE_STEP_USED = True
-                        native_extension.lion_step(
-                            state["payload"],
-                            state["scales"],
-                            state["momentum"],
-                            gradient_view,
-                            compute_view,
-                            lr,
-                            beta1,
-                            beta2,
-                            weight_decay,
-                        )
-                        state["step"] = int(state["step"]) + 1
-                    continue
-
                 weight = decode_mxfp8(
                     state["payload"], state["scales"], parameter.numel()
                 )
@@ -332,26 +238,6 @@ class PackedMXFP8Lion(Optimizer):
                 state["momentum"] = next_momentum.to(dtype=torch.bfloat16)
                 state["step"] = int(state["step"]) + 1
                 parameter.data.copy_(decoded.reshape_as(parameter))
-
-            if native_payloads:
-                if not _NATIVE_STEP_USED:
-                    print("packed Lion native fusion active for FP32 compute/gradient views")
-                    _NATIVE_STEP_USED = True
-                native_extension.lion_step_multi(
-                    native_payloads,
-                    native_scales,
-                    native_momenta,
-                    native_gradients,
-                    native_computes,
-                    lr,
-                    beta1,
-                    beta2,
-                    weight_decay,
-                )
-                for parameter in native_parameters:
-                    self.state[parameter]["step"] = (
-                        int(self.state[parameter]["step"]) + 1
-                    )
         # The selected-layer packed-compute pilot keeps its FP4 payloads in
         # sync with the authoritative MXFP8/BF16-Lion update.  This callback
         # is intentionally optional so the default MXFP8 path is unchanged.

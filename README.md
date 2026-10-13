@@ -261,15 +261,16 @@ HF: KissTheHabit/IDA_OMNI_Q
   → artifact-matched checkpoint + receipt
   → OmniReferenceReasoner
       (src/omni_q/omni_reasoner.py)
-  → identity-gated load_omni_reference
-      (integrations/intel/vendor/omni_reference/omni_inference.py)
+  → explicitly supplied reasoner runtime
+      (OMNIQ_REASONER_RUNTIME_ROOT + OMNIQ_REASONER_TOKENIZER)
   → OmniPlanner constrained advice
   → governed Intel MuJoCo engine
   → validated controller actions, receipt, and optional render trace
 ```
 
 Run it with `OMNIQ_OMNI_REASONER=omni`, an artifact-matched
-`OMNIQ_OMNI_CHECKPOINT`, and `OMNIQ_OMNI_RECEIPT`, then use
+`OMNIQ_OMNI_CHECKPOINT`, `OMNIQ_OMNI_RECEIPT`, and an operator-supplied
+`OMNIQ_REASONER_RUNTIME_ROOT`/`OMNIQ_REASONER_TOKENIZER`, then use
 `python -m omni_q.demo_intel_reasoner --render-dir <dir>`. The loader checks
 the checkpoint digest, architecture, execution revision, precision, and
 completed-example boundary before generation; a missing or mismatched receipt
@@ -328,21 +329,19 @@ python perception/finetune.py \
 
 With `--w-master mxfp8` the trainer keeps the authoritative weight state as
 MXFP8 E4M3 payload plus UE8M0 K32 scales, and Lion momentum as BF16. Repacking
-happens inside every successful optimizer step, matching the
-private training prototype `k_lion_mxfp8` decode→update→RNE-repack equation. The stock YOLO
+happens inside every successful optimizer step, matching the public
+decode→update→RNE-repack contract. The stock YOLO
 Conv2d/Linear graph still retains a floating-point compute view; this mode
 removes FP32 Adam moments but does not claim zero floating-point model
 residency. Removing that compute view requires native packed operators.
 
-The design is evidence-backed by the private training prototype MXFP4-master simulation
-ablation (`docs/mxfp4-master-sim-ablation-2026-09-09.md` in private training prototype):
+The design is bounded by a local MXFP4-master simulation reference:
 per-step RNE re-encode of the master is stable, while stochastic rounding
 *on the master* is a refuted unbounded random walk (SR belongs on gradients
 only). Consequently `--w-master mxfp4` / `mxfp2` are **refused at admission**
 with a clear error — those tiers are sim-only residency states, not
 trainable masters. Loading a master whose sibling manifest disagrees with the
-requested `--w-master` is likewise refused (precision contract at the
-checkpoint boundary, per private training prototype `omni_precision.hpp`).
+requested `--w-master` is likewise refused at the checkpoint boundary.
 
 ## Layout
 
@@ -629,7 +628,6 @@ event surface and real provider work.
 - [`evidence/benchmark_results/openvino_inference_2026-09-10/README.md`](evidence/benchmark_results/openvino_inference_2026-09-10/README.md) —
   first model actually run through OpenVINO on real Intel CPU + iGPU: FP32 device comparison + NNCF INT8 quantization, same protocol as the ONNX baseline above
 - [`evidence/benchmark_results/yolo_2bit_cpu_20260910/README.md`](evidence/benchmark_results/yolo_2bit_cpu_20260910/README.md) —
-  2-bit weight-format evaluation on CPU (fp32/mxfp4/nvint2/mxfp2 arms; ~14× footprint cut; output agreement measured; software-dequantize only) — vendored codec at [`integrations/qualcomm/lowbit/`](integrations/qualcomm/lowbit/) (OQ-029)
 - [`evidence/datasets/table_yolo_v1_20260910/README.md`](evidence/datasets/table_yolo_v1_20260910/README.md) —
   first multi-source tabletop dataset haul (2,723 unique images, measured dedup; feeds `perception/finetune.py`)
 
@@ -653,10 +651,9 @@ validates every step, deterministic fallback stays truthfully labeled on every
 decision) and `src/omni_q/omni_reasoner.py` (backends). YOLO sees; Omni Q
 decides; every rationale rides the receipt. Intel-suite hook:
 `python -m omni_q.demo_intel_reasoner` (real MuJoCo + reasoner advice, zero
-edits to `intel_sim.py`). The IDA Omni body loads through the vendored,
-identity-gated harness at
-[`integrations/intel/vendor/omni_reference/`](integrations/intel/vendor/omni_reference/)
-— select with `OMNIQ_OMNI_REASONER=mock|omni` (+ checkpoint/receipt paths).
+edits to `intel_sim.py`). An optional external reasoner loads only through the
+explicit local binding described in `PUBLIC_BOUNDARY.md`; select with
+`OMNIQ_OMNI_REASONER=mock|omni` (+ checkpoint/receipt/runtime paths).
 
 ## Governed skill runtime
 
@@ -724,12 +721,12 @@ state — BF16 appears only as plumbing (accumulators, norms) inside kernels.
 One slider, selected by available memory:
 
 ```
-MXFP8 -- MXFP4 -- MXFP2 -- CORE_ONLY
+MXFP8 -- MXFP4 -- MXFP2 (planning-only) -- CORE_ONLY
 ```
 
 MXFP8 is the high-fidelity compressed master (~1 byte/weight), MXFP4 the same
-body recompiled lower, MXFP2 extreme residency — through all three MX tiers the
-*same* body/capability stays resident; only the format changes. Below the MXFP2
+body recompiled lower, and MXFP2 is a planning-only residency state until an
+independently releasable codec exists. Below the MXFP2
 envelope the neural reasoner is evicted: OMNI-Q core remains, autonomy is
 DEGRADED, and a novel task produces **HOLD** (queued, never degraded-executed).
 `src/omni_q/residency.py` (envelope math, hysteresis, graph-revision lineage,
@@ -750,10 +747,8 @@ evidence-bundle receipts) · `demo/residency_slider.py` (walks 8 → 6 → 3 →
 - **Deployment** —
   [`docs/providers.md`](docs/providers.md) (Intel + Qualcomm as one Omni graph) ·
   [`docs/datasets.md`](docs/datasets.md) (YOLO real-image haul + synthetic depth; Omni policy/planner data)
-- [`docs/strategy-notes.md`](docs/strategy-notes.md) — track analysis and rubric strategy
 - [`docs/skill-runtime-architecture-2026-09-13.md`](docs/skill-runtime-architecture-2026-09-13.md) —
   current skill contracts, supervisor, promotion gates, and remaining Intel-arm wiring
-- [`docs/prior-art.md`](docs/prior-art.md) — patterns borrowed from sibling THC repos (bounded adaptive-response pattern, private world-simulation prototype, private evidence prototype, private evidence-governance prototype, private training prototype)
 - [`docs/challenge-briefs/intel-online-physical-ai-challenge.md`](docs/challenge-briefs/intel-online-physical-ai-challenge.md) —
   official Intel Online Challenge brief (transcription + [source PDF](docs/challenge-briefs/intel-online-physical-ai-challenge.pdf))
 - [`docs/challenge-briefs/intel-online-getting-started.md`](docs/challenge-briefs/intel-online-getting-started.md) —

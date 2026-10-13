@@ -76,6 +76,8 @@ def _intel_engine_factory(bus):
         reasoner = OmniReferenceReasoner(
             checkpoint,
             receipt,
+            runtime_root=os.environ.get("OMNIQ_REASONER_RUNTIME_ROOT"),
+            tokenizer_path=os.environ.get("OMNIQ_REASONER_TOKENIZER"),
             device=os.environ.get("OMNIQ_OMNI_DEVICE", "cpu"),
         )
     else:

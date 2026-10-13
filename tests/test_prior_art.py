@@ -1,4 +1,4 @@
-"""Patterns lifted from sibling repos (see docs/prior-art.md)."""
+"""Public contract tests for authority, receipts, and stale knowledge."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from omni_q.fakes import FakeManipulator, FakeObserver, FakeRecorder, FakeVerifi
 from omni_q.world import MockWorld
 
 
-# -- bounded adaptive-response pattern: monotone degradation ---------------------------------------
+# -- monotone degradation -----------------------------------------------------
 
 def test_merge_mode_never_downgrades_without_reset():
     m = AutonomyMode.NOMINAL
@@ -42,7 +42,7 @@ def test_keep_local_escalates_mode():
     assert "mode.changed" in [e.kind for e in engine.bus.log]
 
 
-# -- bounded adaptive-response pattern: PlanDecision reason object --------------------------------
+# -- plan decision reason object ----------------------------------------------
 
 def test_plan_decision_records_rejected_forbidden_object():
     engine = build_mock_engine()
@@ -65,7 +65,7 @@ def test_plan_decision_carries_envelope_digest_and_mode():
     assert d["mode"] in {m.value for m in AutonomyMode}
 
 
-# -- bounded adaptive-response pattern: signed envelope authority ---------------------------------
+# -- signed envelope authority -------------------------------------------------
 
 def test_mission_envelope_digest_is_stable_and_content_sensitive():
     a = MissionEnvelope(mission_id="m1", forbidden_objects=("x",))
@@ -86,7 +86,7 @@ def test_envelope_max_revisions_is_the_engine_bound():
     assert engine.max_revisions == 1
 
 
-# -- bounded evidence ledger + private evidence-governance prototype: parent-chained, verifiable receipts -------------------
+# -- parent-chained, verifiable receipts --------------------------------------
 
 def test_receipt_chain_verifies_across_runs():
     engine = build_mock_engine()
@@ -119,7 +119,7 @@ def test_receipt_provenance_block_present():
     assert "python" in prov and "platform" in prov and "package_versions" in prov
 
 
-# -- private world-simulation prototype: stale knowledge is not authoritative --------
+# -- stale knowledge is not authoritative ------------------------------------
 
 def test_planner_will_not_act_on_a_non_live_detection():
     world = MockWorld.sample()

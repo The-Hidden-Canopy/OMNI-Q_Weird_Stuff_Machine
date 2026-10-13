@@ -8,8 +8,6 @@ values, zeros, denormals, values > 448, NaN/Inf), the real table_yolo_v2
 Conv2d weights, packed optimizer-state wiring, and a printed (non-asserting)
 slow-vs-fast benchmark.
 
-Portions derived from *The Hidden Canopy LLC* — [`private training prototype`](https://github.com/The-Hidden-Canopy/private training prototype).
-Used with permission.
 """
 
 from __future__ import annotations
@@ -30,7 +28,7 @@ from integrations.qualcomm.lowbit import (  # noqa: E402
     dequantize_tensor,
     quantize_tensor,
 )
-from integrations.qualcomm.lowbit.vendor.mxfp_scales import (  # noqa: E402
+from integrations.qualcomm.lowbit.scale_codec import (  # noqa: E402
     _E4M3_UNPACK_LUT,
 )
 from package_quant_weights import (  # noqa: E402

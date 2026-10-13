@@ -1,15 +1,13 @@
 """Tests for perception/package_quant_weights.py — packed low-bit masters.
 
-Covers: npz + manifest production for all slider tiers on a synthetic
-state_dict, manifest totals/ratio math, ratio ordering (mxfp8 > mxfp4 > mxfp2),
+Covers: npz + manifest production for the supported public formats on a
+synthetic state_dict, manifest totals/ratio math, ratio ordering (mxfp8 > mxfp4),
 passthrough marking + byte-exact loader round-trip, and the real cross-check —
 the emitted standalone loader's decoder must match the repo codec
 (integrations/qualcomm/lowbit.dequantize_tensor) bit-for-bit on the same
 PackedTensor. A skipif-gated smoke test packages the real ftv2 weights (mxfp8)
 and predicts on a tiny random image with the loader-restored state_dict.
 
-Portions derived from *The Hidden Canopy LLC* — [`private training prototype`](https://github.com/The-Hidden-Canopy/private training prototype).
-Used with permission.
 """
 
 from __future__ import annotations
@@ -36,7 +34,7 @@ from package_quant_weights import LOADER_SOURCE, package  # noqa: E402
 
 torch = pytest.importorskip("torch")
 
-FORMATS_TIERED = ("mxfp8", "mxfp4", "mxfp2")
+FORMATS_TIERED = ("mxfp8", "mxfp4")
 REAL_WEIGHTS = OMNIQ_ROOT / "models" / "table_yolo_v2_ft_2026-09-11.pt"
 
 
@@ -110,9 +108,8 @@ def test_manifest_totals_and_ratio_math(packaged):
         assert totals["mean_weight_cosine"] == pytest.approx(float(np.mean(cosines)))
         assert manifest["model"]["param_count"] == expected_params
         assert manifest["model"]["source_file"] == "tiny.pt"
-        assert "mxfp4/mxfp2 collapse" in manifest["honesty"]["label"]
-        assert manifest["honesty"]["arms_ref"].startswith(
-            "evidence/benchmark_results/yolo_2bit_map_20260911_071815")
+        assert "software dequantize" in manifest["honesty"]["label"]
+        assert "no hardware claim" in manifest["honesty"]["arms_ref"]
 
 
 def test_npz_packed_bytes_match_manifest_per_tensor(packaged):
@@ -135,12 +132,12 @@ def test_npz_packed_bytes_match_manifest_per_tensor(packaged):
                 assert m_entry["block_size"] == BLOCK_SIZES[fmt]
 
 
-def test_ratio_ordering_mxfp8_gt_mxfp4_gt_mxfp2(packaged):
+def test_ratio_ordering_mxfp8_gt_mxfp4(packaged):
     ratios = {}
     for fmt in FORMATS_TIERED:
         manifest = _load_manifest(packaged["out_dir"] / f"tiny.{fmt}.manifest.json")
         ratios[fmt] = manifest["totals"]["ratio"]
-    assert ratios["mxfp8"] > ratios["mxfp4"] > ratios["mxfp2"]
+    assert ratios["mxfp8"] > ratios["mxfp4"]
 
 
 def test_passthrough_marked_and_byte_exact_via_loader(packaged):
@@ -185,8 +182,9 @@ def test_standalone_loader_matches_repo_codec(packaged, fmt):
 def test_loader_source_has_no_repo_deps(packaged):
     loader_path = packaged["out_dir"] / "tiny_loader.py"
     text = loader_path.read_text(encoding="utf-8")
-    assert "OMNI-Q_Weird_Stuff_Machine" in text  # attribution header
-    for banned in ("integrations", "sys.path", "import ultralytics"):
+    assert "public MXFP8 and MXFP4" in text
+    for banned in ("integrations", "sys.path", "import ultralytics",
+                   "mxfp2", "nvint2"):
         assert banned not in text
 
 

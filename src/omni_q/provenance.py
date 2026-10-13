@@ -1,4 +1,4 @@
-"""Run provenance — lifted from private evidence prototype ``artifacts.py``.
+"""Run provenance for bounded, locally verifiable evidence.
 
 Every run is self-describing: a deterministic ``run_id`` from the config, plus
 an environment block (platform, python, package versions, git commit) so a

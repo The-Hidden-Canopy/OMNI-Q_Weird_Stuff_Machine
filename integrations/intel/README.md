@@ -532,7 +532,7 @@ matching receipt/manifest. The public runtime chain is:
 ```text
 KissTheHabit/IDA_OMNI_Q
   -> src/omni_q/omni_reasoner.py::OmniReferenceReasoner
-  -> integrations/intel/vendor/omni_reference/omni_inference.py::load_omni_reference
+  -> explicitly supplied reasoner runtime via OMNIQ_REASONER_RUNTIME_ROOT
   -> src/omni_q/demo_intel_reasoner.py::OmniPlanner
   -> governed Intel MuJoCo engine
   -> receipt and optional render trace

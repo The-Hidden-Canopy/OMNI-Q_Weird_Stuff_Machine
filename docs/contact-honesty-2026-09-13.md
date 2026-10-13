@@ -80,7 +80,7 @@ evidence-driven retries; the handoff does not).
 (977 MB, sha256 `c2ce8259…`, format `ida_omni_strict_checkpoint_v1`,
 architecture `ida_omni_state_coupled_v1`, hash `e3ce7085…`, `spec_hash
 590584bf1c90677c`, optimizer_step 20). Reader:
-`private training prototype/scripts/read_omni_strict_checkpoint.py`. The download
+the local checkpoint-inspection helper. The download
 directory `models/hf_ida_omni_q/` is git-ignored (over GitHub's limit);
 re-download with `hf download KissTheHabit/IDA_OMNI_Q`.
 

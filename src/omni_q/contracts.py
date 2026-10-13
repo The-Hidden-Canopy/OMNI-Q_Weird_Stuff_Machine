@@ -32,7 +32,7 @@ from typing import Any, Protocol, Sequence, runtime_checkable
 class DataStatus(str, Enum):
     """How much a piece of world knowledge can be trusted.
 
-    Borrowed from private world-simulation prototype: an inference is never promoted to an
+    The public contract treats an inference as never promoted to an
     authoritative fact. The planner must re-``Observe`` or lower its commitment
     before acting on anything that is not ``LIVE``.
     """
@@ -356,7 +356,7 @@ class DeviceSpec:
 
 
 class AutonomyMode(str, Enum):
-    """Monotone-escalating operating state (bounded adaptive-response pattern ``envelope.py``).
+    """Monotone-escalating operating state.
 
     Losing a capability or a placement option raises the mode; it never drops
     without an explicit reset. Higher = more constrained.
@@ -385,7 +385,7 @@ def merge_mode(current: AutonomyMode, incoming: AutonomyMode) -> AutonomyMode:
 
 @dataclass(frozen=True)
 class MissionEnvelope:
-    """Fixed operator authority (bounded adaptive-response pattern ``SignedMissionEnvelope``).
+    """Fixed operator authority.
 
     Transient constraints come and go on the :class:`WorldState`; this is the
     part a recompile may **not** widen. A partitioned / re-placed planner
@@ -422,7 +422,7 @@ class MissionEnvelope:
 
 @dataclass
 class PlanDecision:
-    """Reason object attached to every (re)compile (bounded adaptive-response pattern ``planner.py``).
+    """Reason object attached to every (re)compile.
 
     Auditable without pretending the planner itself is 'explainable AI'.
     """
@@ -482,7 +482,7 @@ def sha256_of(obj: Any) -> str:
 
 def canonical_bytes(record_dict: dict[str, Any]) -> bytes:
     """Deterministic bytes for hashing a receipt — ``content_hash`` excluded
-    (private evidence-governance prototype ``audit/receipt.py``)."""
+    (the public receipt contract)."""
     data = {k: v for k, v in record_dict.items() if k != "content_hash"}
     return json.dumps(data, sort_keys=True, separators=(",", ":"), default=str).encode()
 
